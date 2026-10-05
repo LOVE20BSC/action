@@ -97,6 +97,12 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
 
         (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(secondToken), 11, 1, 0, 10, false);
         require(total == 0 && page.length == 0, "second token snapshot independent");
+        uint256[] memory members = new uint256[](1);
+        members[0] = 1;
+        uint256[] memory rounds = actionTarget.joinedRounds(address(token), 11, members);
+        require(rounds[0] == 1, "first token join round");
+        rounds = actionTarget.joinedRounds(address(secondToken), 11, members);
+        require(rounds[0] == 0, "second token join round independent");
         (uint256[] memory ids,, uint256 indexTotal) = actionTarget.actions(address(token), 0, 10, false);
         require(indexTotal == 1 && ids[0] == 11, "first token index");
         (ids,, indexTotal) = actionTarget.actions(address(secondToken), 0, 10, false);

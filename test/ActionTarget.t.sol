@@ -442,6 +442,60 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(actionTarget.isJoined(address(token), 11, 1), "currently joined");
     }
 
+    function testJoinedRoundsReturnsJoinRoundsPerMember() external {
+        _createAction(11);
+        phase.setPhase(2);
+        _join(11, 1);
+        _join(11, 2);
+        phase.setPhase(4);
+        _join(11, 3);
+
+        uint256[] memory memberIds = new uint256[](4);
+        memberIds[0] = 1;
+        memberIds[1] = 2;
+        memberIds[2] = 3;
+        memberIds[3] = 99;
+        uint256[] memory rounds = actionTarget.joinedRounds(address(token), 11, memberIds);
+        require(rounds.length == 4, "aligned with input");
+        require(rounds[0] == 1 && rounds[1] == 1, "same-round joins");
+        require(rounds[2] == 3, "later join round");
+        require(rounds[3] == 0, "unknown member zero");
+
+        rounds = actionTarget.joinedRounds(address(token), 12, memberIds);
+        require(rounds[0] == 0 && rounds[1] == 0 && rounds[2] == 0, "other action independent");
+
+        uint256[] memory empty = new uint256[](0);
+        rounds = actionTarget.joinedRounds(address(token), 11, empty);
+        require(rounds.length == 0, "empty input");
+    }
+
+    function testJoinedRoundsTracksClearAndRejoin() external {
+        _createAction(11);
+        phase.setPhase(2);
+        _join(11, 1);
+        phase.setPhase(3);
+        _clear(11, 1);
+        uint256[] memory memberIds = new uint256[](1);
+        memberIds[0] = 1;
+        uint256[] memory rounds = actionTarget.joinedRounds(address(token), 11, memberIds);
+        require(rounds[0] == 0, "cleared to zero");
+        phase.setPhase(5);
+        _join(11, 1);
+        rounds = actionTarget.joinedRounds(address(token), 11, memberIds);
+        require(rounds[0] == 4, "rejoin records latest round");
+    }
+
+    function testJoinedRoundsAfterForceExitIsZero() external {
+        _createAction(11);
+        phase.setPhase(2);
+        _join(11, 1);
+        _forceExit(11, 1);
+        uint256[] memory memberIds = new uint256[](1);
+        memberIds[0] = 1;
+        uint256[] memory rounds = actionTarget.joinedRounds(address(token), 11, memberIds);
+        require(rounds[0] == 0, "forced exit clears the round");
+    }
+
     function testMemberIdsByActionIdRoundBounds() external {
         _createAction(11);
         phase.setPhase(2);

@@ -110,6 +110,11 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 memberId,
         uint256 round
     ) external view returns (bool);
+    function joinedRounds(
+        address tokenAddress,
+        uint256 actionId,
+        uint256[] calldata memberIds
+    ) external view returns (uint256[] memory rounds);
     function executor(
         address tokenAddress,
         uint256 actionId

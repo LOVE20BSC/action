@@ -155,6 +155,25 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
         }
     }
 
+    function invariant_JoinedRoundsMatchModel() public view {
+        uint256 expectedRound = handler.JOIN_PHASE() - 1;
+        uint256[] memory memberIds = new uint256[](3);
+        memberIds[0] = 1;
+        memberIds[1] = 2;
+        memberIds[2] = 3;
+        for (uint256 i = 0; i < 4; i++) {
+            uint256 actionId = handler.actionIdAt(i);
+            uint256[] memory rounds = actionTarget.joinedRounds(address(token), actionId, memberIds);
+            for (uint256 memberId = 1; memberId <= 3; memberId++) {
+                if (handler.joined(actionId, memberId)) {
+                    require(rounds[memberId - 1] == expectedRound, "joined round matches model");
+                } else {
+                    require(rounds[memberId - 1] == 0, "not joined stays zero");
+                }
+            }
+        }
+    }
+
     function invariant_MemberActionListsMatchModel() public view {
         for (uint256 memberId = 1; memberId <= 3; memberId++) {
             (uint256[] memory page, uint256 total) =

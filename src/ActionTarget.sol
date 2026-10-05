@@ -31,6 +31,10 @@ contract ActionTarget is IActionTarget {
     mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage))
         internal _memberIdsByActionId;
 
+    // tokenAddress => actionId => memberId => joined round
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
+        internal _joinedRoundByMemberId;
+
     // tokenAddress => actionId => executor
     mapping(address => mapping(uint256 => address))
         internal _executorByActionId;
@@ -135,6 +139,7 @@ contract ActionTarget is IActionTarget {
             memberId
         );
         _actionIdsByMemberId[tokenAddress][memberId].add(actionId);
+        _joinedRoundByMemberId[tokenAddress][actionId][memberId] = joinRound;
 
         emit JoinStateRegistered({
             tokenAddress: tokenAddress,
@@ -160,6 +165,7 @@ contract ActionTarget is IActionTarget {
             memberId
         );
         _actionIdsByMemberId[tokenAddress][memberId].remove(actionId);
+        delete _joinedRoundByMemberId[tokenAddress][actionId][memberId];
 
         emit JoinStateCleared({
             tokenAddress: tokenAddress,
@@ -189,6 +195,7 @@ contract ActionTarget is IActionTarget {
             memberId
         );
         _actionIdsByMemberId[tokenAddress][memberId].remove(actionId);
+        delete _joinedRoundByMemberId[tokenAddress][actionId][memberId];
 
         emit JoinStateCleared({
             tokenAddress: tokenAddress,
@@ -220,6 +227,23 @@ contract ActionTarget is IActionTarget {
             memberId,
             round
         );
+    }
+
+    function joinedRounds(
+        address tokenAddress,
+        uint256 actionId,
+        uint256[] calldata memberIds
+    ) external view returns (uint256[] memory rounds) {
+        rounds = new uint256[](memberIds.length);
+        for (uint256 i = 0; i < memberIds.length; ) {
+            rounds[i] = _joinedRoundByMemberId[tokenAddress][actionId][
+                memberIds[i]
+            ];
+
+            unchecked {
+                i++;
+            }
+        }
     }
 
     function actionIdsByMemberId(
