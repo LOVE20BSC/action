@@ -20,7 +20,8 @@ Core 的接口以 `core` 代码库为准：生产代码直接从 `lib/core/src/i
 ## 当前状态
 
 - 仓库骨架与工具链已建立，编译基线为 Solidity `0.8.37`、Foundry `1.8.1`、`evm_version = "osaka"`，不使用 `via_ir`。
-- 规格入口 `docs/specs/` 与 Action 自有接口（`src/interfaces/`，来自 `matt-gov` 的 `action/` 暂存目录）尚未迁入，合约尚未开始迁移。Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
+- ActionTarget 迁移进行中：旧代码基线与改名已提交（第 2 步），BSC 实现与接口同步完成（第 3 步，待确认提交），单元测试未开始（第 4 步）。LP、GroupAction、GroupService 尚未开始。
+- 自有接口以 `matt-gov` 的 `interfaces/action/` 为唯一来源，`src/interfaces/` 与其逐字节同步；Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
 
 ## 构建与测试
 

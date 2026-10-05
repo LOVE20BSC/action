@@ -1,192 +1,176 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
-struct TokenActionPair {
-    address tokenAddress;
-    uint256 actionId;
-}
+import {IProposalTarget} from "core/src/interfaces/IProposalTarget.sol";
 
-interface IExtensionCenterEvents {
-    event AddAccount(
+interface IActionTargetEvents {
+    event JoinStateRegistered(
         address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed memberId,
+        uint256 round
+    );
+    event JoinStateCleared(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed memberId,
         uint256 round,
-        uint256 indexed actionId,
-        address indexed account,
-        uint256 accountCount
+        bool forced
     );
-    event RemoveAccount(
-        address indexed tokenAddress,
-        uint256 round,
-        uint256 indexed actionId,
-        address indexed account,
-        uint256 accountCount
-    );
-    event UpdateVerificationInfo(
-        address indexed tokenAddress,
-        uint256 round,
-        uint256 indexed actionId,
-        address indexed account,
-        string verificationKey,
-        string verificationInfo
-    );
-    event SetExtensionDelegate(
-        address indexed extension,
-        address indexed delegate
-    );
-    event RegisterAction(
+    event ActionCreated(
         address indexed tokenAddress,
         uint256 indexed actionId,
-        address indexed extension,
-        address factory
+        address indexed executor,
+        uint256 round
+    );
+    event ActionRewardMinted(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed round,
+        uint256 amount
+    );
+    event RewardBurned(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed round,
+        uint256 amount
     );
 }
 
-interface IExtensionCenterErrors {
-    error OnlyExtensionOrDelegate();
-    error OnlyAccountOrExtensionOrDelegate();
-    error AccountAlreadyJoined();
-    error VerificationInfoLengthMismatch(uint256 expected);
-    error ActionNotVotedInCurrentRound();
-    error InvalidExtensionFactory();
-    error ActionAlreadyRegisteredToOtherAction();
-    error InvalidExtensionAddress();
-    error InvalidAccountAddress();
-    error RoundExceedsJoinRound(uint256 currentRound);
-    error ExtensionCreatorMismatch(address creator, address author);
-    error ExtensionTokenAddressMismatch(address expected, address actual);
-    error ExtensionActionIdMismatch(uint256 expected, uint256 actual);
+interface IActionTargetErrors {
+    error AlreadyInitialized();
+    error InvalidAddress();
+    error UnauthorizedCallback();
+    error UnboundProposal(address tokenAddress, uint256 proposalId);
+    error UnauthorizedExecutor(address tokenAddress, uint256 actionId);
+    error JoinNotOpen(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 currentRound,
+        uint256 createdRound
+    );
+    error NotMemberOwner(uint256 memberId);
+    error ProposalNotVoted(address tokenAddress, uint256 proposalId);
+    error InvalidExecutor();
+    error AlreadyCreated(address tokenAddress, uint256 actionId);
+    error AlreadyMinted(address tokenAddress, uint256 actionId, uint256 round);
+    error InvalidRound(uint256 round);
+    error TransferFailed(address tokenAddress, address to, uint256 amount);
 }
 
-interface IExtensionCenter is IExtensionCenterEvents, IExtensionCenterErrors {
-    function uniswapV2FactoryAddress() external view returns (address);
-    function launchAddress() external view returns (address);
-    function stakeAddress() external view returns (address);
+interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetErrors {
+    function memberNFTAddress() external view returns (address);
     function submitAddress() external view returns (address);
     function voteAddress() external view returns (address);
-    function joinAddress() external view returns (address);
-    function verifyAddress() external view returns (address);
     function mintAddress() external view returns (address);
-    function randomAddress() external view returns (address);
+    function phaseAddress() external view returns (address);
 
-    // must be called before any other function
-    function registerActionIfNeeded(
-        address tokenAddress,
-        uint256 actionId
-    ) external returns (address extensionAddress);
-
-    function addAccount(
-        address tokenAddress,
-        uint256 actionId,
-        address account,
-        string[] calldata verificationInfos
+    function initialized() external view returns (bool);
+    function init(
+        address memberNFTAddress,
+        address submitAddress,
+        address voteAddress,
+        address mintAddress
     ) external;
 
-    function removeAccount(
+    function registerJoinState(
         address tokenAddress,
         uint256 actionId,
-        address account
-    ) external returns (bool);
-
-    function updateVerificationInfo(
+        uint256 memberId
+    ) external;
+    function clearJoinState(
         address tokenAddress,
         uint256 actionId,
-        address account,
-        string[] calldata verificationInfos
+        uint256 memberId
+    ) external;
+    function forceExit(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external;
+    function mintActionReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external returns (uint256 amount);
+    function burnRewardIfNeeded(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
     ) external;
 
-    function setExtensionDelegate(address delegate) external;
-
-    function extension(
-        address tokenAddress,
-        uint256 actionId
-    ) external view returns (address);
-
-    function factory(
-        address tokenAddress,
-        uint256 actionId
-    ) external view returns (address);
-
-    function extensionDelegate(
-        address extensionAddress
-    ) external view returns (address);
-
-    function extensionTokenActionPair(
-        address extensionAddress
-    ) external view returns (address tokenAddress, uint256 actionId);
-
-    function isAccountJoined(
+    function isJoined(
         address tokenAddress,
         uint256 actionId,
-        address account
+        uint256 memberId
     ) external view returns (bool);
-
-    function isAccountJoinedByRound(
+    function isJoinedByRound(
         address tokenAddress,
         uint256 actionId,
-        address account,
+        uint256 memberId,
         uint256 round
     ) external view returns (bool);
-
-    function actionIdsByAccount(
+    function executor(
         address tokenAddress,
-        address account,
-        address[] calldata factories
+        uint256 actionId
+    ) external view returns (address);
+    function actionReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256 amount, bool minted);
+    function burnInfo(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256 amount, bool burned);
+    function actionIdsByMemberId(
+        address tokenAddress,
+        uint256 memberId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 total);
+    function memberIdsByActionId(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory memberIds, uint256 total);
+    function actionIdsByExecutor(
+        address tokenAddress,
+        address executor,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 total);
+    function actions(
+        address tokenAddress,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
     )
         external
         view
         returns (
             uint256[] memory actionIds,
-            address[] memory extensions,
-            address[] memory factories_
+            address[] memory executors,
+            uint256 total
         );
-
-    function accounts(
+    function votedActions(
         address tokenAddress,
-        uint256 actionId
-    ) external view returns (address[] memory);
-
-    function accountsCount(
-        address tokenAddress,
-        uint256 actionId
-    ) external view returns (uint256);
-
-    function accountsAtIndex(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 index
-    ) external view returns (address);
-
-    function accountsByRound(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (address[] memory);
-
-    function accountsByRoundCount(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (uint256);
-
-    function accountsByRoundAtIndex(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 index,
-        uint256 round
-    ) external view returns (address);
-
-    function verificationInfo(
-        address tokenAddress,
-        uint256 actionId,
-        address account,
-        string calldata verificationKey
-    ) external view returns (string memory);
-
-    function verificationInfoByRound(
-        address tokenAddress,
-        uint256 actionId,
-        address account,
-        string calldata verificationKey,
-        uint256 round
-    ) external view returns (string memory);
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    )
+        external
+        view
+        returns (
+            uint256[] memory actionIds,
+            address[] memory executors,
+            uint256 total
+        );
 }
