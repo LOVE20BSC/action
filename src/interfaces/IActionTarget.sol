@@ -66,12 +66,7 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     function phaseAddress() external view returns (address);
 
     function initialized() external view returns (bool);
-    function init(
-        address memberNFTAddress,
-        address submitAddress,
-        address voteAddress,
-        address mintAddress
-    ) external;
+    function init(address mintAddress) external;
 
     function registerJoinState(
         address tokenAddress,

@@ -64,28 +64,25 @@ contract ActionTarget is IActionTarget {
     // tokenAddress => executor => bound actionIds
     mapping(address => mapping(address => uint256[])) internal _actionIdsByExecutor;
 
-    function init(
-        address memberNFTAddress_,
-        address submitAddress_,
-        address voteAddress_,
-        address mintAddress_
-    ) external {
+    function init(address mintAddress_) external {
         if (initialized) {
             revert AlreadyInitialized();
         }
         initialized = true;
 
-        if (
-            memberNFTAddress_ == address(0) ||
-            submitAddress_ == address(0) ||
-            voteAddress_ == address(0) ||
-            mintAddress_ == address(0)
-        ) {
+        if (mintAddress_ == address(0)) {
             revert InvalidAddress();
         }
 
-        address phaseAddress_ = IVote(voteAddress_).phaseAddress();
-        if (phaseAddress_ == address(0)) {
+        IMint mint = IMint(mintAddress_);
+        address voteAddress_ = mint.voteAddress();
+        address submitAddress_ = mint.submitAddress();
+        address memberNFTAddress_ = mint.memberNFTAddress();
+        address phaseAddress_ = mint.phaseAddress();
+        if (
+            voteAddress_ == address(0) || submitAddress_ == address(0) || memberNFTAddress_ == address(0)
+                || phaseAddress_ == address(0)
+        ) {
             revert InvalidAddress();
         }
 
