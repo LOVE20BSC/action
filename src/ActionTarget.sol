@@ -320,8 +320,15 @@ contract ActionTarget is IActionTarget {
         uint256 actionId,
         uint256 round
     ) external view returns (uint256 amount, bool minted) {
-        amount = _actionReward[tokenAddress][actionId][round];
-        minted = _actionMinted[tokenAddress][actionId][round];
+        address bound = _executorByActionId[tokenAddress][actionId];
+        if (bound != address(0)) {
+            minted = _actionMinted[tokenAddress][actionId][round];
+            if (minted) {
+                amount = _actionReward[tokenAddress][actionId][round];
+            } else if (!_rewardBurned[tokenAddress][actionId][round]) {
+                (amount, ) = IMint(mintAddress).proposalRewardByProposalId(tokenAddress, round, actionId);
+            }
+        }
     }
 
     function burnInfo(address tokenAddress, uint256 actionId, uint256 round)

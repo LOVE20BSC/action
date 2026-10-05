@@ -251,6 +251,8 @@ contract ActionTargetRealIntegrationTest {
     function _assertMint(uint256 round, uint256 proposalId) internal {
         (uint256 expectedAmount,) = mint.proposalRewardByProposalId(address(token), round, proposalId);
         require(expectedAmount > 0, "reward available");
+        (uint256 quotedAmount, bool mintedBefore) = actionTarget.actionReward(address(token), proposalId, round);
+        require(quotedAmount == expectedAmount && mintedBefore == false, "expected amount before mint");
         vm.prank(address(executor));
         uint256 amount = actionTarget.mintActionReward(address(token), proposalId, round);
         require(amount == expectedAmount, "minted amount matches quote");

@@ -661,6 +661,7 @@ contract ActionTargetTest is ActionTargetTestBase {
     function testMintActionRewardRollsBackOnTransferFailure() external {
         _createAction(11);
         uint256 round = 5;
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
         vote.setProposalVoted(address(token), round, 11, true);
         token.setTransferResult(false);
         vm.prank(address(executor));
@@ -671,20 +672,50 @@ contract ActionTargetTest is ActionTargetTestBase {
         );
         actionTarget.mintActionReward(address(token), 11, round);
         (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
-        require(amount == 0 && minted == false, "ledger rolled back");
+        require(amount == MINT_AMOUNT && minted == false, "expected amount remains after rollback");
         require(mint.mintCalls() == 0, "mock mint call rolled back");
     }
 
     function testMintActionRewardPropagatesMintRevert() external {
         _createAction(11);
         uint256 round = 5;
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
         vote.setProposalVoted(address(token), round, 11, true);
         mint.setRevertOnMint(true);
         vm.prank(address(executor));
         vm.expectRevert(abi.encodeWithSelector(MockMint.MintProposalRewardReverted.selector));
         actionTarget.mintActionReward(address(token), 11, round);
         (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
-        require(amount == 0 && minted == false, "ledger untouched");
+        require(amount == MINT_AMOUNT && minted == false, "expected amount remains after revert");
+    }
+
+    function testActionRewardReturnsExpectedBeforeMint() external {
+        _createAction(11);
+        uint256 round = 5;
+        (uint256 unset, bool unsetMinted) = actionTarget.actionReward(address(token), 11, round);
+        require(unset == 0 && unsetMinted == false, "no reward set");
+
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
+        (uint256 expected, bool mintedBefore) = actionTarget.actionReward(address(token), 11, round);
+        require(expected == MINT_AMOUNT && mintedBefore == false, "expected amount before mint");
+
+        vote.setProposalVoted(address(token), round, 11, true);
+        vm.prank(address(executor));
+        actionTarget.mintActionReward(address(token), 11, round);
+        (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        require(recorded == MINT_AMOUNT && minted, "recorded amount after mint");
+    }
+
+    function testActionRewardZeroAfterBurn() external {
+        _createAction(11);
+        uint256 round = 5;
+        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
+        vote.setRoundEnded(round, true);
+        executor.setNeedBurn(true);
+        vm.prank(OUTSIDER);
+        actionTarget.burnRewardIfNeeded(address(token), 11, round);
+        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        require(amount == 0 && minted == false, "burned round has nothing mintable");
     }
 
     function testRewardQueriesDefaultForUnboundRounds() external view {

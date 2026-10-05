@@ -88,6 +88,7 @@ contract ActionTargetStubTest is ActionTargetTestBase {
     function testStubTokenTransferFalseRevertsTransferFailed() external {
         _createAction(11);
         uint256 round = 5;
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
         vote.setProposalVoted(address(token), round, 11, true);
         token.setTransferResult(false);
 
@@ -99,6 +100,6 @@ contract ActionTargetStubTest is ActionTargetTestBase {
         );
         actionTarget.mintActionReward(address(token), 11, round);
         (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
-        require(amount == 0 && minted == false, "ledger rolled back");
+        require(amount == MINT_AMOUNT && minted == false, "expected amount remains after rollback");
     }
 }
