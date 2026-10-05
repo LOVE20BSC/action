@@ -48,7 +48,14 @@ abstract contract ActionTargetTestBase {
         _deployMocks();
         actionTarget = new ActionTarget();
         executor = new MockExecutor(address(actionTarget));
-        _wireAndInit(SUBMIT_ADDRESS, address(vote));
+        submitAddress = SUBMIT_ADDRESS;
+        voteAddress = address(vote);
+        phase.setPhase(1);
+        mint.setVoteAddress(voteAddress);
+        mint.setSubmitAddress(submitAddress);
+        mint.setMemberNFTAddress(address(memberNFT));
+        mint.setPhaseAddress(address(phase));
+        actionTarget.init(address(mint));
     }
 
     function _deployMocks() internal {
@@ -61,14 +68,6 @@ abstract contract ActionTargetTestBase {
         memberNFT.setOwner(1, MEMBER1);
         memberNFT.setOwner(2, MEMBER2);
         memberNFT.setOwner(3, MEMBER3);
-    }
-
-    function _wireAndInit(address submitAddress_, address voteAddress_) internal {
-        submitAddress = submitAddress_;
-        voteAddress = voteAddress_;
-        vote.setPhaseAddress(address(phase));
-        phase.setPhase(1);
-        actionTarget.init(address(memberNFT), submitAddress_, voteAddress_, address(mint));
     }
 
     function _targetData(address executorAddress) internal pure returns (bytes[] memory targetData) {

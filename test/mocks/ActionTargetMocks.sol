@@ -18,18 +18,12 @@ contract MockPhase {
 contract MockVote {
     using Pagination for uint256[];
 
-    address public phaseAddress;
-
     // tokenAddress => round => proposalId => voted
     mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _proposalVoted;
     // tokenAddress => round => voted proposal ids
     mapping(address => mapping(uint256 => uint256[])) internal _votedProposalIds;
     // round => ended
     mapping(uint256 => bool) internal _roundEnded;
-
-    function setPhaseAddress(address phaseAddress_) external {
-        phaseAddress = phaseAddress_;
-    }
 
     function setRoundEnded(uint256 round, bool ended) external {
         _roundEnded[round] = ended;
@@ -68,6 +62,10 @@ contract MockMint {
     error MintProposalRewardReverted();
     error BurnUnmintedProposalRewardReverted();
 
+    address public voteAddress;
+    address public submitAddress;
+    address public memberNFTAddress;
+    address public phaseAddress;
     uint256 public mintAmount;
     bool public revertOnMint;
     bool public revertOnBurn;
@@ -86,6 +84,22 @@ contract MockMint {
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _proposalRewardAmount;
     // tokenAddress => round => proposalId => minted
     mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _proposalMinted;
+
+    function setVoteAddress(address voteAddress_) external {
+        voteAddress = voteAddress_;
+    }
+
+    function setSubmitAddress(address submitAddress_) external {
+        submitAddress = submitAddress_;
+    }
+
+    function setMemberNFTAddress(address memberNFTAddress_) external {
+        memberNFTAddress = memberNFTAddress_;
+    }
+
+    function setPhaseAddress(address phaseAddress_) external {
+        phaseAddress = phaseAddress_;
+    }
 
     function setMintAmount(uint256 mintAmount_) external {
         mintAmount = mintAmount_;

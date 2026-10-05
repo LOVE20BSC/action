@@ -96,7 +96,7 @@ contract ActionTargetRealIntegrationTest {
         mint.init(address(vote), address(submit), address(launch), address(memberNFT), 50, 100, 100, 2);
 
         actionTarget = new ActionTarget();
-        actionTarget.init(address(memberNFT), address(submit), address(vote), address(mint));
+        actionTarget.init(address(mint));
         executor = new MockExecutor(address(actionTarget));
 
         vm.roll(block.number + ROLL_PAST_ROUND0);

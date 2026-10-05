@@ -27,46 +27,56 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(actionTarget.submitAddress() == submitAddress, "submit bound");
         require(actionTarget.voteAddress() == address(vote), "vote bound");
         require(actionTarget.mintAddress() == address(mint), "mint bound");
-        require(actionTarget.phaseAddress() == address(phase), "phase derived from vote");
+        require(actionTarget.phaseAddress() == address(phase), "phase derived from mint");
     }
 
     function testInitIsPermissionless() external {
         ActionTarget fresh = new ActionTarget();
         vm.prank(OUTSIDER);
-        fresh.init(address(memberNFT), SUBMIT_ADDRESS, address(vote), address(mint));
+        fresh.init(address(mint));
         require(fresh.initialized(), "outsider init succeeds");
         require(fresh.phaseAddress() == address(phase), "phase derived");
     }
 
     function testInitRejectsSecondCall() external {
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.AlreadyInitialized.selector));
-        actionTarget.init(address(memberNFT), SUBMIT_ADDRESS, address(vote), address(mint));
+        actionTarget.init(address(mint));
         require(actionTarget.memberNFTAddress() == address(memberNFT), "state unchanged");
     }
 
-    function testInitRejectsZeroDependencyAddresses() external {
+    function testInitRejectsZeroMint() external {
         ActionTarget fresh = new ActionTarget();
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
-        fresh.init(address(0), SUBMIT_ADDRESS, address(vote), address(mint));
-
-        fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
-        fresh.init(address(memberNFT), address(0), address(vote), address(mint));
-
-        fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
-        fresh.init(address(memberNFT), SUBMIT_ADDRESS, address(0), address(mint));
-
-        fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
-        fresh.init(address(memberNFT), SUBMIT_ADDRESS, address(vote), address(0));
+        fresh.init(address(0));
+        require(fresh.initialized() == false, "not latched");
     }
 
-    function testInitRejectsVoteWithoutPhase() external {
-        vote.setPhaseAddress(address(0));
+    function testInitRejectsZeroDerivedDependencies() external {
         ActionTarget fresh = new ActionTarget();
+
+        mint.setVoteAddress(address(0));
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
-        fresh.init(address(memberNFT), SUBMIT_ADDRESS, address(vote), address(mint));
+        fresh.init(address(mint));
+        mint.setVoteAddress(voteAddress);
+
+        mint.setSubmitAddress(address(0));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        fresh.init(address(mint));
+        mint.setSubmitAddress(submitAddress);
+
+        mint.setMemberNFTAddress(address(0));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        fresh.init(address(mint));
+        mint.setMemberNFTAddress(address(memberNFT));
+
+        mint.setPhaseAddress(address(0));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        fresh.init(address(mint));
+        mint.setPhaseAddress(address(phase));
+
+        require(fresh.initialized() == false, "not latched");
+        fresh.init(address(mint));
+        require(fresh.initialized(), "retry succeeds after bindings are restored");
     }
 
     function testCreateBindsExecutorAndIndexes() external {

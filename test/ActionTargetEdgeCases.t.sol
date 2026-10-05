@@ -112,10 +112,10 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
     function testInitFailureDoesNotLatchState() external {
         ActionTarget fresh = new ActionTarget();
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
-        fresh.init(address(0), submitAddress, address(vote), address(mint));
+        fresh.init(address(0));
         require(fresh.initialized() == false, "not latched");
 
-        fresh.init(address(memberNFT), submitAddress, address(vote), address(mint));
+        fresh.init(address(mint));
         require(fresh.initialized(), "retry succeeds");
     }
 

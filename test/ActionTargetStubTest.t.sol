@@ -7,12 +7,7 @@ import {MockExecutor} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
 contract CallbackStub {
-    address public phaseAddress;
     ActionTarget public target;
-
-    function setPhaseAddress(address phaseAddress_) external {
-        phaseAddress = phaseAddress_;
-    }
 
     function setTarget(ActionTarget target_) external {
         target = target_;
@@ -59,8 +54,9 @@ contract ActionTargetStubTest is ActionTargetTestBase {
         super.setUp();
         stub = new CallbackStub();
         stubTarget = new ActionTarget();
-        stub.setPhaseAddress(address(phase));
-        stubTarget.init(address(memberNFT), address(stub), address(stub), address(mint));
+        mint.setVoteAddress(address(stub));
+        mint.setSubmitAddress(address(stub));
+        stubTarget.init(address(mint));
         stub.setTarget(stubTarget);
     }
 
