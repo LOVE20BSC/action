@@ -15,11 +15,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-// core's IUniswapV2Pair omits token1(); LP admission needs both tokens for the factory lookup.
-interface IUniswapV2PairToken1 is IUniswapV2Pair {
-    function token1() external view returns (address);
-}
-
 contract LpExecutor is ILpExecutor, ReentrancyGuard {
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using SafeERC20 for IERC20;
@@ -184,9 +179,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         if (amount == 0) {
             revert InvalidParticipationAmount();
         }
-        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
+        _requireMemberOwner(memberId);
 
         uint256 joinRound = currentJoinRound();
 
@@ -232,9 +225,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         if (amount == 0) {
             revert InvalidParticipationAmount();
         }
-        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
+        _requireMemberOwner(memberId);
 
         uint256 joinRound = currentJoinRound();
         uint256 memberJoinedAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(joinRound);
@@ -242,20 +233,16 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
             revert InvalidParticipationAmount();
         }
 
-        uint256 memberDeduction = _deduction[tokenAddress][actionId][joinRound][memberId];
-        uint256 deductionReduction = Math.mulDiv(memberDeduction, amount, memberJoinedAmount);
-        uint256 newJoinedAmount = memberJoinedAmount - amount;
+        if (amount == memberJoinedAmount) {
+            _clearJoinState(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
+        } else {
+            uint256 memberDeduction = _deduction[tokenAddress][actionId][joinRound][memberId];
+            uint256 deductionReduction = Math.mulDiv(memberDeduction, amount, memberJoinedAmount);
 
-        _deduction[tokenAddress][actionId][joinRound][memberId] = memberDeduction - deductionReduction;
-        _totalDeduction[tokenAddress][actionId][joinRound] -= deductionReduction;
-        _joinedAmountByMemberId[tokenAddress][actionId][memberId].record(joinRound, newJoinedAmount);
-        _joinedAmount[tokenAddress][actionId].decrease(joinRound, amount);
-
-        if (newJoinedAmount == 0) {
-            delete _deduction[tokenAddress][actionId][joinRound][memberId];
-            delete _joinBlocks[tokenAddress][actionId][joinRound][memberId];
-            delete _joinAmounts[tokenAddress][actionId][joinRound][memberId];
-            IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+            _deduction[tokenAddress][actionId][joinRound][memberId] = memberDeduction - deductionReduction;
+            _totalDeduction[tokenAddress][actionId][joinRound] -= deductionReduction;
+            _joinedAmountByMemberId[tokenAddress][actionId][memberId].record(joinRound, memberJoinedAmount - amount);
+            _joinedAmount[tokenAddress][actionId].decrease(joinRound, amount);
         }
 
         IERC20(_joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
@@ -271,9 +258,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function exit(address tokenAddress, uint256 actionId, uint256 memberId) external nonReentrant {
-        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
+        _requireMemberOwner(memberId);
 
         uint256 joinRound = currentJoinRound();
         uint256 memberJoinedAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(joinRound);
@@ -281,18 +266,35 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
             revert NotJoined();
         }
 
-        _totalDeduction[tokenAddress][actionId][joinRound] -= _deduction[tokenAddress][actionId][joinRound][memberId];
-        delete _deduction[tokenAddress][actionId][joinRound][memberId];
-        delete _joinBlocks[tokenAddress][actionId][joinRound][memberId];
-        delete _joinAmounts[tokenAddress][actionId][joinRound][memberId];
-        _joinedAmountByMemberId[tokenAddress][actionId][memberId].record(joinRound, 0);
-        _joinedAmount[tokenAddress][actionId].decrease(joinRound, memberJoinedAmount);
-
-        IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+        _clearJoinState(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
 
         IERC20(_joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, memberJoinedAmount);
 
         emit Exited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _requireMemberOwner(uint256 memberId) internal view {
+        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
+            revert NotMemberOwner(memberId);
+        }
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function _clearJoinState(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId,
+        uint256 memberJoinedAmount
+    ) internal {
+        _totalDeduction[tokenAddress][actionId][round] -= _deduction[tokenAddress][actionId][round][memberId];
+        delete _deduction[tokenAddress][actionId][round][memberId];
+        delete _joinBlocks[tokenAddress][actionId][round][memberId];
+        delete _joinAmounts[tokenAddress][actionId][round][memberId];
+        _joinedAmountByMemberId[tokenAddress][actionId][memberId].record(round, 0);
+        _joinedAmount[tokenAddress][actionId].decrease(round, memberJoinedAmount);
+        IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
     }
 
     function _calculateReward(
@@ -372,7 +374,6 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         }
     }
 
-    // Batch settlement repeats all checks and interactions per action and round; any failure reverts the batch.
     // forge-lint: disable-next-item(require-revert-in-loop, missing-events-access-control)
     function mintMemberReward(
         address tokenAddress,
@@ -387,16 +388,13 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         if (round > _mintRound()) {
             revert InvalidRound(round);
         }
-        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
+        _requireMemberOwner(memberId);
 
         if (_memberMinted[tokenAddress][actionId][round][memberId]) {
             revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
         }
 
-        uint256 totalJoinedAmount = _joinedAmount[tokenAddress][actionId].value(round);
-        uint256 totalEffectiveAmount = totalJoinedAmount - _totalDeduction[tokenAddress][actionId][round];
+        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
         if (totalEffectiveAmount != 0) {
             (uint256 proposalReward, bool actionMinted) =
                 IActionTarget(actionTarget).actionReward(tokenAddress, actionId, round);
@@ -463,13 +461,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
 
         uint256 createdRound = _createdRound[tokenAddress][actionId];
         if (createdRound != 0 && round >= createdRound && round <= _mintRound()) {
-            uint256 totalJoinedAmount = _joinedAmount[tokenAddress][actionId].value(round);
-            uint256 totalEffectiveAmount = totalJoinedAmount - _totalDeduction[tokenAddress][actionId][round];
-            if (totalEffectiveAmount != 0) {
-                (uint256 proposalReward, ) = IActionTarget(actionTarget).actionReward(tokenAddress, actionId, round);
-                (mintAmount, burnAmount) =
-                    _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
-            }
+            (mintAmount, burnAmount) = _pendingMemberReward(tokenAddress, actionId, round, memberId);
         }
     }
 
@@ -482,19 +474,19 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     }
 
     function currentJoinRound() public view returns (uint256) {
-        uint256 phase = IPhase(_phase).currentPhase();
-        if (phase < 2) {
+        uint256 round = _joinRound();
+        if (round == 0) {
             revert RoundNotStarted();
         }
-        return phase - 1;
+        return round;
     }
 
     function currentMintRound() external view returns (uint256) {
-        uint256 phase = IPhase(_phase).currentPhase();
-        if (phase < 3) {
+        uint256 round = _mintRound();
+        if (round == 0) {
             revert RoundNotStarted();
         }
-        return phase - 2;
+        return round;
     }
 
     function joinedAmount(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
@@ -520,6 +512,29 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         return _joinTokenAddress[tokenAddress][actionId];
     }
 
+    function _totalEffectiveAmount(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) internal view returns (uint256) {
+        return _joinedAmount[tokenAddress][actionId].value(round) - _totalDeduction[tokenAddress][actionId][round];
+    }
+
+    function _pendingMemberReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId
+    ) internal view returns (uint256 mintAmount, uint256 burnAmount) {
+        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
+        if (totalEffectiveAmount == 0) {
+            return (0, 0);
+        }
+        (uint256 proposalReward, ) = IActionTarget(actionTarget).actionReward(tokenAddress, actionId, round);
+        (mintAmount, burnAmount) =
+            _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
+    }
+
     function _joinRound() internal view returns (uint256) {
         uint256 phase = IPhase(_phase).currentPhase();
         return phase < 2 ? 0 : phase - 1;
@@ -543,7 +558,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         }
 
         address token1 = address(0);
-        try IUniswapV2PairToken1(lpToken).token1() returns (address result) {
+        try IUniswapV2Pair(lpToken).token1() returns (address result) {
             token1 = result;
         } catch {
             return false;
