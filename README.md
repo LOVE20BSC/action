@@ -20,7 +20,9 @@ Core 的接口以 `core` 代码库为准：生产代码直接从 `lib/core/src/i
 ## 当前状态
 
 - 仓库骨架与工具链已建立，编译基线为 Solidity `0.8.37`、Foundry `1.8.1`、`evm_version = "osaka"`，不使用 `via_ir`。
-- ActionTarget 与 LP 迁移完成：旧代码基线、改名、BSC 实现与测试均已提交（第 2-4 步）；LP 含真实 core 栈集成测试。GroupAction、GroupService 尚未开始。
+- ActionTarget 与 LP 迁移完成：旧代码基线、改名、BSC 实现与测试均已提交（第 2-4 步）；LP 含真实 core 栈集成测试，`src/LpExecutor.sol` 达 100% 行与分支覆盖。
+- acceptance.md 的 LP 全周期集成场景（`love20-anvil/scenarios/lp-action-full-cycle.yml`）依赖 BSC 版 `love20-anvil` 仓库，该仓库尚在规划中未创建，属仓库级阻塞项，不影响 LP 四步迁移收口；仓库创建后补跑该场景。
+- GroupAction、GroupService 是下两个迁移对象，尚未开始。
 - 自有接口以 `matt-gov` 的 `interfaces/action/` 为唯一来源，`src/interfaces/` 与其逐字节同步；Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
 
 ## 构建与测试
