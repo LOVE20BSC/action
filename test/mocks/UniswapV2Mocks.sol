@@ -18,10 +18,17 @@ contract MockUniswapV2Pair {
     uint112 private reserve1;
     uint32 private blockTimestampLast;
     uint256 private _totalSupply;
+    mapping(address => uint256) private _balanceOf;
+    mapping(address => mapping(address => uint256)) private _allowance;
+    bool public failTransferFrom;
 
     constructor(address token0_, address token1_) {
         token0 = token0_;
         token1 = token1_;
+    }
+
+    function setFailTransferFrom(bool failTransferFrom_) external {
+        failTransferFrom = failTransferFrom_;
     }
 
     function getReserves() external view returns (uint112, uint112, uint32) {
@@ -32,21 +39,51 @@ contract MockUniswapV2Pair {
         return _totalSupply;
     }
 
-    function mint(address) external returns (uint256 liquidity) {
+    function balanceOf(address account) external view returns (uint256) {
+        return _balanceOf[account];
+    }
+
+    function mint(address to) external returns (uint256 liquidity) {
         liquidity = 1000;
         _totalSupply += liquidity;
+        _balanceOf[to] += liquidity;
         reserve0 = 5000;
         reserve1 = 5000;
         blockTimestampLast = uint32(block.timestamp);
         return liquidity;
     }
 
-    function transfer(address, uint256) external pure returns (bool) {
+    function mintTo(address to, uint256 amount) external {
+        _totalSupply += amount;
+        _balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        _balanceOf[msg.sender] -= amount;
+        _balanceOf[to] += amount;
         return true;
     }
 
-    function balanceOf(address) external view returns (uint256) {
-        return _totalSupply;
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (failTransferFrom) {
+            return false;
+        }
+        uint256 allowed = _allowance[from][msg.sender];
+        if (allowed != type(uint256).max) {
+            _allowance[from][msg.sender] = allowed - amount;
+        }
+        _balanceOf[from] -= amount;
+        _balanceOf[to] += amount;
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        _allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function allowance(address owner, address spender) external view returns (uint256) {
+        return _allowance[owner][spender];
     }
 }
 
