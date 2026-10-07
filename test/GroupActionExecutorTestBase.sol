@@ -146,6 +146,11 @@ abstract contract GroupActionExecutorTestBase {
         return GroupConfig({description: "group", maxCapacity: 0, minJoinAmount: 1e18, maxJoinAmount: 0, maxAccounts: 0});
     }
 
+    function _deactivateGroup(uint256 groupId) internal {
+        vm.prank(GROUP_OWNER);
+        executor.deactivateGroup(address(token), ACTION_ID, groupId);
+    }
+
     function _fundTokenFor(address account, uint256 amount) internal {
         token.mint(account, amount);
         vm.prank(account);

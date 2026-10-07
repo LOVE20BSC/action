@@ -1,0 +1,311 @@
+// SPDX-License-Identifier: MIT
+pragma solidity =0.8.37;
+
+import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
+import {IGroupActionExecutorErrors} from "../src/interfaces/IGroupActionExecutor.sol";
+import {IGroupActionManagerErrors} from "../src/interfaces/IGroupActionManager.sol";
+import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
+import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
+
+contract GroupActionManagerTest is GroupActionExecutorTestBase {
+    uint256 internal constant ACTION_2 = 22;
+    uint256 internal constant GROUP_8 = 8;
+    uint256 internal constant GROUP_99 = 99;
+
+    function testActivateGroupAccountingAndSnapshots() external {
+        _openJoinPhase();
+
+        require(executor.isGroupActive(address(token), ACTION_ID, GROUP_ID), "active");
+        require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "staked");
+        require(executor.totalStaked(address(token)) == ACTIVATION_STAKE, "total staked");
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "owner staked");
+
+        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+        _activateGroupWith(GROUP_8, _defaultConfig());
+        require(executor.totalStaked(address(token)) == ACTIVATION_STAKE * 2, "both groups staked");
+
+        (uint256[] memory groupIds, uint256 total) = executor.activeGroupIds(address(token), ACTION_ID, 0, 10, false);
+        require(total == 2 && groupIds.length == 2, "two active groups");
+        (groupIds, total) = executor.activeGroupIds(address(token), ACTION_ID, 1, 1, false);
+        require(total == 2 && groupIds.length == 1 && groupIds[0] == GROUP_8, "active ids pagination");
+
+        (address[] memory tokenAddresses, uint256 tokenTotal) =
+            executor.tokenAddressesByGroupId(GROUP_ID, 0, 10, false);
+        require(tokenTotal == 1 && tokenAddresses[0] == address(token), "token by group");
+        (uint256[] memory actionIds, uint256 actionTotal) =
+            executor.actionIdsByGroupId(address(token), GROUP_ID, 0, 10, false);
+        require(actionTotal == 1 && actionIds[0] == ACTION_ID, "action by group");
+        (actionIds, actionTotal) = executor.actionIds(address(token), 0, 10, false);
+        require(actionTotal == 1 && actionIds[0] == ACTION_ID, "action ids");
+
+        require(
+            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 2, GROUP_ID)))
+                == keccak256(bytes("group")),
+            "description by round"
+        );
+        require(
+            bytes(executor.descriptionByRound(address(token), ACTION_ID, 1, GROUP_ID)).length == 0,
+            "no earlier description"
+        );
+    }
+
+    function testActivateGroupReverts() external {
+        _openJoinPhase();
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.OnlyGroupOwner.selector));
+        executor.activateGroup(address(token), ACTION_ID, GROUP_ID, _defaultConfig());
+
+        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupAlreadyActivated.selector));
+        executor.activateGroup(address(token), ACTION_ID, GROUP_ID, _defaultConfig());
+
+        GroupConfig memory zeroMin = GroupConfig({
+            description: "x",
+            maxCapacity: 0,
+            minJoinAmount: 0,
+            maxJoinAmount: 0,
+            maxAccounts: 0
+        });
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InvalidMinMaxJoinAmount.selector));
+        executor.activateGroup(address(token), ACTION_ID, GROUP_8, zeroMin);
+
+        GroupConfig memory inverted = GroupConfig({
+            description: "x",
+            maxCapacity: 0,
+            minJoinAmount: 10e18,
+            maxJoinAmount: 5e18,
+            maxAccounts: 0
+        });
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InvalidMinMaxJoinAmount.selector));
+        executor.activateGroup(address(token), ACTION_ID, GROUP_8, inverted);
+
+        bytes memory longDescription = new bytes(1025);
+        for (uint256 i = 0; i < longDescription.length; i++) {
+            longDescription[i] = 0x61;
+        }
+        GroupConfig memory tooLong = GroupConfig({
+            description: string(longDescription),
+            maxCapacity: 0,
+            minJoinAmount: 1e18,
+            maxJoinAmount: 0,
+            maxAccounts: 0
+        });
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector));
+        executor.activateGroup(address(token), ACTION_ID, GROUP_8, tooLong);
+    }
+
+    function testActivationMinGovRatioGate() external {
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, PRECISION, 1e17));
+        _atPhase(3);
+        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+
+        stake.setGlobalGovVotes(address(token), 0);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NoGovVotes.selector));
+        executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
+
+        stake.setGlobalGovVotes(address(token), 1000e18);
+        stake.setValidGovVotes(address(token), GROUP_8, 50e18);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InsufficientActivationMinGovRatio.selector));
+        executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
+
+        stake.setValidGovVotes(address(token), GROUP_8, 100e18);
+        vm.prank(GROUP_OWNER);
+        executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
+        require(executor.isGroupActive(address(token), ACTION_2, GROUP_8), "activated at the ratio boundary");
+        require(executor.staked(address(token), ACTION_2) == 0, "no activation stake configured");
+    }
+
+    function testDeactivateRestoresStakeAndSnapshots() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(GROUP_OWNER, 1e18);
+        _join(GROUP_OWNER_ID, 1e18, 0);
+        require(executor.hasActiveGroups(address(token), GROUP_OWNER_ID), "active before");
+
+        _atPhase(4);
+        uint256 before = token.balanceOf(GROUP_OWNER);
+        _deactivateGroup(GROUP_ID);
+        require(token.balanceOf(GROUP_OWNER) - before == ACTIVATION_STAKE, "stake returned");
+        require(!executor.isGroupActive(address(token), ACTION_ID, GROUP_ID), "inactive");
+        require(executor.staked(address(token), ACTION_ID) == 0, "staked cleared");
+        require(executor.totalStaked(address(token)) == 0, "total cleared");
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "owner cleared");
+
+        (uint256[] memory groupIds, uint256 total) = executor.activeGroupIds(address(token), ACTION_ID, 0, 10, false);
+        require(total == 0 && groupIds.length == 0, "no active groups");
+        (, uint256 tokenTotal) = executor.tokenAddressesByGroupId(GROUP_ID, 0, 10, false);
+        require(tokenTotal == 0, "token link removed");
+        (, uint256 actionTotal) = executor.actionIdsByGroupId(address(token), GROUP_ID, 0, 10, false);
+        require(actionTotal == 0, "action link removed");
+        (, actionTotal) = executor.actionIds(address(token), 0, 10, false);
+        require(actionTotal == 0, "action ids removed");
+        require(!executor.hasActiveGroups(address(token), GROUP_OWNER_ID), "active after false");
+    }
+
+    function testDeactivateReverts() external {
+        _openJoinPhase();
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.CannotDeactivateInActivatedRound.selector));
+        executor.deactivateGroup(address(token), ACTION_ID, GROUP_ID);
+
+        memberNFT.setOwner(GROUP_99, GROUP_OWNER);
+        _atPhase(4);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));
+        executor.deactivateGroup(address(token), ACTION_ID, GROUP_99);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.OnlyGroupOwner.selector));
+        executor.deactivateGroup(address(token), ACTION_ID, GROUP_ID);
+    }
+
+    function testUpdateGroupConfigAndReverts() external {
+        _openJoinPhase();
+        _atPhase(4);
+
+        GroupConfig memory updated = GroupConfig({
+            description: "v2",
+            maxCapacity: 500e18,
+            minJoinAmount: 2e18,
+            maxJoinAmount: 20e18,
+            maxAccounts: 3
+        });
+        vm.prank(GROUP_OWNER);
+        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
+
+        (GroupConfig memory config, bool active, uint256 activatedRound, uint256 deactivatedRound) =
+            executor.groupInfo(address(token), ACTION_ID, GROUP_ID);
+        require(active && activatedRound == 2 && deactivatedRound == 0, "group info flags");
+        require(keccak256(bytes(config.description)) == keccak256(bytes("v2")), "description updated");
+        require(
+            config.maxCapacity == 500e18 && config.minJoinAmount == 2e18 && config.maxJoinAmount == 20e18
+                && config.maxAccounts == 3,
+            "config updated"
+        );
+        require(
+            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_ID)))
+                == keccak256(bytes("v2")),
+            "description history at update round"
+        );
+        require(
+            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 2, GROUP_ID)))
+                == keccak256(bytes("group")),
+            "history keeps activation round"
+        );
+
+        memberNFT.setOwner(GROUP_99, GROUP_OWNER);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));
+        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_99, updated);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.OnlyGroupOwner.selector));
+        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
+    }
+
+    function testMaxJoinAmountDerivation() external {
+        _openJoinPhase();
+        require(executor.maxJoinAmount(address(token), ACTION_ID) == 0, "zero supply caps at zero");
+
+        joinToken.mint(MEMBER1, 400e18);
+        require(executor.maxJoinAmount(address(token), ACTION_ID) == 400e18, "full vote rate");
+
+        vote.setVotesNumByProposalId(address(token), 2, ACTION_ID, 250e18);
+        require(executor.maxJoinAmount(address(token), ACTION_ID) == 100e18, "quarter vote rate");
+
+        vote.setVotesNum(address(token), 2, 0);
+        require(executor.maxJoinAmount(address(token), ACTION_ID) == 0, "zero total votes");
+
+        vote.setVotesNumByProposalId(address(token), 2, ACTION_ID, 0);
+        require(executor.maxJoinAmount(address(token), ACTION_ID) == 0, "zero action votes");
+
+        vote.setVotesNum(address(token), 2, 1000e18);
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, 0, 0));
+        require(executor.maxJoinAmount(address(token), ACTION_2) == 0, "zero ratio");
+    }
+
+    function testOnProposalCreatedReverts() external {
+        bytes[] memory data = _targetData();
+
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        executor.onProposalCreated(address(token), ACTION_2, data);
+
+        bytes[] memory four = new bytes[](4);
+        for (uint256 i = 0; i < 4; i++) {
+            four[i] = data[i];
+        }
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        executor.onProposalCreated(address(token), ACTION_2, four);
+
+        bytes[] memory badItem = _clone(data);
+        badItem[2] = new bytes(31);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        executor.onProposalCreated(address(token), ACTION_2, badItem);
+
+        bytes[] memory zeroToken = _clone(data);
+        zeroToken[1] = abi.encode(address(0));
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidAddress.selector));
+        executor.onProposalCreated(address(token), ACTION_2, zeroToken);
+
+        bytes[] memory badRatio = _clone(data);
+        badRatio[3] = abi.encode(PRECISION + 1);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidRatio.selector));
+        executor.onProposalCreated(address(token), ACTION_2, badRatio);
+
+        bytes[] memory badGov = _clone(data);
+        badGov[4] = abi.encode(PRECISION + 1);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidRatio.selector));
+        executor.onProposalCreated(address(token), ACTION_2, badGov);
+
+        string[] memory keys = new string[](1);
+        keys[0] = "k";
+        string[] memory descriptions = new string[](2);
+        descriptions[0] = "a";
+        descriptions[1] = "b";
+        bytes[] memory six = new bytes[](6);
+        for (uint256 i = 0; i < 5; i++) {
+            six[i] = data[i];
+        }
+        six[5] = abi.encode(keys, descriptions);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector));
+        executor.onProposalCreated(address(token), ACTION_2, six);
+    }
+
+    function _targetDataWith(address joinTokenAddress, uint256 stakeAmount, uint256 ratio, uint256 minGovRatio)
+        internal
+        view
+        returns (bytes[] memory targetData)
+    {
+        targetData = new bytes[](5);
+        targetData[0] = abi.encode(address(executor));
+        targetData[1] = abi.encode(joinTokenAddress);
+        targetData[2] = abi.encode(stakeAmount);
+        targetData[3] = abi.encode(ratio);
+        targetData[4] = abi.encode(minGovRatio);
+    }
+
+    function _createActionWith(uint256 actionId, bytes[] memory targetData) internal {
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(address(token), actionId, targetData);
+    }
+
+    function _clone(bytes[] memory data) internal pure returns (bytes[] memory copy) {
+        copy = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            copy[i] = data[i];
+        }
+    }
+}
