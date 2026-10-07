@@ -165,6 +165,114 @@ contract GroupActionVerifyTest {
         require(score == 0 && !verified, "unscored group unverified");
     }
 
+    function test_ScoredRoundSurvivesLaterRoundSetChurn() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100, 60, 30));
+        _submit(GROUP_B, 0, _scores(50));
+
+        // Round 2: member 2 leaves, swap-and-pop displaces member 3 within the round-2 order.
+        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].remove(ROUND + 1, 2);
+
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        require(score1 == 100 && verified1, "member 1 keeps round score");
+        require(score2 == 60 && verified2, "departing member keeps round score");
+        require(score3 == 30 && verified3, "displaced member keeps round score");
+        require(
+            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+                == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 60 + MEMBER_AMOUNT_C * 30 + 40e18 * 50,
+            "totals frozen across later rounds"
+        );
+        require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "round stays verified");
+    }
+
+    function test_SameRoundChurnKeepsFinalOrderVerifiable() external {
+        _bindVerifier();
+        // Member 2 leaves and re-joins within the round: the round keeps the final arrangement [1, 3, 2].
+        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].remove(ROUND, 2);
+        s.groupHistory[TOKEN][ACTION_ID][2].record(ROUND, 0);
+        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].add(ROUND, 2);
+        s.groupHistory[TOKEN][ACTION_ID][2].record(ROUND, GROUP_A);
+
+        _submit(GROUP_A, 0, _scores(100, 90, 80));
+
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        require(score1 == 100 && verified1, "slot 0 scored first");
+        require(score3 == 90 && verified3, "displaced member scored in new slot");
+        require(score2 == 80 && verified2, "re-added member scored last");
+        require(
+            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+                == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_C * 90 + MEMBER_AMOUNT_B * 80,
+            "totals follow the final arrangement"
+        );
+        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][3] == 10, "deduction follows member 3");
+    }
+
+    function test_PartialBatchRemainderStaysUnverified() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100));
+        _submit(GROUP_A, 1, _scores(90));
+
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        require(score3 == 0 && !verified3, "remainder stays unverified");
+        require(
+            GroupActionVerify.verifiedMemberCount(s, TOKEN, ACTION_ID, ROUND, GROUP_A) == 2,
+            "cursor at batch boundary"
+        );
+
+        _submit(GROUP_A, 2, _scores(80));
+        (score3, verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        require(score3 == 80 && verified3, "remainder verified by final batch");
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        require(score1 == 100 && verified1, "first batch untouched");
+    }
+
+    function test_SlotMismatchIsRejectedAsUnverified() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100, 60));
+
+        // Corrupt the slot lookup only: the member index still points at slot 0.
+        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].slotHistory[0].record(ROUND, 99);
+
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        require(score1 == 0 && !verified1, "slot mismatch rejected");
+        (uint256 final1, bool finalVerified1) = GroupActionVerify.finalScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        require(final1 == 0 && !finalVerified1, "slot mismatch final zero");
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        require(score2 == 60 && verified2, "unrelated member unchanged");
+    }
+
+    function test_DeductionsIsolatedAcrossRounds() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(60));
+
+        phase.setCurrentPhase(4);
+        s.lockedVerifierId[TOKEN][ACTION_ID][ROUND + 1] = VERIFIER_ID;
+        _submit(GROUP_A, 0, _scores(100));
+
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND + 1, 1);
+        require(score1 == 60 && verified1, "round 1 deduction intact");
+        require(score2 == 100 && verified2, "round 2 full score decodes from empty slot");
+        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][1] == 40, "round 1 slot");
+        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND + 1][1] == 0, "round 2 no slot");
+        require(
+            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND + 1) == MEMBER_AMOUNT_A * 100,
+            "round 2 totals"
+        );
+    }
+
+    function test_MemberWithoutGroupReturnsZero() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100, 60, 30));
+
+        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 99);
+        require(score == 0 && !verified, "no group attribution is unverified");
+    }
+
     function _seedMember(uint256 memberId, uint256 groupId, uint256 amount) internal {
         s.memberIdsByGroupId[TOKEN][ACTION_ID][groupId].add(ROUND, memberId);
         s.groupHistory[TOKEN][ACTION_ID][memberId].record(ROUND, groupId);
@@ -190,5 +298,12 @@ contract GroupActionVerifyTest {
         out = new uint256[](2);
         out[0] = a;
         out[1] = b;
+    }
+
+    function _scores(uint256 a, uint256 b, uint256 c) internal pure returns (uint256[] memory out) {
+        out = new uint256[](3);
+        out[0] = a;
+        out[1] = b;
+        out[2] = c;
     }
 }

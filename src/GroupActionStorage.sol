@@ -120,7 +120,10 @@ library GroupActionStorage {
         mapping(uint256 => Uint256Set.Storage) gMemberIdsByGroupId;
 
         // tokenAddress => actionId => round => memberId => origin score deduction from MAX_ORIGIN_SCORE
-        // (0 = full score or unverified; verified-ness is positional, see verifiedMemberCount)
+        // (0 = full score or unverified). Verified-ness is positional: scored members are exactly the
+        // first `verifiedMemberCount` slots of the round's member set, which holds because the set is
+        // only written at the current join round (phase - 1) while verification only runs for round
+        // `phase - 2`, freezing the round's set view once verification starts.
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeduction;
         // tokenAddress => actionId => round => groupId => verified member count
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
