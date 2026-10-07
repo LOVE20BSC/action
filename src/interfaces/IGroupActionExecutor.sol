@@ -10,6 +10,7 @@ import {IActionExecutor} from "./IActionExecutor.sol";
 interface IGroupActionExecutorErrors {
     error InvalidAddress();
     error InvalidSplits();
+    error InvalidRatio();
     error InvalidTargetDataLength();
     error VerificationInfoLengthMismatch();
     error DescriptionTooLong();
