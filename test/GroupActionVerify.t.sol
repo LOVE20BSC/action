@@ -122,6 +122,49 @@ contract GroupActionVerifyTest {
         require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "round complete");
     }
 
+    function test_FullScoreWritesNoDeductionSlot() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100, 60));
+
+        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][1] == 0, "full score writes no slot");
+        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][2] == 40, "deduction stored");
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        require(score1 == 100 && verified1, "full score decodes");
+        require(score2 == 60 && verified2, "deduction decodes");
+        require(
+            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+                == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 60,
+            "totals unchanged"
+        );
+    }
+
+    function test_UnverifiedMemberBeyondCursorReturnsZero() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100));
+
+        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        require(score == 0 && !verified, "beyond cursor unverified");
+        (uint256 finalScore, bool finalVerified) = GroupActionVerify.finalScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        require(finalScore == 0 && !finalVerified, "beyond cursor final zero");
+    }
+
+    function test_MemberOutsideMemberSetReturnsZero() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100));
+        s.groupHistory[TOKEN][ACTION_ID][9].record(ROUND, GROUP_A);
+
+        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 9);
+        require(score == 0 && !verified, "absent from member set is unverified");
+    }
+
+    function test_UnscoredGroupReturnsZero() external {
+        _bindVerifier();
+
+        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 4);
+        require(score == 0 && !verified, "unscored group unverified");
+    }
+
     function _seedMember(uint256 memberId, uint256 groupId, uint256 amount) internal {
         s.memberIdsByGroupId[TOKEN][ACTION_ID][groupId].add(ROUND, memberId);
         s.groupHistory[TOKEN][ACTION_ID][memberId].record(ROUND, groupId);

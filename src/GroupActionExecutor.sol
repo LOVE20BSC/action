@@ -773,11 +773,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         uint256 round,
         uint256 memberId
     ) internal view returns (uint256) {
-        uint256 packed = s.originScorePacked[tokenAddress][actionId][round][memberId];
-        if (packed < GroupActionStorage.VERIFIED_FLAG) {
-            return 0;
-        }
-        return s.memberAmountAt(tokenAddress, actionId, round, memberId) * (packed & GroupActionStorage.SCORE_MASK);
+        (uint256 score, ) = GroupActionVerify.finalScore(s, tokenAddress, actionId, round, memberId);
+        return score;
     }
 
 

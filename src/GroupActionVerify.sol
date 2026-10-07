@@ -101,8 +101,7 @@ library GroupActionVerify {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 score, bool verified) {
-        uint256 packed = s.originScorePacked[tokenAddress][actionId][round][memberId];
-        return (packed & GroupActionStorage.SCORE_MASK, packed >= GroupActionStorage.VERIFIED_FLAG);
+        return _originScoreOf(s, tokenAddress, actionId, round, memberId);
     }
 
     function finalScore(
@@ -112,15 +111,14 @@ library GroupActionVerify {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 score, bool verified) {
-        uint256 packed = s.originScorePacked[tokenAddress][actionId][round][memberId];
-        verified = packed >= GroupActionStorage.VERIFIED_FLAG;
+        (score, verified) = _originScoreOf(s, tokenAddress, actionId, round, memberId);
         if (!verified) {
             // forge-lint: disable-next-line(boolean-cst)
             return (0, false);
         }
         uint256 amount = s.memberAmountAt(tokenAddress, actionId, round, memberId);
         // forge-lint: disable-next-line(boolean-cst)
-        return (amount * (packed & GroupActionStorage.SCORE_MASK), true);
+        return (amount * score, true);
     }
 
     function totalFinalScore(
@@ -431,8 +429,39 @@ library GroupActionVerify {
         uint256 memberId,
         uint256 score
     ) internal returns (uint256 weighted) {
-        s.originScorePacked[tokenAddress][actionId][round][memberId] = score | GroupActionStorage.VERIFIED_FLAG;
+        if (score < GroupActionStorage.MAX_ORIGIN_SCORE) {
+            uint256 deduction = GroupActionStorage.MAX_ORIGIN_SCORE - score;
+            s.originScoreDeduction[tokenAddress][actionId][round][memberId] = deduction;
+        }
         return s.memberAmountAt(tokenAddress, actionId, round, memberId) * score;
+    }
+
+    // forge-lint: disable-next-item(boolean-cst)
+    function _originScoreOf(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId
+    ) internal view returns (uint256 score, bool verified) {
+        uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].value(round);
+        if (groupId == 0) {
+            return (0, false);
+        }
+        uint256 verifiedCount = s.verifiedMemberCount[tokenAddress][actionId][round][groupId];
+        if (verifiedCount == 0) {
+            return (0, false);
+        }
+        RoundHistoryUint256Set.Storage storage memberSet = s.memberIdsByGroupId[tokenAddress][actionId][groupId];
+        uint256 indexPlusOne = memberSet.indexPlusOneHistory[memberId].value(round);
+        if (
+            indexPlusOne == 0 || indexPlusOne - 1 >= verifiedCount
+                || memberSet.slotHistory[indexPlusOne - 1].value(round) != memberId
+        ) {
+            return (0, false);
+        }
+        uint256 deduction = s.originScoreDeduction[tokenAddress][actionId][round][memberId];
+        return (GroupActionStorage.MAX_ORIGIN_SCORE - deduction, true);
     }
 
     function _pageMembers(

@@ -25,8 +25,6 @@ library GroupActionStorage {
     uint256 constant MAX_ORIGIN_SCORE = 100;
     uint256 constant MAX_VERIFICATION_BATCH = 100;
     uint256 constant MAX_DESCRIPTION_BYTES = 1024;
-    uint256 constant VERIFIED_FLAG = 1 << 255;
-    uint256 constant SCORE_MASK = VERIFIED_FLAG - 1;
 
     struct GroupInfo {
         GroupConfig config;
@@ -121,8 +119,9 @@ library GroupActionStorage {
         // groupId => member ids currently in the group
         mapping(uint256 => Uint256Set.Storage) gMemberIdsByGroupId;
 
-        // tokenAddress => actionId => round => memberId => packed origin score (bit 255 marks verified, low bits the score)
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScorePacked;
+        // tokenAddress => actionId => round => memberId => origin score deduction from MAX_ORIGIN_SCORE
+        // (0 = full score or unverified; verified-ness is positional, see verifiedMemberCount)
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeduction;
         // tokenAddress => actionId => round => groupId => verified member count
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
         // tokenAddress => actionId => round => groupId => accumulated final score
