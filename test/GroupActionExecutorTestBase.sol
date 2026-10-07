@@ -12,10 +12,19 @@ import {
 import {MockGroupActionMemberNFT, MockGroupActionPhase} from "./mocks/GroupActionMocks.sol";
 
 interface GroupActionExecutorVm {
+    struct Log {
+        bytes32[] topics;
+        bytes data;
+        address emitter;
+    }
+
     function prank(address sender) external;
     function expectRevert(bytes calldata data) external;
     function expectRevert() external;
     function roll(uint256 blockNumber) external;
+    function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
+    function recordLogs() external;
+    function getRecordedLogs() external returns (Log[] memory logs);
 }
 
 /// @dev Executor-level suite: deploys the real Executor with thin mocks for the
