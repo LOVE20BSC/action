@@ -1,289 +1,156 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
-interface IGroupVerifyEvents {
-    event SubmitOriginScores(
+import {IVerificationInfo} from "./IVerificationInfo.sol";
+
+struct VerifierApplication {
+    uint256 applicationId;
+    uint256 memberId;
+    string description;
+}
+
+interface IGroupActionVerifyEvents {
+    event OriginScoresSubmitted(
         address indexed tokenAddress,
-        uint256 round,
         uint256 indexed actionId,
         uint256 indexed groupId,
+        uint256 round,
+        uint256 verifierId,
         uint256 startIndex,
-        uint256 count,
-        bool isComplete
+        uint256[] scores
     );
-    event SetGroupDelegate(
+    event VerifierApplicationSubmitted(
         address indexed tokenAddress,
-        uint256 round,
         uint256 indexed actionId,
-        uint256 indexed groupId,
-        address delegate
+        uint256 indexed memberId,
+        uint256 round,
+        uint256 applicationId
     );
-    event DistrustVote(
+    event VerifierApplicationCancelled(
         address indexed tokenAddress,
-        uint256 round,
         uint256 indexed actionId,
-        address indexed groupOwner,
-        address voter,
-        uint256 amount,
-        string reason
+        uint256 indexed memberId,
+        uint256 round,
+        uint256 applicationId
+    );
+    event VerifierLocked(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed round,
+        uint256 memberId
     );
 }
 
-interface IGroupVerifyErrors {
+interface IGroupActionVerifyErrors {
     error OriginScoresEmpty();
-    error NotVerifier();
+    error InvalidCandidate();
     error ScoreExceedsMax();
     error AlreadyVerified();
-    error InvalidStartIndex();
+    error StartIndexMismatch(uint256 expected, uint256 actual);
     error ScoresExceedAccountCount();
     error VerifyVotesZero();
-    error DistrustVoteExceedsVerifyVotes();
-    error InvalidReason();
-    error DistrustVoteZeroAmount();
-    error OnlyGroupOwner();
-    error NotRegisteredExtensionInFactory();
-    error ExtensionNotInitialized();
+    error ApplicationNotActive();
+    error VerifierAlreadyLocked(address tokenAddress, uint256 actionId, uint256 round);
 }
 
-interface IGroupVerify is IGroupVerifyEvents, IGroupVerifyErrors {
-    /// @notice Maximum origin score for verification (100 = full score)
-    function MAX_ORIGIN_SCORE() external pure returns (uint256);
-
-    /// @notice Precision constant for ratio calculations (1e18)
-    function PRECISION() external pure returns (uint256);
-
-    function initialize(address factory_) external;
-
-    function FACTORY_ADDRESS() external view returns (address);
-
+interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGroupActionVerifyErrors {
     function submitOriginScores(
-        address extension,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 verifierId,
         uint256 groupId,
         uint256 startIndex,
         uint256[] calldata originScores
     ) external;
 
-    function setGroupDelegate(
-        address extension,
-        uint256 groupId,
-        address delegate
-    ) external;
-
-    function distrustVote(
-        address extension,
-        address groupOwner,
-        uint256 amount,
-        string calldata reason
-    ) external;
-
-    function originScoreByAccount(
-        address extension,
+    function originScore(
+        address tokenAddress,
+        uint256 actionId,
         uint256 round,
-        address account
-    ) external view returns (uint256);
+        uint256 memberId
+    )
+        external
+        view
+        returns (
+            uint256 score,
+            bool verified
+        );
 
-    function accountScore(
-        address extension,
+    function finalScore(
+        address tokenAddress,
+        uint256 actionId,
         uint256 round,
-        address account
-    ) external view returns (uint256);
+        uint256 memberId
+    ) external view returns (uint256 score, bool verified);
 
-    function totalAccountScore(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256);
-
-    function groupScore(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256);
-
-    function totalGroupScore(
-        address extension,
+    function totalFinalScore(
+        address tokenAddress,
+        uint256 actionId,
         uint256 round
     ) external view returns (uint256);
 
-    function delegateByGroupId(
-        address extension,
+    function verifiedMemberCount(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
         uint256 groupId
-    ) external view returns (address);
+    ) external view returns (uint256);
 
-    function canVerify(
-        address extension,
-        address account,
-        uint256 groupId
+    function isRoundVerified(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
     ) external view returns (bool);
 
-    function verifiedAccountCount(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256);
-
-    function isVerified(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (bool);
-
-    function verifiers(
-        address extension,
-        uint256 round
-    ) external view returns (address[] memory);
-
-    function verifiersCount(
-        address extension,
-        uint256 round
-    ) external view returns (uint256);
-
-    function verifiersAtIndex(
-        address extension,
-        uint256 round,
-        uint256 index
-    ) external view returns (address);
-
-    function verifierByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (address);
-
-    function submitterByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (address);
-
-    function groupIdsByVerifier(
-        address extension,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256[] memory);
-
-    function groupIdsByVerifierCount(
-        address extension,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256);
-
-    function groupIdsByVerifierAtIndex(
-        address extension,
-        uint256 round,
-        address verifier,
-        uint256 index
-    ) external view returns (uint256);
-
-    function actionIdsByVerifier(
+    function lockedVerifierId(
         address tokenAddress,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256[] memory);
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256);
 
-    function actionIdsByVerifierCount(
+    function submitVerifierApplication(
         address tokenAddress,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256);
+        uint256 actionId,
+        uint256 memberId,
+        string calldata description
+    ) external returns (uint256 applicationId);
 
-    function actionIdsByVerifierAtIndex(
+    function cancelVerifierApplication(
         address tokenAddress,
-        uint256 round,
-        address verifier,
-        uint256 index
-    ) external view returns (uint256);
+        uint256 actionId,
+        uint256 memberId
+    ) external;
 
-    function actionIds(
+    function verifierApplication(
         address tokenAddress,
-        uint256 round
-    ) external view returns (uint256[] memory);
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (VerifierApplication memory application);
 
-    function actionIdsCount(
+    function verifierApplications(
         address tokenAddress,
-        uint256 round
-    ) external view returns (uint256);
+        uint256 actionId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    )
+        external
+        view
+        returns (
+            VerifierApplication[] memory applications,
+            uint256 total
+        );
 
-    function actionIdsAtIndex(
+    function votesByVerifierIds(
         address tokenAddress,
+        uint256 actionId,
         uint256 round,
-        uint256 index
-    ) external view returns (uint256);
+        uint256[] calldata verifierIds
+    ) external view returns (uint256[] memory votes);
 
-    function groupIds(
-        address extension,
+    function topVerifiers(
+        address tokenAddress,
+        uint256 actionId,
         uint256 round
-    ) external view returns (uint256[] memory);
-
-    function groupIdsCount(
-        address extension,
-        uint256 round
-    ) external view returns (uint256);
-
-    function groupIdsAtIndex(
-        address extension,
-        uint256 round,
-        uint256 index
-    ) external view returns (uint256);
-
-    function distrustVotesByGroupOwner(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) external view returns (uint256);
-
-    function distrustVotesByVoterByGroupOwner(
-        address extension,
-        uint256 round,
-        address voter,
-        address groupOwner
-    ) external view returns (uint256);
-
-    function distrustReason(
-        address extension,
-        uint256 round,
-        address voter,
-        address groupOwner
-    ) external view returns (string memory);
-
-    function distrustVotersByGroupOwner(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) external view returns (address[] memory);
-
-    function distrustVotersByGroupOwnerCount(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) external view returns (uint256);
-
-    function distrustVotersByGroupOwnerAtIndex(
-        address extension,
-        uint256 round,
-        address groupOwner,
-        uint256 index
-    ) external view returns (address);
-
-    function distrustGroupOwners(
-        address extension,
-        uint256 round
-    ) external view returns (address[] memory);
-
-    function distrustGroupOwnersCount(
-        address extension,
-        uint256 round
-    ) external view returns (uint256);
-
-    function distrustGroupOwnersAtIndex(
-        address extension,
-        uint256 round,
-        uint256 index
-    ) external view returns (address);
-
-    function distrustRateByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256);
+    ) external view returns (uint256[] memory verifierIds, uint256[] memory votes);
 }
