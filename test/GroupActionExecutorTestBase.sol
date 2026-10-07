@@ -29,6 +29,7 @@ abstract contract GroupActionExecutorTestBase {
     uint256 internal constant PRECISION = 1e18;
     uint256 internal constant ACTION_ID = 21;
     uint256 internal constant GROUP_ID = 5;
+    uint256 internal constant GROUP_B_ID = 7;
     uint256 internal constant CREATION_PHASE = 2;
     uint256 internal constant PHASE_BLOCKS = 1000;
     uint256 internal constant PROPOSAL_REWARD = 1000e18;
@@ -133,15 +134,16 @@ abstract contract GroupActionExecutorTestBase {
     }
 
     function _activateGroup() internal {
-        GroupConfig memory config = GroupConfig({
-            description: "group",
-            maxCapacity: 0,
-            minJoinAmount: 1e18,
-            maxJoinAmount: 0,
-            maxAccounts: 0
-        });
+        _activateGroupWith(GROUP_ID, _defaultConfig());
+    }
+
+    function _activateGroupWith(uint256 groupId, GroupConfig memory config) internal {
         vm.prank(GROUP_OWNER);
-        executor.activateGroup(address(token), ACTION_ID, GROUP_ID, config);
+        executor.activateGroup(address(token), ACTION_ID, groupId, config);
+    }
+
+    function _defaultConfig() internal pure returns (GroupConfig memory) {
+        return GroupConfig({description: "group", maxCapacity: 0, minJoinAmount: 1e18, maxJoinAmount: 0, maxAccounts: 0});
     }
 
     function _fundTokenFor(address account, uint256 amount) internal {
@@ -166,8 +168,32 @@ abstract contract GroupActionExecutorTestBase {
     }
 
     function _join(uint256 memberId, uint256 amount, uint256 providerId) internal {
+        _joinAt(GROUP_ID, memberId, amount, providerId);
+    }
+
+    function _joinAt(uint256 groupId, uint256 memberId, uint256 amount, uint256 providerId) internal {
         vm.prank(_memberAddress(memberId));
-        executor.join(address(token), ACTION_ID, GROUP_ID, memberId, amount, providerId, new string[](0));
+        executor.join(address(token), ACTION_ID, groupId, memberId, amount, providerId, new string[](0));
+    }
+
+    function _withdraw(uint256 memberId, uint256 amount) internal {
+        vm.prank(_memberAddress(memberId));
+        executor.withdraw(address(token), ACTION_ID, memberId, amount);
+    }
+
+    function _exit(uint256 memberId) internal {
+        vm.prank(_memberAddress(memberId));
+        executor.exit(address(token), ACTION_ID, memberId);
+    }
+
+    function _quotaRemove(uint256 providerId, uint256 memberId) internal {
+        vm.prank(_memberAddress(providerId));
+        executor.providerQuotaRemove(address(token), ACTION_ID, GROUP_ID, providerId, _ids(memberId));
+    }
+
+    function _ids(uint256 a) internal pure returns (uint256[] memory out) {
+        out = new uint256[](1);
+        out[0] = a;
     }
 
     function _submitScores(uint256[] memory scores) internal {
@@ -187,16 +213,22 @@ abstract contract GroupActionExecutorTestBase {
     /// @dev Drives creation-phase voting plus the join phase up to two members
     ///      (one own-amount join, one provider-quota join); ends at phase 3.
     function _prepareRound() internal {
-        _submitApplication();
-        _castCandidateVotes();
-        _atPhase(3);
-        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
-        _activateGroup();
+        _openJoinPhase();
         _fundJoinTokenFor(MEMBER1, 100e18);
         _fundJoinTokenFor(PROVIDER, PROVIDER_QUOTA);
         _grantQuota(PROVIDER_ID, MEMBER2_ID, PROVIDER_QUOTA);
         _join(MEMBER1_ID, 100e18, 0);
         _join(MEMBER2_ID, PROVIDER_QUOTA, PROVIDER_ID);
+    }
+
+    /// @dev Creation-phase application and votes, then the join phase with the
+    ///      group active; ends at phase 3.
+    function _openJoinPhase() internal {
+        _submitApplication();
+        _castCandidateVotes();
+        _atPhase(3);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
+        _activateGroup();
     }
 
     function _memberAddress(uint256 memberId) internal pure returns (address) {
