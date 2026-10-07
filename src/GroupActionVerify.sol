@@ -65,6 +65,11 @@ library GroupActionVerify {
         if (startIndex + originScores.length > memberCount) {
             revert IGroupActionVerifyErrors.ScoresExceedAccountCount();
         }
+        for (uint256 i = 0; i < originScores.length; i++) {
+            if (originScores[i] > GroupActionStorage.MAX_ORIGIN_SCORE) {
+                revert IGroupActionVerifyErrors.ScoreExceedsMax();
+            }
+        }
 
         if (lockedVerifier == 0) {
             s.lockedVerifierId[tokenAddress][actionId][round] = verifierId;
