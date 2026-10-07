@@ -200,6 +200,30 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         executor.join(address(token), ACTION_ID, GROUP_B_ID, MEMBER2_ID, 1, 0, new string[](0));
     }
 
+    function testWithdrawAndExitGuards() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(MEMBER1, 10e18);
+        _join(MEMBER1_ID, 1e18, 0);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 0);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 2e18);
+
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.NotJoinedAction.selector));
+        executor.exit(address(token), ACTION_ID, MEMBER2_ID);
+
+        _fundJoinTokenFor(PROVIDER, 1e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 1e18);
+        vm.prank(PROVIDER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 0);
+    }
+
     function testProviderQuotaReverts() external {
         _openJoinPhase();
         _fundJoinTokenFor(PROVIDER, 100e18);

@@ -141,6 +141,162 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(mintAmount == 0 && burnAmount == 0, "partial round settles zero");
     }
 
+    function testBatchMintMemberRewards() external {
+        _prepareRound();
+        _atPhase(4);
+        _submitScores(_scores(100, 60));
+        _atPhase(5);
+        _fundExecutor(PROPOSAL_REWARD);
+        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
+
+        uint256 expected1 = Math.mulDiv(PROPOSAL_REWARD, 100e18 * 100, 100e18 * 100 + PROVIDER_QUOTA * 60);
+
+        uint256[] memory actionIds = new uint256[](1);
+        actionIds[0] = ACTION_ID;
+        uint256[] memory rounds = new uint256[](1);
+        rounds[0] = 2;
+        vm.prank(MEMBER1);
+        (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
+            executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+        require(mintAmounts[0] == expected1 && burnAmounts[0] == 0, "batch mint amount");
+        require(token.balanceOf(MEMBER1) == expected1, "batch mint paid");
+
+        uint256[] memory mismatched = new uint256[](2);
+        mismatched[0] = ACTION_ID;
+        mismatched[1] = ACTION_ID;
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
+        executor.mintMemberRewards(address(token), mismatched, MEMBER1_ID, rounds);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), ACTION_ID, MEMBER1_ID, 2
+            )
+        );
+        executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+    }
+
+    function testJoinedAmountQueryGuards() external {
+        _prepareRound();
+
+        require(executor.joinedAmount(address(token), ACTION_ID, 2) == 100e18 + PROVIDER_QUOTA, "round total");
+        require(executor.joinedAmount(address(token), ACTION_ID, 3) == 0, "future round zero");
+        require(
+            executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == 100e18,
+            "member round amount"
+        );
+        require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 3, MEMBER1_ID) == 0, "member future zero");
+        require(executor.joinedAmountTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token");
+        require(executor.currentJoinRound() == 2, "join round getter");
+        require(executor.currentVoteRound() == 3, "vote round getter");
+    }
+
+    function testProviderQuotaAndAmountsConsistency() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 250e18);
+
+        uint256 secondProviderId = 11;
+        address secondProvider = address(0x1008);
+        memberNFT.setOwner(secondProviderId, secondProvider);
+        _fundJoinTokenFor(secondProvider, 100e18);
+
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 200e18);
+        uint256[] memory ids = _ids(MEMBER2_ID);
+        vm.prank(secondProvider);
+        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, secondProviderId, ids, _ids(100e18));
+        _grantQuota(PROVIDER_ID, MEMBER1_ID, 50e18);
+
+        vm.prank(MEMBER2);
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, 120e18, PROVIDER_ID, new string[](0));
+        vm.prank(MEMBER2);
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, 80e18, secondProviderId, new string[](0));
+        _join(MEMBER1_ID, 50e18, PROVIDER_ID);
+
+        (uint256[] memory providerIds, uint256[] memory amounts, uint256 total) =
+            executor.providerAmountsByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID, 0, 10, false);
+        require(total == 2, "two sources");
+        require(providerIds[0] == PROVIDER_ID && amounts[0] == 120e18, "first source");
+        require(providerIds[1] == secondProviderId && amounts[1] == 80e18, "second source");
+        require(
+            amounts[0] + amounts[1] == executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID),
+            "sources sum to join amount"
+        );
+
+        (uint256[] memory memberIds, uint256[] memory quotaAmounts, , uint256 quotaTotal) =
+            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(quotaTotal == 1 && memberIds[0] == MEMBER2_ID && quotaAmounts[0] == 80e18, "quota table");
+        (memberIds, quotaAmounts, , quotaTotal) =
+            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, secondProviderId, 0, 10, false);
+        require(quotaTotal == 1 && memberIds[0] == MEMBER2_ID && quotaAmounts[0] == 20e18, "second quota table");
+    }
+
+    function testRoundGettersAndGuards() external {
+        require(executor.currentVoteRound() == 2, "vote round at creation");
+        require(executor.currentJoinRound() == 1, "join round at creation");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        executor.currentMintRound();
+
+        GroupActionExecutor fresh = new GroupActionExecutor();
+        uint256[] memory splits = new uint256[](1);
+        splits[0] = 5e17;
+        fresh.init(address(actionTarget), address(stake), splits);
+
+        phase.setCurrentPhase(0);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        fresh.currentVoteRound();
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        fresh.currentJoinRound();
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        fresh.currentMintRound();
+
+        phase.setCurrentPhase(1);
+        require(fresh.currentVoteRound() == 1, "vote at phase 1");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        fresh.currentJoinRound();
+
+        phase.setCurrentPhase(2);
+        require(fresh.currentJoinRound() == 1, "join at phase 2");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        fresh.currentVerifyRound();
+
+        phase.setCurrentPhase(3);
+        require(fresh.currentVerifyRound() == 1, "verify at phase 3");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        fresh.currentMintRound();
+
+        phase.setCurrentPhase(4);
+        require(fresh.currentMintRound() == 1, "mint at phase 4");
+    }
+
+    function testNeedBurnWhenAllScoresZero() external {
+        _prepareRound();
+        _atPhase(4);
+        _submitScores(_scores(0, 0));
+
+        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "verified");
+        require(executor.totalFinalScore(address(token), ACTION_ID, 2) == 0, "zero total");
+
+        _atPhase(5);
+        require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn flagged on zero total");
+        (uint256 mintAmount, uint256 burnAmount) = _settle(MEMBER1_ID, 2);
+        require(mintAmount == 0 && burnAmount == 0, "zero settle");
+    }
+
+    function testMintRoundGuards() external {
+        _prepareRound();
+        _atPhase(5);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 1);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 3));
+        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 3);
+    }
+
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {
         out = new uint256[](1);
         out[0] = a;

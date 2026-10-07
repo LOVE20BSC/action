@@ -159,11 +159,15 @@ abstract contract GroupActionExecutorTestBase {
     }
 
     function _castCandidateVotes() internal {
+        _castVotesFor(VERIFIER_ID, 100e18);
+    }
+
+    function _castVotesFor(uint256 candidateMemberId, uint256 votes) internal {
         bytes[] memory targetData = new bytes[](2);
         targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(VERIFIER_ID);
+        targetData[1] = abi.encode(candidateMemberId);
         vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), CREATION_PHASE, ACTION_ID, 0, 100e18, targetData);
+        executor.onProposalVoted(address(token), CREATION_PHASE, ACTION_ID, 0, votes, targetData);
     }
 
     function _activateGroup() internal {
