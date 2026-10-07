@@ -1,892 +1,593 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
-import {IGroupVerify} from "./interface/IGroupVerify.sol";
-import {IGroupJoin} from "./interface/IGroupJoin.sol";
+import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {
-    IExtensionGroupActionFactory
-} from "./interface/IExtensionGroupActionFactory.sol";
-import {
-    IGroupManager,
-    IGroupManagerErrors
-} from "./interface/IGroupManager.sol";
-import {ILOVE20Verify} from "@core/interfaces/ILOVE20Verify.sol";
-import {ILOVE20Vote} from "@core/interfaces/ILOVE20Vote.sol";
-import {IExtension} from "@extension/src/interface/IExtension.sol";
-import {IExtensionCenter} from "@extension/src/interface/IExtensionCenter.sol";
-import {
-    IERC721Enumerable
-} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
-import {
-    EnumerableSet
-} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+    VerifierApplication,
+    IGroupActionVerifyEvents,
+    IGroupActionVerifyErrors
+} from "./interfaces/IGroupActionVerify.sol";
+import {IStake} from "core/src/interfaces/IStake.sol";
+import {IPhase} from "core/src/interfaces/IPhase.sol";
+import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
+import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
+import {RoundHistoryString} from "libs/RoundHistoryString.sol";
+import {Uint256Set} from "libs/Uint256Set.sol";
+import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
-contract GroupVerify is IGroupVerify {
-    using EnumerableSet for EnumerableSet.UintSet;
-    uint256 public constant MAX_ORIGIN_SCORE = 100;
-    uint256 public constant PRECISION = 1e18;
+library GroupActionVerify {
+    using GroupActionStorage for GroupActionStorage.Layout;
+    using RoundHistoryUint256 for RoundHistoryUint256.History;
+    using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
+    using RoundHistoryString for RoundHistoryString.History;
+    using Uint256Set for Uint256Set.Storage;
 
-    IExtensionGroupActionFactory internal _factory;
-    IExtensionCenter internal _center;
-    IGroupManager internal _groupManager;
-    IERC721Enumerable internal _group;
-    ILOVE20Verify internal _verify;
-    ILOVE20Vote internal _vote;
-    IGroupJoin internal _groupJoin;
-
-    address public FACTORY_ADDRESS;
-    bool internal _initialized;
-
-    // extension => groupOwner => groupId => delegate
-    mapping(address => mapping(address => mapping(uint256 => address)))
-        internal _delegateByGroupId;
-    // extension => round => account => score deduction (0 means full score 100, >0 means deduction from 100)
-    mapping(address => mapping(uint256 => mapping(address => uint256)))
-        internal _originScoreDeductionByAccount;
-    // extension => round => groupId => verified account count
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
-        internal _verifiedAccountCount;
-    // extension => round => groupId => accumulated total score
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
-        internal _batchTotalScore;
-    // extension => round => groupId => total score of all accounts in group
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
-        internal _totalAccountScore;
-    // extension => round => groupId => group score (with distrust applied)
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
-        internal _groupScore;
-    // extension => round => total score of all verified groups
-    mapping(address => mapping(uint256 => uint256)) internal _totalGroupScore;
-    // extension => round => groupId => whether verification is complete
-    mapping(address => mapping(uint256 => mapping(uint256 => bool)))
-        internal _isVerified;
-    // extension => round => list of verified group ids
-    mapping(address => mapping(uint256 => uint256[])) internal _groupIds;
-    // extension => round => groupId => verifier address
-    mapping(address => mapping(uint256 => mapping(uint256 => address)))
-        internal _verifierByGroupId;
-    // extension => round => groupId => submitter address who submitted the original scores
-    mapping(address => mapping(uint256 => mapping(uint256 => address)))
-        internal _submitterByGroupId;
-    // extension => round => verifier => list of verified group ids
-    mapping(address => mapping(uint256 => mapping(address => uint256[])))
-        internal _groupIdsByVerifier;
-    // extension => round => list of verifiers
-    mapping(address => mapping(uint256 => address[])) internal _verifiers;
-    // tokenAddress => round => verifier => set of actionIds
-    mapping(address => mapping(uint256 => mapping(address => EnumerableSet.UintSet)))
-        internal _actionIdsByVerifier;
-    // tokenAddress => round => set of actionIds with at least one verified group
-    mapping(address => mapping(uint256 => EnumerableSet.UintSet))
-        internal _actionIds;
-
-    // extension => round => groupOwner => total distrust votes
-    mapping(address => mapping(uint256 => mapping(address => uint256)))
-        internal _distrustVotesByGroupOwner;
-    // extension => round => voter => groupOwner => distrust votes
-    mapping(address => mapping(uint256 => mapping(address => mapping(address => uint256))))
-        internal _distrustVotesByVoterByGroupOwner;
-
-    // extension => round => groupOwner => list of voters
-    mapping(address => mapping(uint256 => mapping(address => address[])))
-        internal _distrustVotersByGroupOwner;
-    // extension => round => list of groupOwners
-    mapping(address => mapping(uint256 => address[]))
-        internal _distrustGroupOwners;
-
-    // extension => round => voter => groupOwner => reason
-    mapping(address => mapping(uint256 => mapping(address => mapping(address => string))))
-        internal _distrustReason;
-
-    function initialize(address factory_) external {
-        require(_initialized == false, "Already initialized");
-        require(factory_ != address(0), "Invalid factory");
-
-        FACTORY_ADDRESS = factory_;
-        _factory = IExtensionGroupActionFactory(factory_);
-        _center = IExtensionCenter(_factory.CENTER_ADDRESS());
-        _groupManager = IGroupManager(_factory.GROUP_MANAGER_ADDRESS());
-        _group = IERC721Enumerable(_factory.GROUP_ADDRESS());
-        _verify = ILOVE20Verify(_center.verifyAddress());
-        _vote = ILOVE20Vote(_center.voteAddress());
-        _groupJoin = IGroupJoin(_factory.GROUP_JOIN_ADDRESS());
-
-        _initialized = true;
-    }
-
-    modifier onlyValidExtension(address extension) {
-        if (!_factory.exists(extension)) {
-            revert NotRegisteredExtensionInFactory();
-        }
-        if (!IExtension(extension).initialized()) {
-            revert ExtensionNotInitialized();
-        }
-        _;
-    }
-
-    modifier onlyGroupOwner(uint256 groupId) {
-        if (_group.ownerOf(groupId) != msg.sender) revert OnlyGroupOwner();
-        _;
-    }
-
-    function setGroupDelegate(
-        address extension,
-        uint256 groupId,
-        address delegate
-    ) external onlyValidExtension(extension) onlyGroupOwner(groupId) {
-        address tokenAddress = IExtension(extension).TOKEN_ADDRESS();
-        uint256 actionId = IExtension(extension).actionId();
-        _delegateByGroupId[extension][msg.sender][groupId] = delegate;
-        emit SetGroupDelegate({
-            tokenAddress: tokenAddress,
-            round: _verify.currentRound(),
-            actionId: actionId,
-            groupId: groupId,
-            delegate: delegate
-        });
-    }
-
+    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function submitOriginScores(
-        address extension,
-        uint256 groupId,
-        uint256 startIndex,
-        uint256[] calldata originScores
-    ) external onlyValidExtension(extension) {
-        uint256 currentRound = _verify.currentRound();
-        _validateSubmitOriginScores(
-            extension,
-            groupId,
-            startIndex,
-            originScores,
-            currentRound
-        );
-        bool isComplete = _updateBatchState(
-            extension,
-            currentRound,
-            groupId,
-            startIndex,
-            originScores
-        );
-        if (isComplete) {
-            _finalizeVerification(extension, currentRound, groupId, msg.sender);
-        }
-        address tokenAddress = IExtension(extension).TOKEN_ADDRESS();
-        uint256 actionId = IExtension(extension).actionId();
-        _emitSubmitOriginScores(
-            tokenAddress,
-            actionId,
-            currentRound,
-            groupId,
-            startIndex,
-            originScores.length,
-            isComplete
-        );
-    }
-
-    function _validateSubmitOriginScores(
-        address extension,
-        uint256 groupId,
-        uint256 startIndex,
-        uint256[] calldata originScores,
-        uint256 currentRound
-    ) internal view {
-        if (!canVerify(extension, msg.sender, groupId)) {
-            revert NotVerifier();
-        }
-        if (!_groupManager.isGroupActive(extension, groupId)) {
-            revert IGroupManagerErrors.GroupNotActive();
-        }
-        if (originScores.length == 0) {
-            revert OriginScoresEmpty();
-        }
-        if (_isVerified[extension][currentRound][groupId]) {
-            revert AlreadyVerified();
-        }
-
-        if (
-            startIndex !=
-            _verifiedAccountCount[extension][currentRound][groupId]
-        ) {
-            revert InvalidStartIndex();
-        }
-
-        uint256 accountCount = _groupJoin.accountsByGroupIdCount(
-            extension,
-            currentRound,
-            groupId
-        );
-        if (startIndex + originScores.length > accountCount) {
-            revert ScoresExceedAccountCount();
-        }
-    }
-
-    function _updateBatchState(
-        address extension,
-        uint256 currentRound,
-        uint256 groupId,
-        uint256 startIndex,
-        uint256[] calldata originScores
-    ) internal returns (bool isComplete) {
-        _batchTotalScore[extension][currentRound][
-            groupId
-        ] += _storeOriginScores(
-            extension,
-            currentRound,
-            groupId,
-            startIndex,
-            originScores
-        );
-
-        _verifiedAccountCount[extension][currentRound][groupId] += originScores
-            .length;
-
-        isComplete =
-            _verifiedAccountCount[extension][currentRound][groupId] ==
-            _groupJoin.accountsByGroupIdCount(extension, currentRound, groupId);
-    }
-
-    function _finalizeVerification(
-        address extension,
-        uint256 currentRound,
-        uint256 groupId,
-        address submitter
-    ) internal {
-        // 0. Update verification state
-        _isVerified[extension][currentRound][groupId] = true;
-
-        // 1. Prepare data
-        address groupOwner = _group.ownerOf(groupId);
-
-        // 2. Record verifier information
-        _verifierByGroupId[extension][currentRound][groupId] = groupOwner;
-        _submitterByGroupId[extension][currentRound][groupId] = submitter;
-        if (
-            _groupIdsByVerifier[extension][currentRound][groupOwner].length == 0
-        ) {
-            _verifiers[extension][currentRound].push(groupOwner);
-        }
-
-        // 3. Record total account score by groupId
-        _totalAccountScore[extension][currentRound][groupId] = _batchTotalScore[
-            extension
-        ][currentRound][groupId];
-
-        // 4. Calculate and update group score
-        uint256 calculatedGroupScore = _calculateGroupScore(
-            extension,
-            currentRound,
-            groupId
-        );
-        _groupScore[extension][currentRound][groupId] = calculatedGroupScore;
-        _totalGroupScore[extension][currentRound] += calculatedGroupScore;
-
-        // 5. Update group lists
-        address tokenAddress = IExtension(extension).TOKEN_ADDRESS();
-        uint256 actionId = IExtension(extension).actionId();
-        if (_groupIds[extension][currentRound].length == 0) {
-            _actionIds[tokenAddress][currentRound].add(actionId);
-        }
-        _groupIdsByVerifier[extension][currentRound][groupOwner].push(groupId);
-        _groupIds[extension][currentRound].push(groupId);
-
-        // 6. Record actionId for verifier (with deduplication)
-        _actionIdsByVerifier[tokenAddress][currentRound][groupOwner].add(
-            actionId
-        );
-    }
-
-    function _emitSubmitOriginScores(
+        GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
-        uint256 currentRound,
-        uint256 groupId,
-        uint256 startIndex,
-        uint256 count,
-        bool isComplete
-    ) internal {
-        emit SubmitOriginScores({
-            tokenAddress: tokenAddress,
-            round: currentRound,
-            actionId: actionId,
-            groupId: groupId,
-            startIndex: startIndex,
-            count: count,
-            isComplete: isComplete
-        });
-    }
-
-    function distrustVote(
-        address extension,
-        address groupOwner,
-        uint256 amount,
-        string calldata reason
-    ) external onlyValidExtension(extension) {
-        address voter = msg.sender;
-        uint256 currentRound = _verify.currentRound();
-
-        _validateDistrustVote(
-            extension,
-            currentRound,
-            voter,
-            groupOwner,
-            amount,
-            reason
-        );
-        _updateDistrustVoteState(
-            extension,
-            currentRound,
-            voter,
-            groupOwner,
-            amount,
-            reason
-        );
-
-        _updateGroupScoresForVerifier(extension, currentRound, groupOwner);
-
-        emit DistrustVote({
-            tokenAddress: IExtension(extension).TOKEN_ADDRESS(),
-            round: currentRound,
-            actionId: IExtension(extension).actionId(),
-            groupOwner: groupOwner,
-            voter: voter,
-            amount: amount,
-            reason: reason
-        });
-    }
-
-    function _validateDistrustVote(
-        address extension,
-        uint256 currentRound,
-        address voter,
-        address groupOwner,
-        uint256 amount,
-        string calldata reason
-    ) internal view {
-        if (amount == 0) revert DistrustVoteZeroAmount();
-        if (bytes(reason).length == 0) revert InvalidReason();
-
-        address tokenAddress = IExtension(extension).TOKEN_ADDRESS();
-        uint256 actionId = IExtension(extension).actionId();
-        uint256 verifyVotes = _verify.scoreByVerifierByActionIdByAccount(
-            tokenAddress,
-            currentRound,
-            voter,
-            actionId,
-            extension
-        );
-        if (verifyVotes == 0) revert VerifyVotesZero();
-
-        uint256 preVotes = _distrustVotesByVoterByGroupOwner[extension][
-            currentRound
-        ][voter][groupOwner];
-        if (preVotes + amount > verifyVotes)
-            revert DistrustVoteExceedsVerifyVotes();
-    }
-
-    function _updateDistrustVoteState(
-        address extension,
-        uint256 currentRound,
-        address voter,
-        address groupOwner,
-        uint256 amount,
-        string calldata reason
-    ) internal {
-        _distrustReason[extension][currentRound][voter][groupOwner] = reason;
-
-        uint256 preVotes = _distrustVotesByVoterByGroupOwner[extension][
-            currentRound
-        ][voter][groupOwner];
-        if (preVotes == 0) {
-            _distrustVotersByGroupOwner[extension][currentRound][groupOwner]
-                .push(voter);
-        }
-
-        if (
-            _distrustVotesByGroupOwner[extension][currentRound][groupOwner] == 0
-        ) {
-            _distrustGroupOwners[extension][currentRound].push(groupOwner);
-        }
-
-        _distrustVotesByVoterByGroupOwner[extension][currentRound][voter][
-            groupOwner
-        ] += amount;
-        _distrustVotesByGroupOwner[extension][currentRound][
-            groupOwner
-        ] += amount;
-    }
-
-    function originScoreByAccount(
-        address extension,
-        uint256 round,
-        address account
-    ) public view returns (uint256) {
-        uint256 groupId = _groupJoin.groupIdByAccount(
-            extension,
-            round,
-            account
-        );
-
-        // If account is not in any group, return 0
-        if (groupId == 0) {
-            return 0;
-        }
-
-        // if group is verified, return the deduction value
-        if (_isVerified[extension][round][groupId]) {
-            return
-                MAX_ORIGIN_SCORE -
-                _originScoreDeductionByAccount[extension][round][account];
-        }
-
-        uint256 verifiedCount = _verifiedAccountCount[extension][round][
-            groupId
-        ];
-
-        // If group is not verified, return 0
-        if (verifiedCount == 0) {
-            return 0;
-        }
-
-        (bool found, uint256 index) = _groupJoin.accountIndexByGroupId(
-            extension,
-            groupId,
-            account,
-            round
-        );
-        if (!found || index >= verifiedCount) {
-            return 0;
-        }
-
-        uint256 deduction = _originScoreDeductionByAccount[extension][round][
-            account
-        ];
-        return MAX_ORIGIN_SCORE - deduction;
-    }
-
-    function totalAccountScore(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256) {
-        return _totalAccountScore[extension][round][groupId];
-    }
-    function accountScore(
-        address extension,
-        uint256 round,
-        address account
-    ) external view returns (uint256) {
-        uint256 originScoreVal = originScoreByAccount(
-            extension,
-            round,
-            account
-        );
-        if (originScoreVal == 0) return 0;
-
-        uint256 amount = _groupJoin.joinedAmountByAccount(
-            extension,
-            round,
-            account
-        );
-        return originScoreVal * amount;
-    }
-
-    function groupScore(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256) {
-        return _groupScore[extension][round][groupId];
-    }
-
-    function distrustRateByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256) {
-        return _distrustRateByGroupId(extension, round, groupId);
-    }
-
-    function _distrustRateByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) internal view returns (uint256) {
-        // Prefer verifier (recorded at verification time)
-        address groupOwner = _verifierByGroupId[extension][round][groupId];
-        // Only fallback to current owner for current round (not yet verified)
-        if (groupOwner == address(0) && round == _verify.currentRound()) {
-            groupOwner = _group.ownerOf(groupId);
-        }
-        return _calculateDistrustRate(extension, round, groupOwner);
-    }
-
-    function _calculateDistrustRate(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) internal view returns (uint256) {
-        if (groupOwner == address(0)) {
-            return 0; // No group owner means no distrust
-        }
-
-        uint256 distrustVotes = _distrustVotesByGroupOwner[extension][round][
-            groupOwner
-        ];
-        address tokenAddress = IExtension(extension).TOKEN_ADDRESS();
-        uint256 actionId = IExtension(extension).actionId();
-        uint256 totalVotes = _vote.votesNumByActionId(
-            tokenAddress,
-            round,
-            actionId
-        );
-
-        if (totalVotes == 0) {
-            return 0; // No votes means no distrust
-        }
-
-        return (distrustVotes * PRECISION) / totalVotes;
-    }
-
-    function totalGroupScore(
-        address extension,
-        uint256 round
-    ) external view returns (uint256) {
-        return _totalGroupScore[extension][round];
-    }
-
-    function delegateByGroupId(
-        address extension,
-        uint256 groupId
-    ) external view returns (address) {
-        address groupOwner = _group.ownerOf(groupId);
-        return _delegateByGroupId[extension][groupOwner][groupId];
-    }
-
-    function canVerify(
-        address extension,
-        address account,
-        uint256 groupId
-    ) public view returns (bool) {
-        address groupOwner = _group.ownerOf(groupId);
-        bool isValidDelegate = account ==
-            _delegateByGroupId[extension][groupOwner][groupId];
-        return account == groupOwner || isValidDelegate;
-    }
-
-    function verifiedAccountCount(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256) {
-        return _verifiedAccountCount[extension][round][groupId];
-    }
-
-    function isVerified(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (bool) {
-        return _isVerified[extension][round][groupId];
-    }
-
-    function verifiers(
-        address extension,
-        uint256 round
-    ) external view returns (address[] memory) {
-        return _verifiers[extension][round];
-    }
-
-    function verifiersCount(
-        address extension,
-        uint256 round
-    ) external view returns (uint256) {
-        return _verifiers[extension][round].length;
-    }
-
-    function verifiersAtIndex(
-        address extension,
-        uint256 round,
-        uint256 index
-    ) external view returns (address) {
-        return _verifiers[extension][round][index];
-    }
-
-    function verifierByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (address) {
-        return _verifierByGroupId[extension][round][groupId];
-    }
-
-    function submitterByGroupId(
-        address extension,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (address) {
-        return _submitterByGroupId[extension][round][groupId];
-    }
-
-    function groupIdsByVerifier(
-        address extension,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256[] memory) {
-        return _groupIdsByVerifier[extension][round][verifier];
-    }
-
-    function groupIdsByVerifierCount(
-        address extension,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256) {
-        return _groupIdsByVerifier[extension][round][verifier].length;
-    }
-
-    function groupIdsByVerifierAtIndex(
-        address extension,
-        uint256 round,
-        address verifier,
-        uint256 index
-    ) external view returns (uint256) {
-        return _groupIdsByVerifier[extension][round][verifier][index];
-    }
-
-    function actionIdsByVerifier(
-        address tokenAddress,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256[] memory) {
-        return _actionIdsByVerifier[tokenAddress][round][verifier].values();
-    }
-
-    function actionIdsByVerifierCount(
-        address tokenAddress,
-        uint256 round,
-        address verifier
-    ) external view returns (uint256) {
-        return _actionIdsByVerifier[tokenAddress][round][verifier].length();
-    }
-
-    function actionIdsByVerifierAtIndex(
-        address tokenAddress,
-        uint256 round,
-        address verifier,
-        uint256 index
-    ) external view returns (uint256) {
-        return _actionIdsByVerifier[tokenAddress][round][verifier].at(index);
-    }
-
-    function actionIds(
-        address tokenAddress,
-        uint256 round
-    ) external view returns (uint256[] memory) {
-        return _actionIds[tokenAddress][round].values();
-    }
-
-    function actionIdsCount(
-        address tokenAddress,
-        uint256 round
-    ) external view returns (uint256) {
-        return _actionIds[tokenAddress][round].length();
-    }
-
-    function actionIdsAtIndex(
-        address tokenAddress,
-        uint256 round,
-        uint256 index
-    ) external view returns (uint256) {
-        return _actionIds[tokenAddress][round].at(index);
-    }
-
-    function groupIds(
-        address extension,
-        uint256 round
-    ) external view returns (uint256[] memory) {
-        return _groupIds[extension][round];
-    }
-
-    function groupIdsCount(
-        address extension,
-        uint256 round
-    ) external view returns (uint256) {
-        return _groupIds[extension][round].length;
-    }
-
-    function groupIdsAtIndex(
-        address extension,
-        uint256 round,
-        uint256 index
-    ) external view returns (uint256) {
-        return _groupIds[extension][round][index];
-    }
-
-    function distrustVotesByGroupOwner(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) external view returns (uint256) {
-        return _distrustVotesByGroupOwner[extension][round][groupOwner];
-    }
-
-    function distrustVotesByVoterByGroupOwner(
-        address extension,
-        uint256 round,
-        address voter,
-        address groupOwner
-    ) external view returns (uint256) {
-        return
-            _distrustVotesByVoterByGroupOwner[extension][round][voter][
-                groupOwner
-            ];
-    }
-
-    function distrustReason(
-        address extension,
-        uint256 round,
-        address voter,
-        address groupOwner
-    ) external view returns (string memory) {
-        return _distrustReason[extension][round][voter][groupOwner];
-    }
-
-    function distrustVotersByGroupOwner(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) external view returns (address[] memory) {
-        return _distrustVotersByGroupOwner[extension][round][groupOwner];
-    }
-
-    function distrustVotersByGroupOwnerCount(
-        address extension,
-        uint256 round,
-        address groupOwner
-    ) external view returns (uint256) {
-        return _distrustVotersByGroupOwner[extension][round][groupOwner].length;
-    }
-
-    function distrustVotersByGroupOwnerAtIndex(
-        address extension,
-        uint256 round,
-        address groupOwner,
-        uint256 index
-    ) external view returns (address) {
-        return _distrustVotersByGroupOwner[extension][round][groupOwner][index];
-    }
-
-    function distrustGroupOwners(
-        address extension,
-        uint256 round
-    ) external view returns (address[] memory) {
-        return _distrustGroupOwners[extension][round];
-    }
-
-    function distrustGroupOwnersCount(
-        address extension,
-        uint256 round
-    ) external view returns (uint256) {
-        return _distrustGroupOwners[extension][round].length;
-    }
-
-    function distrustGroupOwnersAtIndex(
-        address extension,
-        uint256 round,
-        uint256 index
-    ) external view returns (address) {
-        return _distrustGroupOwners[extension][round][index];
-    }
-
-    function _storeOriginScores(
-        address extension,
-        uint256 currentRound,
+        uint256 verifierId,
         uint256 groupId,
         uint256 startIndex,
         uint256[] calldata originScores
-    ) internal returns (uint256 totalScore) {
-        uint256 length = originScores.length;
-        for (uint256 i = 0; i < length; i++) {
-            if (originScores[i] > MAX_ORIGIN_SCORE) revert ScoreExceedsMax();
-            address account = _groupJoin.accountsByGroupIdAtIndex(
-                extension,
-                currentRound,
-                groupId,
-                startIndex + i
-            );
-
-            // Store deduction instead of original score to save gas
-            // If score is 100, don't store (remains 0)
-            // If score < 100, store MAX_ORIGIN_SCORE - originScore
-            if (originScores[i] < MAX_ORIGIN_SCORE) {
-                _originScoreDeductionByAccount[extension][currentRound][
-                    account
-                ] = MAX_ORIGIN_SCORE - originScores[i];
-            }
-
-            totalScore +=
-                originScores[i] *
-                _groupJoin.joinedAmountByAccount(
-                    extension,
-                    currentRound,
-                    account
-                );
+    ) external {
+        _requireMemberOwner(s, verifierId);
+        if (originScores.length == 0) {
+            revert IGroupActionVerifyErrors.OriginScoresEmpty();
         }
-        return totalScore;
+        if (originScores.length > GroupActionStorage.MAX_VERIFICATION_BATCH) {
+            revert IGroupActionVerifyErrors.VerificationBatchTooLarge();
+        }
+
+        uint256 round = _currentVerifyRound(s);
+
+        uint256 lockedVerifier = s.lockedVerifierId[tokenAddress][actionId][round];
+        if (lockedVerifier != 0) {
+            if (lockedVerifier != verifierId) {
+                revert IGroupActionVerifyErrors.VerifierAlreadyLocked(tokenAddress, actionId, round);
+            }
+        } else {
+            _requireOpenCandidate(s, tokenAddress, actionId, round, verifierId);
+        }
+
+        uint256 memberCount = s.memberIdsByGroupId[tokenAddress][actionId][groupId].countByRound(round);
+        uint256 verifiedCount = s.verifiedMemberCount[tokenAddress][actionId][round][groupId];
+        if (memberCount != 0 && verifiedCount == memberCount) {
+            revert IGroupActionVerifyErrors.AlreadyVerified();
+        }
+        if (startIndex != verifiedCount) {
+            revert IGroupActionVerifyErrors.StartIndexMismatch(verifiedCount, startIndex);
+        }
+        if (startIndex + originScores.length > memberCount) {
+            revert IGroupActionVerifyErrors.ScoresExceedAccountCount();
+        }
+
+        if (lockedVerifier == 0) {
+            s.lockedVerifierId[tokenAddress][actionId][round] = verifierId;
+            emit IGroupActionVerifyEvents.VerifierLocked({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                round: round,
+                memberId: verifierId
+            });
+        }
+
+        _scoreBatch(s, tokenAddress, actionId, round, groupId, verifiedCount, originScores);
+
+        emit IGroupActionVerifyEvents.OriginScoresSubmitted({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            groupId: groupId,
+            round: round,
+            verifierId: verifierId,
+            startIndex: startIndex,
+            scores: originScores
+        });
     }
 
-    function _computeGroupScore(
-        uint256 groupAmount,
-        uint256 distrustRate_
-    ) internal pure returns (uint256) {
-        uint256 oneMinusDistrust = PRECISION - distrustRate_;
-        return (groupAmount * oneMinusDistrust) / PRECISION;
+    function originScore(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId
+    ) external view returns (uint256 score, bool verified) {
+        uint256 packed = s.originScorePacked[tokenAddress][actionId][round][memberId];
+        return (packed & GroupActionStorage.SCORE_MASK, packed >= GroupActionStorage.VERIFIED_FLAG);
     }
 
-    function _calculateGroupScore(
-        address extension,
+    function finalScore(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId
+    ) external view returns (uint256 score, bool verified) {
+        uint256 packed = s.originScorePacked[tokenAddress][actionId][round][memberId];
+        verified = packed >= GroupActionStorage.VERIFIED_FLAG;
+        if (!verified) {
+            // forge-lint: disable-next-line(boolean-cst)
+            return (0, false);
+        }
+        uint256 amount = s.memberAmountAt(tokenAddress, actionId, round, memberId);
+        // forge-lint: disable-next-line(boolean-cst)
+        return (amount * (packed & GroupActionStorage.SCORE_MASK), true);
+    }
+
+    function totalFinalScore(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256) {
+        return s.totalFinalScore[tokenAddress][actionId][round];
+    }
+
+    function verifiedMemberCount(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
         uint256 round,
         uint256 groupId
-    ) internal view returns (uint256) {
-        uint256 groupAmount = _groupJoin.totalJoinedAmountByGroupId(
-            extension,
-            round,
-            groupId
-        );
-        uint256 distrustRate_ = _distrustRateByGroupId(
-            extension,
-            round,
-            groupId
-        );
-
-        return _computeGroupScore(groupAmount, distrustRate_);
+    ) external view returns (uint256) {
+        return s.verifiedMemberCount[tokenAddress][actionId][round][groupId];
     }
 
-    /// @notice Updates group scores for all groups owned by a verifier when distrust votes change
-    /// @dev Recalculates each group's score with the new distrust rate and updates totalGroupScore
-    /// @param extension The extension address
-    /// @param round The round number
-    /// @param verifier The verifier whose groups need score updates
-    function _updateGroupScoresForVerifier(
-        address extension,
-        uint256 round,
-        address verifier
-    ) internal {
-        uint256[] storage groupIds_ = _groupIdsByVerifier[extension][round][
-            verifier
-        ];
-        uint256 totalGroupScore_ = _totalGroupScore[extension][round];
-        mapping(uint256 => uint256) storage scoreMap = _groupScore[extension][
-            round
-        ];
+    function isRoundVerified(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (bool) {
+        uint256 groupCount = s.groupIdsByRound[tokenAddress][actionId].countByRound(round);
+        if (groupCount == 0) {
+            return true;
+        }
+        (uint256[] memory groupIds, ) =
+            s.groupIdsByRound[tokenAddress][actionId].valuesByRound(round, 0, groupCount, false);
+        for (uint256 i = 0; i < groupIds.length; i++) {
+            uint256 groupId = groupIds[i];
+            if (
+                s.verifiedMemberCount[tokenAddress][actionId][round][groupId]
+                    != s.memberIdsByGroupId[tokenAddress][actionId][groupId].countByRound(round)
+            ) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-        for (uint256 i = 0; i < groupIds_.length; i++) {
-            uint256 groupId = groupIds_[i];
-            uint256 oldScore = scoreMap[groupId];
-            uint256 newScore = _calculateGroupScore(extension, round, groupId);
-            scoreMap[groupId] = newScore;
-            totalGroupScore_ = totalGroupScore_ - oldScore + newScore;
+    function lockedVerifierId(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256) {
+        return s.lockedVerifierId[tokenAddress][actionId][round];
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function submitVerifierApplication(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        string calldata description
+    ) external returns (uint256 applicationId) {
+        _requireMemberOwner(s, memberId);
+        if (IStake(s.stakeAddress).validGovVotes(tokenAddress, memberId) == 0) {
+            revert IGroupActionVerifyErrors.VerifyVotesZero();
+        }
+        if (bytes(description).length > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
+            revert IGroupActionExecutorErrors.DescriptionTooLong();
+        }
+        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        uint256 currentRound = IPhase(s.phaseAddress).currentPhase();
+        if (currentRound != createdRound) {
+            revert IActionExecutorErrors.InvalidRound(currentRound);
         }
 
-        _totalGroupScore[extension][round] = totalGroupScore_;
+        applicationId = _replaceApplication(s, tokenAddress, actionId, memberId, createdRound);
+        s.applicationMemberId[tokenAddress][actionId][applicationId] = memberId;
+        s.applicationDescription[tokenAddress][actionId][applicationId] = description;
+        s.applicationCreatedRound[tokenAddress][actionId][applicationId] = createdRound;
+
+        emit IGroupActionVerifyEvents.VerifierApplicationSubmitted({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: createdRound,
+            applicationId: applicationId
+        });
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function cancelVerifierApplication(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external {
+        _requireMemberOwner(s, memberId);
+        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        uint256 currentRound = IPhase(s.phaseAddress).currentPhase();
+        if (currentRound != createdRound) {
+            revert IActionExecutorErrors.InvalidRound(currentRound);
+        }
+        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
+        if (applicationId == 0) {
+            revert IGroupActionVerifyErrors.ApplicationNotActive();
+        }
+
+        s.activeApplicationIds[tokenAddress][actionId].remove(applicationId);
+        _removeFromRank(s, tokenAddress, actionId, createdRound, applicationId);
+        s.currentApplicationId[tokenAddress][actionId][memberId] = 0;
+
+        emit IGroupActionVerifyEvents.VerifierApplicationCancelled({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: createdRound,
+            applicationId: applicationId
+        });
+    }
+
+    function verifierApplication(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (VerifierApplication memory application) {
+        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
+        if (applicationId == 0) {
+            return VerifierApplication({applicationId: 0, memberId: 0, description: ""});
+        }
+        return VerifierApplication({
+            applicationId: applicationId,
+            memberId: s.applicationMemberId[tokenAddress][actionId][applicationId],
+            description: s.applicationDescription[tokenAddress][actionId][applicationId]
+        });
+    }
+
+    function verifierApplications(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (VerifierApplication[] memory applications, uint256 total) {
+        uint256[] memory applicationIds;
+        (applicationIds, total) = s.activeApplicationIds[tokenAddress][actionId].values(offset, limit, reverse);
+        applications = new VerifierApplication[](applicationIds.length);
+        for (uint256 i = 0; i < applicationIds.length; i++) {
+            uint256 applicationId = applicationIds[i];
+            applications[i] = VerifierApplication({
+                applicationId: applicationId,
+                memberId: s.applicationMemberId[tokenAddress][actionId][applicationId],
+                description: s.applicationDescription[tokenAddress][actionId][applicationId]
+            });
+        }
+    }
+
+    function votesByVerifierIds(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256[] calldata verifierIds
+    ) external view returns (uint256[] memory votes) {
+        votes = new uint256[](verifierIds.length);
+        for (uint256 i = 0; i < verifierIds.length; i++) {
+            uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][verifierIds[i]];
+            if (applicationId != 0 && s.applicationCreatedRound[tokenAddress][actionId][applicationId] == round) {
+                votes[i] = s.votesByApplicationId[tokenAddress][actionId][applicationId];
+            }
+        }
+    }
+
+    function votesByApplicationId(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 applicationId
+    ) external view returns (uint256) {
+        return s.votesByApplicationId[tokenAddress][actionId][applicationId];
+    }
+
+    function topVerifiers(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256[] memory verifierIds, uint256[] memory votes) {
+        uint256[] storage rankedApplicationIds = s.rankedApplicationIds[tokenAddress][actionId][round];
+        verifierIds = new uint256[](rankedApplicationIds.length);
+        votes = new uint256[](rankedApplicationIds.length);
+        for (uint256 i = 0; i < rankedApplicationIds.length; i++) {
+            uint256 applicationId = rankedApplicationIds[i];
+            verifierIds[i] = s.applicationMemberId[tokenAddress][actionId][applicationId];
+            votes[i] = s.votesByApplicationId[tokenAddress][actionId][applicationId];
+        }
+    }
+
+    function verificationSchema(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId
+    ) external view returns (string[] memory keys, string[] memory descriptions) {
+        return (s.verificationKeys[tokenAddress][actionId], s.verificationDescriptions[tokenAddress][actionId]);
+    }
+
+    function verificationValue(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        string calldata key
+    ) external view returns (string memory value) {
+        string[] storage keys = s.verificationKeys[tokenAddress][actionId];
+        for (uint256 i = 0; i < keys.length; i++) {
+            if (keccak256(bytes(keys[i])) == keccak256(bytes(key))) {
+                return s.verificationValueHistory[tokenAddress][actionId][memberId][i].latestValue();
+            }
+        }
+        return "";
+    }
+
+    function verificationInfos(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (string[] memory keys, string[] memory values) {
+        return _verificationValues(s, tokenAddress, actionId, memberId, type(uint256).max);
+    }
+
+    function verificationInfosByRound(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round
+    ) external view returns (string[] memory keys, string[] memory values) {
+        return _verificationValues(s, tokenAddress, actionId, memberId, round);
+    }
+
+    function onProposalVoted(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        bytes[] calldata targetData,
+        uint256 votes
+    ) external {
+        if (round != s.createdRound[tokenAddress][actionId]) {
+            revert IActionExecutorErrors.InvalidRound(round);
+        }
+        if (targetData.length == 0 || targetData.length == 1) {
+            return;
+        }
+        if (targetData.length > 2) {
+            revert IGroupActionExecutorErrors.InvalidTargetDataLength();
+        }
+        if (targetData[1].length != 32) {
+            revert IGroupActionExecutorErrors.InvalidTargetDataLength();
+        }
+
+        uint256 candidateMemberId = abi.decode(targetData[1], (uint256));
+        if (candidateMemberId == 0) {
+            revert IGroupActionVerifyErrors.InvalidCandidate();
+        }
+        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][candidateMemberId];
+        if (applicationId == 0) {
+            revert IGroupActionVerifyErrors.ApplicationNotActive();
+        }
+
+        if (votes == 0) {
+            return;
+        }
+        s.votesByApplicationId[tokenAddress][actionId][applicationId] += votes;
+        _upsertRank(s, tokenAddress, actionId, round, applicationId);
+    }
+
+    function _scoreBatch(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 verifiedCount,
+        uint256[] calldata originScores
+    ) internal {
+        (uint256[] memory memberIds, ) =
+            _pageMembers(s, tokenAddress, actionId, round, groupId, verifiedCount, originScores.length);
+        uint256 groupFinal = s.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
+        uint256 totalFinal = s.totalFinalScore[tokenAddress][actionId][round];
+        for (uint256 i = 0; i < originScores.length; i++) {
+            uint256 weighted = _scoreMember(s, tokenAddress, actionId, round, memberIds[i], originScores[i]);
+            groupFinal += weighted;
+            totalFinal += weighted;
+        }
+        s.finalScoreByGroupId[tokenAddress][actionId][round][groupId] = groupFinal;
+        s.totalFinalScore[tokenAddress][actionId][round] = totalFinal;
+        s.verifiedMemberCount[tokenAddress][actionId][round][groupId] = verifiedCount + originScores.length;
+    }
+
+    function _scoreMember(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId,
+        uint256 score
+    ) internal returns (uint256 weighted) {
+        s.originScorePacked[tokenAddress][actionId][round][memberId] = score | GroupActionStorage.VERIFIED_FLAG;
+        return s.memberAmountAt(tokenAddress, actionId, round, memberId) * score;
+    }
+
+    function _pageMembers(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 offset,
+        uint256 limit
+    ) internal view returns (uint256[] memory memberIds, uint256 total) {
+        RoundHistoryUint256Set.Storage storage memberSet = s.memberIdsByGroupId[tokenAddress][actionId][groupId];
+        return memberSet.valuesByRound(round, offset, limit, false);
+    }
+
+    function _requireMemberOwner(GroupActionStorage.Layout storage s, uint256 memberId) internal view {
+        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
+            revert IActionExecutorErrors.NotMemberOwner(memberId);
+        }
+    }
+
+    function _currentVerifyRound(GroupActionStorage.Layout storage s) internal view returns (uint256) {
+        uint256 phase = IPhase(s.phaseAddress).currentPhase();
+        if (phase < 3) {
+            revert IActionExecutorErrors.RoundNotStarted();
+        }
+        return phase - 2;
+    }
+
+    function _requireOpenCandidate(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 verifierId
+    ) internal view {
+        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][verifierId];
+        uint256[] storage rankedApplicationIds = s.rankedApplicationIds[tokenAddress][actionId][round];
+        uint256 rank = 0;
+        for (; rank < rankedApplicationIds.length; rank++) {
+            if (rankedApplicationIds[rank] == applicationId) {
+                break;
+            }
+        }
+        if (rank == rankedApplicationIds.length || applicationId == 0) {
+            revert IGroupActionVerifyErrors.InvalidCandidate();
+        }
+        if (rank == 0) {
+            return;
+        }
+        uint256 splitIndex = rank - 1;
+        if (splitIndex >= s.splits.length) {
+            revert IGroupActionVerifyErrors.InvalidCandidate();
+        }
+        (uint256 startBlock, uint256 phaseBlocks) = IPhase(s.phaseAddress).phaseInfo(round + 2);
+        uint256 openOffset =
+            Math.mulDiv(phaseBlocks, s.splits[splitIndex], GroupActionStorage.PRECISION, Math.Rounding.Ceil);
+        if (block.number < startBlock + openOffset) {
+            revert IGroupActionVerifyErrors.InvalidCandidate();
+        }
+    }
+
+    function _replaceApplication(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round
+    ) internal returns (uint256 applicationId) {
+        uint256 previousApplicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
+        if (previousApplicationId != 0) {
+            s.activeApplicationIds[tokenAddress][actionId].remove(previousApplicationId);
+            _removeFromRank(s, tokenAddress, actionId, round, previousApplicationId);
+        }
+
+        applicationId = ++s.applicationIdCounter[tokenAddress][actionId];
+        s.currentApplicationId[tokenAddress][actionId][memberId] = applicationId;
+        s.activeApplicationIds[tokenAddress][actionId].add(applicationId);
+    }
+
+    function _upsertRank(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 applicationId
+    ) internal {
+        uint256[] storage rankedApplicationIds = s.rankedApplicationIds[tokenAddress][actionId][round];
+        uint256 capacity = s.splits.length + 1;
+
+        _removeFromRank(s, tokenAddress, actionId, round, applicationId);
+
+        uint256 length = rankedApplicationIds.length;
+        if (length >= capacity) {
+            uint256 lastApplicationId = rankedApplicationIds[length - 1];
+            uint256 lastVotes = s.votesByApplicationId[tokenAddress][actionId][lastApplicationId];
+            uint256 applicationVotes = s.votesByApplicationId[tokenAddress][actionId][applicationId];
+            if (applicationVotes <= lastVotes) {
+                return;
+            }
+            rankedApplicationIds.pop();
+        }
+
+        uint256 insertIndex = rankedApplicationIds.length;
+        for (uint256 i = 0; i < rankedApplicationIds.length; i++) {
+            uint256 rankedApplicationId = rankedApplicationIds[i];
+            uint256 rankedVotes = s.votesByApplicationId[tokenAddress][actionId][rankedApplicationId];
+            uint256 applicationVotes = s.votesByApplicationId[tokenAddress][actionId][applicationId];
+            if (rankedVotes < applicationVotes || (rankedVotes == applicationVotes && rankedApplicationId > applicationId)) {
+                insertIndex = i;
+                break;
+            }
+        }
+        rankedApplicationIds.push(applicationId);
+        for (uint256 i = rankedApplicationIds.length - 1; i > insertIndex; i--) {
+            rankedApplicationIds[i] = rankedApplicationIds[i - 1];
+        }
+        if (insertIndex != rankedApplicationIds.length - 1) {
+            rankedApplicationIds[insertIndex] = applicationId;
+        }
+    }
+
+    function _removeFromRank(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 applicationId
+    ) internal {
+        uint256[] storage rankedApplicationIds = s.rankedApplicationIds[tokenAddress][actionId][round];
+        uint256 length = rankedApplicationIds.length;
+        uint256 removeIndex = length;
+        for (uint256 i = 0; i < length; i++) {
+            if (rankedApplicationIds[i] == applicationId) {
+                removeIndex = i;
+                break;
+            }
+        }
+        if (removeIndex == length) {
+            return;
+        }
+        for (uint256 i = removeIndex; i < length - 1; i++) {
+            rankedApplicationIds[i] = rankedApplicationIds[i + 1];
+        }
+        rankedApplicationIds.pop();
+    }
+
+    function _verificationValues(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round
+    ) internal view returns (string[] memory keys, string[] memory values) {
+        keys = s.verificationKeys[tokenAddress][actionId];
+        values = new string[](keys.length);
+        for (uint256 i = 0; i < keys.length; i++) {
+            values[i] = round == type(uint256).max
+                ? s.verificationValueHistory[tokenAddress][actionId][memberId][i].latestValue()
+                : s.verificationValueHistory[tokenAddress][actionId][memberId][i].value(round);
+        }
     }
 }
