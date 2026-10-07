@@ -283,29 +283,4 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector));
         executor.onProposalCreated(address(token), ACTION_2, six);
     }
-
-    function _targetDataWith(address joinTokenAddress, uint256 stakeAmount, uint256 ratio, uint256 minGovRatio)
-        internal
-        view
-        returns (bytes[] memory targetData)
-    {
-        targetData = new bytes[](5);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(joinTokenAddress);
-        targetData[2] = abi.encode(stakeAmount);
-        targetData[3] = abi.encode(ratio);
-        targetData[4] = abi.encode(minGovRatio);
-    }
-
-    function _createActionWith(uint256 actionId, bytes[] memory targetData) internal {
-        vm.prank(address(actionTarget));
-        executor.onProposalCreated(address(token), actionId, targetData);
-    }
-
-    function _clone(bytes[] memory data) internal pure returns (bytes[] memory copy) {
-        copy = new bytes[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            copy[i] = data[i];
-        }
-    }
 }

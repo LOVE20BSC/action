@@ -116,17 +116,41 @@ abstract contract GroupActionExecutorTestBase {
     }
 
     function _targetData() internal view returns (bytes[] memory targetData) {
+        return _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0);
+    }
+
+    function _targetDataWith(address joinTokenAddress, uint256 stakeAmount, uint256 ratio, uint256 minGovRatio)
+        internal
+        view
+        returns (bytes[] memory targetData)
+    {
         targetData = new bytes[](5);
         targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(address(joinToken));
-        targetData[2] = abi.encode(ACTIVATION_STAKE);
-        targetData[3] = abi.encode(PRECISION);
-        targetData[4] = abi.encode(uint256(0));
+        targetData[1] = abi.encode(joinTokenAddress);
+        targetData[2] = abi.encode(stakeAmount);
+        targetData[3] = abi.encode(ratio);
+        targetData[4] = abi.encode(minGovRatio);
     }
 
     function _createAction(uint256 actionId) internal {
         vm.prank(address(actionTarget));
         executor.onProposalCreated(address(token), actionId, _targetData());
+    }
+
+    function _createActionWith(uint256 actionId, bytes[] memory targetData) internal {
+        _createActionOn(address(token), actionId, targetData);
+    }
+
+    function _createActionOn(address tokenAddress, uint256 actionId, bytes[] memory targetData) internal {
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(tokenAddress, actionId, targetData);
+    }
+
+    function _clone(bytes[] memory data) internal pure returns (bytes[] memory copy) {
+        copy = new bytes[](data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            copy[i] = data[i];
+        }
     }
 
     function _submitApplication() internal {
@@ -158,6 +182,23 @@ abstract contract GroupActionExecutorTestBase {
     function _deactivateGroup(uint256 groupId) internal {
         vm.prank(GROUP_OWNER);
         executor.deactivateGroup(address(token), ACTION_ID, groupId);
+    }
+
+    function _activateGroupOn(address tokenAddress, uint256 actionId, uint256 groupId) internal {
+        vm.prank(GROUP_OWNER);
+        executor.activateGroup(tokenAddress, actionId, groupId, _defaultConfig());
+    }
+
+    function _joinOn(address tokenAddress, uint256 actionId, uint256 groupId, uint256 memberId, uint256 amount)
+        internal
+    {
+        vm.prank(_memberAddress(memberId));
+        executor.join(tokenAddress, actionId, groupId, memberId, amount, 0, new string[](0));
+    }
+
+    function _exitOn(address tokenAddress, uint256 actionId, uint256 memberId) internal {
+        vm.prank(_memberAddress(memberId));
+        executor.exit(tokenAddress, actionId, memberId);
     }
 
     function _fundTokenFor(address account, uint256 amount) internal {
