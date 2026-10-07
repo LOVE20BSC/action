@@ -39,7 +39,7 @@ library GroupActionJoin {
         if (amount == 0) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
-        _requireMemberOwner(s, memberId);
+        s.requireMemberOwner(memberId);
         if (groupId == 0) {
             revert IGroupActionJoinErrors.InvalidGroupId();
         }
@@ -51,7 +51,7 @@ library GroupActionJoin {
 
         _validateGroupConstraints(s, tokenAddress, actionId, groupId, memberId, amount, joinedGroupId == 0);
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
 
         if (joinedGroupId == 0) {
             _registerMembership(s, tokenAddress, actionId, groupId, memberId, round);
@@ -97,9 +97,9 @@ library GroupActionJoin {
         if (amount == 0) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
-        _requireMemberOwner(s, memberId);
+        s.requireMemberOwner(memberId);
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
         uint256 ownAmount = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue();
         if (amount > ownAmount) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
@@ -137,22 +137,16 @@ library GroupActionJoin {
         if (amount == 0) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
-        _requireMemberOwner(s, providerId);
+        s.requireMemberOwner(providerId);
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
         uint256 invested = s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
         if (amount > invested) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
         uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
 
-        s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].record(round, invested - amount);
-        if (invested - amount == 0) {
-            s.providerIdsByMemberId[tokenAddress][actionId][memberId].remove(round, providerId);
-        }
-        s.providerAmountHistory[tokenAddress][actionId][memberId].decrease(round, amount);
-        s.totalJoinedAmountByGroupId[tokenAddress][actionId][groupId].decrease(round, amount);
-        s.totalJoinedAmount[tokenAddress][actionId].decrease(round, amount);
+        _decreaseProviderAmount(s, tokenAddress, actionId, round, groupId, memberId, providerId, amount);
 
         IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
@@ -181,9 +175,9 @@ library GroupActionJoin {
         uint256 actionId,
         uint256 memberId
     ) external {
-        _requireMemberOwner(s, memberId);
+        s.requireMemberOwner(memberId);
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
         uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
         uint256 ownAmount = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue();
         uint256 providerTotal = s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue();
@@ -215,11 +209,9 @@ library GroupActionJoin {
                 if (invested == 0) {
                     continue;
                 }
-                s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerIds[i]].record(round, 0);
-                s.providerIdsByMemberId[tokenAddress][actionId][memberId].remove(round, providerIds[i]);
-                s.providerAmountHistory[tokenAddress][actionId][memberId].decrease(round, invested);
-                s.totalJoinedAmountByGroupId[tokenAddress][actionId][groupId].decrease(round, invested);
-                s.totalJoinedAmount[tokenAddress][actionId].decrease(round, invested);
+                _decreaseProviderAmount(
+                    s, tokenAddress, actionId, round, groupId, memberId, providerIds[i], invested
+                );
                 s.quotaAmount[tokenAddress][actionId][groupId][providerIds[i]][memberId] += invested;
                 s.quotaMemberIds[tokenAddress][actionId][groupId][providerIds[i]].add(memberId);
                 s.quotaBlockNumber[tokenAddress][actionId][groupId][providerIds[i]][memberId] = block.number;
@@ -311,7 +303,7 @@ library GroupActionJoin {
         uint256[] calldata memberIds,
         uint256[] calldata amounts
     ) external {
-        _requireMemberOwner(s, providerId);
+        s.requireMemberOwner(providerId);
         if (groupId == 0) {
             revert IGroupActionJoinErrors.InvalidGroupId();
         }
@@ -366,7 +358,7 @@ library GroupActionJoin {
         uint256 providerId,
         uint256[] calldata memberIds
     ) external {
-        _requireMemberOwner(s, providerId);
+        s.requireMemberOwner(providerId);
         if (memberIds.length == 0) {
             return;
         }
@@ -549,18 +541,25 @@ library GroupActionJoin {
         return s.gMemberIdsByGroupId[groupId].values(offset, limit, reverse);
     }
 
-    function _requireMemberOwner(GroupActionStorage.Layout storage s, uint256 memberId) internal view {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
-            revert IActionExecutorErrors.NotMemberOwner(memberId);
+    function _decreaseProviderAmount(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 memberId,
+        uint256 providerId,
+        uint256 amount
+    ) internal {
+        uint256 invested = s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
+        uint256 remaining = invested - amount;
+        s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].record(round, remaining);
+        if (remaining == 0) {
+            s.providerIdsByMemberId[tokenAddress][actionId][memberId].remove(round, providerId);
         }
-    }
-
-    function _currentJoinRound(GroupActionStorage.Layout storage s) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        if (phase < 2) {
-            revert IActionExecutorErrors.RoundNotStarted();
-        }
-        return phase - 1;
+        s.providerAmountHistory[tokenAddress][actionId][memberId].decrease(round, amount);
+        s.totalJoinedAmountByGroupId[tokenAddress][actionId][groupId].decrease(round, amount);
+        s.totalJoinedAmount[tokenAddress][actionId].decrease(round, amount);
     }
 
     function _validateGroupConstraints(

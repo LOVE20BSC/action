@@ -35,7 +35,7 @@ library GroupActionVerify {
         uint256 startIndex,
         uint256[] calldata originScores
     ) external {
-        _requireMemberOwner(s, verifierId);
+        s.requireMemberOwner(verifierId);
         if (originScores.length == 0) {
             revert IGroupActionVerifyErrors.OriginScoresEmpty();
         }
@@ -178,7 +178,7 @@ library GroupActionVerify {
         uint256 memberId,
         string calldata description
     ) external returns (uint256 applicationId) {
-        _requireMemberOwner(s, memberId);
+        s.requireMemberOwner(memberId);
         if (IStake(s.stakeAddress).validGovVotes(tokenAddress, memberId) == 0) {
             revert IGroupActionVerifyErrors.VerifyVotesZero();
         }
@@ -212,7 +212,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 memberId
     ) external {
-        _requireMemberOwner(s, memberId);
+        s.requireMemberOwner(memberId);
         uint256 createdRound = s.createdRound[tokenAddress][actionId];
         uint256 currentRound = IPhase(s.phaseAddress).currentPhase();
         if (currentRound != createdRound) {
@@ -345,7 +345,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 memberId
     ) external view returns (string[] memory keys, string[] memory values) {
-        return _verificationValues(s, tokenAddress, actionId, memberId, type(uint256).max);
+        return _verificationValues(s, tokenAddress, actionId, memberId, true, 0);
     }
 
     function verificationInfosByRound(
@@ -355,7 +355,7 @@ library GroupActionVerify {
         uint256 memberId,
         uint256 round
     ) external view returns (string[] memory keys, string[] memory values) {
-        return _verificationValues(s, tokenAddress, actionId, memberId, round);
+        return _verificationValues(s, tokenAddress, actionId, memberId, false, round);
     }
 
     function onProposalVoted(
@@ -441,12 +441,6 @@ library GroupActionVerify {
     ) internal view returns (uint256[] memory memberIds, uint256 total) {
         RoundHistoryUint256Set.Storage storage memberSet = s.memberIdsByGroupId[tokenAddress][actionId][groupId];
         return memberSet.valuesByRound(round, offset, limit, false);
-    }
-
-    function _requireMemberOwner(GroupActionStorage.Layout storage s, uint256 memberId) internal view {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
-            revert IActionExecutorErrors.NotMemberOwner(memberId);
-        }
     }
 
     function _currentVerifyRound(GroupActionStorage.Layout storage s) internal view returns (uint256) {
@@ -580,12 +574,13 @@ library GroupActionVerify {
         address tokenAddress,
         uint256 actionId,
         uint256 memberId,
+        bool latest,
         uint256 round
     ) internal view returns (string[] memory keys, string[] memory values) {
         keys = s.verificationKeys[tokenAddress][actionId];
         values = new string[](keys.length);
         for (uint256 i = 0; i < keys.length; i++) {
-            values[i] = round == type(uint256).max
+            values[i] = latest
                 ? s.verificationValueHistory[tokenAddress][actionId][memberId][i].latestValue()
                 : s.verificationValueHistory[tokenAddress][actionId][memberId][i].value(round);
         }

@@ -84,7 +84,7 @@ library GroupActionManager {
         _validateGroupConfig(config);
         _validateActivationMinGovRatio(s, tokenAddress, actionId, groupId);
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
 
         group.config = config;
         group.active = true;
@@ -128,7 +128,7 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.GroupNotActive();
         }
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
         if (round == group.activatedRound) {
             revert IGroupActionManagerErrors.CannotDeactivateInActivatedRound();
         }
@@ -179,7 +179,7 @@ library GroupActionManager {
 
         _validateGroupConfig(config);
 
-        uint256 round = _currentJoinRound(s);
+        uint256 round = s.currentJoinRound();
         group.config = config;
         s.descriptionHistory[tokenAddress][actionId][groupId].record(round, config.description);
 
@@ -364,13 +364,5 @@ library GroupActionManager {
         if ((ownerGovVotes * GroupActionStorage.PRECISION) / totalGovVotes < minGovRatio) {
             revert IGroupActionManagerErrors.InsufficientActivationMinGovRatio();
         }
-    }
-
-    function _currentJoinRound(GroupActionStorage.Layout storage s) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        if (phase < 2) {
-            revert IActionExecutorErrors.RoundNotStarted();
-        }
-        return phase - 1;
     }
 }

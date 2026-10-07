@@ -20,6 +20,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
+    using GroupActionStorage for GroupActionStorage.Layout;
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using SafeERC20 for IERC20;
 
@@ -610,7 +611,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     }
 
     function currentJoinRound() public view returns (uint256) {
-        uint256 round = _joinRound();
+        uint256 round = s.joinRound();
         if (round == 0) {
             revert RoundNotStarted();
         }
@@ -626,7 +627,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     }
 
     function joinedAmount(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
-        if (round > _joinRound()) {
+        if (round > s.joinRound()) {
             return 0;
         }
         return s.totalJoinedAmount[tokenAddress][actionId].value(round);
@@ -638,11 +639,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256) {
-        if (round > _joinRound()) {
+        if (round > s.joinRound()) {
             return 0;
         }
-        return s.ownAmountHistory[tokenAddress][actionId][memberId].value(round)
-            + s.providerAmountHistory[tokenAddress][actionId][memberId].value(round);
+        return s.memberAmountAt(tokenAddress, actionId, round, memberId);
     }
 
     function joinedAmountTokenAddress(address tokenAddress, uint256 actionId) external view returns (address) {
@@ -663,7 +663,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         if (round > _mintRound()) {
             revert InvalidRound(round);
         }
-        _requireMemberOwner(memberId);
+        s.requireMemberOwner(memberId);
 
         if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
             revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
@@ -766,12 +766,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         return s.totalFinalScore[tokenAddress][actionId][round] == 0;
     }
 
-    // forge-lint: disable-next-item(require-revert-in-loop)
-    function _requireMemberOwner(uint256 memberId) internal view {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
-    }
 
     function _memberFinalScore(
         address tokenAddress,
@@ -783,15 +777,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         if (packed < GroupActionStorage.VERIFIED_FLAG) {
             return 0;
         }
-        uint256 amount = s.ownAmountHistory[tokenAddress][actionId][memberId].value(round)
-            + s.providerAmountHistory[tokenAddress][actionId][memberId].value(round);
-        return amount * (packed & GroupActionStorage.SCORE_MASK);
+        return s.memberAmountAt(tokenAddress, actionId, round, memberId) * (packed & GroupActionStorage.SCORE_MASK);
     }
 
-    function _joinRound() internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        return phase < 2 ? 0 : phase - 1;
-    }
 
     function _mintRound() internal view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();

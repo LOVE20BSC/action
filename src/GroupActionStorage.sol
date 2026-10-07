@@ -9,6 +9,8 @@ import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
 import {Uint256Set} from "libs/Uint256Set.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
+import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
 import {IVote} from "core/src/interfaces/IVote.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 
@@ -155,6 +157,26 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberMintedReward;
         // tokenAddress => actionId => round => memberId => burned amount
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberBurnedReward;
+    }
+
+    function joinRound(Layout storage s) internal view returns (uint256) {
+        uint256 phase = IPhase(s.phaseAddress).currentPhase();
+        return phase < 2 ? 0 : phase - 1;
+    }
+
+    function currentJoinRound(Layout storage s) internal view returns (uint256) {
+        uint256 round = joinRound(s);
+        if (round == 0) {
+            revert IActionExecutorErrors.RoundNotStarted();
+        }
+        return round;
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function requireMemberOwner(Layout storage s, uint256 memberId) internal view {
+        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
+            revert IActionExecutorErrors.NotMemberOwner(memberId);
+        }
     }
 
     function memberAmountAt(
