@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {GroupActionManager} from "./GroupActionManager.sol";
 import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {IGroupActionJoinEvents, IGroupActionJoinErrors} from "./interfaces/IGroupActionJoin.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
@@ -599,7 +600,7 @@ library GroupActionJoin {
             }
         }
 
-        uint256 actionMaxJoinAmount = s.maxJoinAmount(tokenAddress, actionId);
+        uint256 actionMaxJoinAmount = GroupActionManager._maxJoinAmount(s, tokenAddress, actionId);
         if (newTotal > actionMaxJoinAmount) {
             revert IGroupActionJoinErrors.ExceedsActionMaxJoinAmount();
         }

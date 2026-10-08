@@ -10,8 +10,10 @@ import {GroupConfig, IGroupActionManagerEvents, IGroupActionManagerErrors} from 
 import {IStake} from "core/src/interfaces/IStake.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {IVote} from "core/src/interfaces/IVote.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
 library GroupActionManager {
@@ -250,7 +252,7 @@ library GroupActionManager {
         address tokenAddress,
         uint256 actionId
     ) external view returns (uint256) {
-        return s.maxJoinAmount(tokenAddress, actionId);
+        return _maxJoinAmount(s, tokenAddress, actionId);
     }
 
     function staked(
@@ -329,6 +331,30 @@ library GroupActionManager {
         if (IMemberNFT(s.memberNFTAddress).ownerOf(groupId) != msg.sender) {
             revert IGroupActionManagerErrors.OnlyGroupOwner();
         }
+    }
+
+    function _maxJoinAmount(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId
+    ) internal view returns (uint256) {
+        uint256 phase = IPhase(s.phaseAddress).currentPhase();
+        uint256 round = phase < 2 ? 0 : phase - 1;
+        if (round == 0) {
+            return 0;
+        }
+        uint256 totalVotes = IVote(s.voteAddress).votesNum(tokenAddress, round);
+        if (totalVotes == 0) {
+            return 0;
+        }
+        uint256 actionVotes = IVote(s.voteAddress).votesNumByProposalId(tokenAddress, round, actionId);
+        if (actionVotes == 0) {
+            return 0;
+        }
+        uint256 voteRate = (actionVotes * GroupActionStorage.PRECISION) / totalVotes;
+        uint256 totalMinted = IERC20(s.joinTokenAddress[tokenAddress][actionId]).totalSupply();
+        uint256 baseAmount = (totalMinted * s.maxJoinAmountRatio[tokenAddress][actionId]) / GroupActionStorage.PRECISION;
+        return Math.mulDiv(baseAmount, voteRate, GroupActionStorage.PRECISION);
     }
 
     function _validateGroupConfig(GroupConfig calldata config) internal pure {

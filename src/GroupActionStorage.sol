@@ -7,11 +7,8 @@ import {RoundHistoryString} from "libs/RoundHistoryString.sol";
 import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
 import {Uint256Set} from "libs/Uint256Set.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
-import {IVote} from "core/src/interfaces/IVote.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 
 library GroupActionStorage {
@@ -190,29 +187,5 @@ library GroupActionStorage {
     ) internal view returns (uint256) {
         return s.ownAmountHistory[tokenAddress][actionId][memberId].value(round)
             + s.providerAmountHistory[tokenAddress][actionId][memberId].value(round);
-    }
-
-    function maxJoinAmount(
-        Layout storage s,
-        address tokenAddress,
-        uint256 actionId
-    ) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        uint256 round = phase < 2 ? 0 : phase - 1;
-        if (round == 0) {
-            return 0;
-        }
-        uint256 totalVotes = IVote(s.voteAddress).votesNum(tokenAddress, round);
-        if (totalVotes == 0) {
-            return 0;
-        }
-        uint256 actionVotes = IVote(s.voteAddress).votesNumByProposalId(tokenAddress, round, actionId);
-        if (actionVotes == 0) {
-            return 0;
-        }
-        uint256 voteRate = (actionVotes * PRECISION) / totalVotes;
-        uint256 totalMinted = IERC20(s.joinTokenAddress[tokenAddress][actionId]).totalSupply();
-        uint256 baseAmount = (totalMinted * s.maxJoinAmountRatio[tokenAddress][actionId]) / PRECISION;
-        return Math.mulDiv(baseAmount, voteRate, PRECISION);
     }
 }
