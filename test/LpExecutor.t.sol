@@ -780,42 +780,45 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(mintAmount == 140e18 && burnAmount == 560e18, "the pull return drives the split");
     }
 
-    function testMintMemberRewardZeroEffectiveMarksMintedWithoutPull() external {
+    function testMintMemberRewardRevertsOnZeroEffective() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _withdraw(1, 100e18);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, false);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
-        require(mintAmount == 0 && burnAmount == 0, "zero settlement");
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
         require(actionTarget.mintRewardCalls() == 0, "no pull without effective participation");
         (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
-        require(minted, "still marked minted");
+        require(!minted, "not marked minted");
     }
 
-    function testMintMemberRewardForNonParticipantMarksMinted() external {
+    function testMintMemberRewardRevertsForNonParticipant() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
 
         uint256 memberBefore = token.balanceOf(MEMBER2);
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 2);
-        require(mintAmount == 0 && burnAmount == 0, "non participant gets nothing");
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 2);
         require(token.balanceOf(MEMBER2) == memberBefore, "no transfer");
         (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 2);
-        require(minted, "marked minted");
+        require(!minted, "not marked minted");
     }
 
-    function testMintMemberRewardZeroProposalRewardSkipsPull() external {
+    function testMintMemberRewardRevertsOnZeroProposalReward() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
         _setActionReward(2, 0, false);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
-        require(mintAmount == 0 && burnAmount == 0, "zero settlement");
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
         require(actionTarget.mintRewardCalls() == 0, "no pull with zero reward");
     }
 

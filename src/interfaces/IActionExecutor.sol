@@ -22,6 +22,7 @@ interface IActionExecutorErrors {
     error NotMemberOwner(uint256 memberId);
     error ProposalNotVoted(address tokenAddress, uint256 proposalId);
     error RewardAlreadyMinted(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round);
+    error NoRewardAvailable();
     error BatchLengthMismatch(uint256 actionIdsLength, uint256 roundsLength);
 }
 

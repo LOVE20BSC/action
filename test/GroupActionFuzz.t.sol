@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionFuzzTest is GroupActionExecutorTestBase {
@@ -59,15 +60,32 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
 
         if (total == 0) {
             require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn on zero total");
-            (uint256 mint0, ) = _settle(MEMBER1_ID, 2);
-            require(mint0 == 0, "zero settle");
+            vm.prank(MEMBER1);
+            vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+            executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
             return;
         }
 
         uint256 expected1 = Math.mulDiv(PROPOSAL_REWARD, final1, total);
         uint256 expected2 = Math.mulDiv(PROPOSAL_REWARD, final2, total);
-        (uint256 mint1, ) = _settle(MEMBER1_ID, 2);
-        (uint256 mint2, ) = _settle(MEMBER2_ID, 2);
+
+        uint256 mint1;
+        if (expected1 == 0) {
+            vm.prank(MEMBER1);
+            vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+            executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        } else {
+            (mint1,) = _settle(MEMBER1_ID, 2);
+        }
+
+        uint256 mint2;
+        if (expected2 == 0) {
+            vm.prank(MEMBER2);
+            vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+            executor.mintMemberReward(address(token), ACTION_ID, MEMBER2_ID, 2);
+        } else {
+            (mint2,) = _settle(MEMBER2_ID, 2);
+        }
         require(mint1 == expected1 && mint2 == expected2, "split formula");
         require(mint1 + mint2 <= PROPOSAL_REWARD, "budget bound");
         require(token.balanceOf(MEMBER1) == expected1 && token.balanceOf(MEMBER2) == expected2, "paid out");

@@ -124,6 +124,13 @@ contract LpExecutorHandler {
         uint256 memberId = seed % 2 + 1;
         if (mintedModel[memberId]) return;
 
+        // Zero settlement reverts NoRewardAvailable; skip members with nothing to settle.
+        uint256 memberEffective = balanceModel[memberId] - deductionModel[memberId];
+        uint256 totalEffective = totalJoinedModel - totalDeductionModel;
+        if (memberEffective == 0 || totalEffective == 0) return;
+        uint256 effectiveLpRatio = memberEffective * 1e18 / totalEffective;
+        if (PROPOSAL_REWARD * effectiveLpRatio / 1e18 == 0) return;
+
         vm.prank(_memberAddress(memberId));
         (uint256 mintAmount, uint256 burnAmount) =
             LpExecutor(lpExecutor).mintMemberReward(token, ACTION_ID, memberId, 2);

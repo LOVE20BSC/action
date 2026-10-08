@@ -683,6 +683,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
             }
         }
 
+        if (mintAmount == 0 && burnAmount == 0) {
+            revert NoRewardAvailable();
+        }
+
         s.memberMinted[tokenAddress][actionId][round][memberId] = true;
         s.memberMintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
         s.memberBurnedReward[tokenAddress][actionId][round][memberId] = burnAmount;

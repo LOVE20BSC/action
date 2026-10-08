@@ -406,6 +406,10 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
                 _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
         }
 
+        if (mintAmount == 0 && burnAmount == 0) {
+            revert NoRewardAvailable();
+        }
+
         _memberMinted[tokenAddress][actionId][round][memberId] = true;
         _mintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
         _burnedReward[tokenAddress][actionId][round][memberId] = burnAmount;

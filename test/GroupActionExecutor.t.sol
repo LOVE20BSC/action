@@ -102,20 +102,13 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
             "no group reward"
         );
 
-        (uint256 mintAmount, uint256 burnAmount) = _settle(MEMBER1_ID, 2);
-        require(mintAmount == 0 && burnAmount == 0, "zero settle");
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
 
         (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
             executor.memberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
-        require(viewAmount == 0 && viewBurn == 0 && viewMinted, "settled zero recorded");
-
-        vm.prank(MEMBER1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), ACTION_ID, MEMBER1_ID, 2
-            )
-        );
-        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        require(viewAmount == 0 && viewBurn == 0 && !viewMinted, "unsettled round stays pending");
     }
 
     function testPartialVerificationBlocksSettle() external {
@@ -137,8 +130,9 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
             "partial batches unlock nothing"
         );
 
-        (uint256 mintAmount, uint256 burnAmount) = _settle(MEMBER1_ID, 2);
-        require(mintAmount == 0 && burnAmount == 0, "partial round settles zero");
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
     }
 
     function testBatchMintMemberRewards() external {
@@ -280,8 +274,9 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
 
         _atPhase(5);
         require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn flagged on zero total");
-        (uint256 mintAmount, uint256 burnAmount) = _settle(MEMBER1_ID, 2);
-        require(mintAmount == 0 && burnAmount == 0, "zero settle");
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
     }
 
     function testMintRoundGuards() external {

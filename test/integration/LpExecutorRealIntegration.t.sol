@@ -301,8 +301,8 @@ contract LpExecutorRealIntegrationTest {
         require(burned && recorded == expectedBurn, "action burn ledger");
 
         vm.prank(member1);
-        (uint256 mintAmount, uint256 burnAmount) = lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
-        require(mintAmount == 0 && burnAmount == 0, "nothing left to settle");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
 
         vm.prank(address(0xBEEF));
         actionTarget.burnRewardIfNeeded(address(token), proposalId, round);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {IActionExecutorEvents} from "../src/interfaces/IActionExecutor.sol";
+import {IActionExecutorErrors, IActionExecutorEvents} from "../src/interfaces/IActionExecutor.sol";
 import {ILpExecutorEvents} from "../src/interfaces/ILpExecutor.sol";
 import {LpExecutorTestBase, LpExecutorVm} from "./LpExecutorTestBase.sol";
 
@@ -71,16 +71,15 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
     }
 
-    function testMemberRewardMintedEventOnZeroSettlement() external {
+    function testMintMemberRewardRevertsOnZeroSettlement() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _withdraw(1, 100e18);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, false);
 
-        vm.expectEmit(true, true, true, true);
-        emit MemberRewardMinted(address(token), ACTION_ID, 1, 2, 0, 0);
         vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
     }
 
