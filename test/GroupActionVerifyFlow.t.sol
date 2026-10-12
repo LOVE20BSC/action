@@ -21,6 +21,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
         stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         _castVotesFor(VERIFIER2_ID, 150e18);
@@ -63,6 +64,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
         stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         _castVotesFor(VERIFIER_ID, 100e18);
@@ -154,9 +156,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     }
 
     function testSchemaAndVerificationInfoFlow() external {
-        bytes[] memory data = new bytes[](6);
-        bytes[] memory baseData = _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0);
-        for (uint256 i = 0; i < 5; i++) {
+        bytes[] memory data = new bytes[](7);
+        bytes[] memory baseData = _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE);
+        for (uint256 i = 0; i < 6; i++) {
             data[i] = baseData[i];
         }
         string[] memory keys = new string[](2);
@@ -165,7 +167,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         string[] memory descriptions = new string[](2);
         descriptions[0] = "n";
         descriptions[1] = "c";
-        data[5] = abi.encode(keys, descriptions);
+        data[6] = abi.encode(keys, descriptions);
         _createActionWith(ACTION_2, data);
 
         (string[] memory schemaKeys, string[] memory schemaDescriptions) =
@@ -267,6 +269,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
         stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
 
@@ -274,6 +277,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         address third = address(0x1009);
         memberNFT.setOwner(thirdId, third);
         stake.setValidGovVotes(address(token), thirdId, 100e18);
+        _fundVerifierStakeFor(third);
         vm.prank(third);
         executor.submitVerifierApplication(address(token), ACTION_ID, thirdId, "v3");
 
@@ -292,6 +296,200 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds[0] == VERIFIER2_ID && verifierIds[1] == VERIFIER_ID, "strictly above replaces");
         require(votes[1] == 150e18 + 1, "replacing votes accumulate");
+    }
+
+    function testVerifierStakeLifecycle() external {
+        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "no stake before applying");
+
+        uint256 verifierBefore = token.balanceOf(VERIFIER);
+        _submitApplication();
+        require(token.balanceOf(VERIFIER) == verifierBefore - VERIFIER_STAKE, "stake pulled on application");
+        require(token.balanceOf(address(executor)) == VERIFIER_STAKE, "executor holds the stake");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "stake recorded");
+
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
+        require(token.balanceOf(VERIFIER) == verifierBefore - VERIFIER_STAKE, "replace does not stake twice");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "stake unchanged");
+
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(token.balanceOf(VERIFIER) == verifierBefore, "stake refunded");
+        require(token.balanceOf(address(executor)) == 0, "executor emptied");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "stake cleared");
+
+        _submitApplication();
+        require(token.balanceOf(VERIFIER) == verifierBefore - VERIFIER_STAKE, "re-application stakes again");
+    }
+
+    function testVerifierStakeZeroConfigNeedsNoTransfer() external {
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, 0));
+        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_2) == 0, "stake disabled");
+
+        uint256 before = token.balanceOf(VERIFIER);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "v");
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == 0, "nothing recorded");
+
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_2, VERIFIER_ID);
+        require(token.balanceOf(VERIFIER) == before, "no transfer in either direction");
+    }
+
+    function testVerifierStakeLocksAfterTheCreationPhase() external {
+        _submitApplication();
+
+        _atPhase(3);
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 3));
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "stake locked");
+        require(token.balanceOf(address(executor)) == VERIFIER_STAKE, "stake stays in the executor");
+    }
+
+    function testVerifierStakeNeedsBalanceAndAllowance() external {
+        memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
+        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+
+        vm.prank(VERIFIER2);
+        vm.expectRevert();
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == 0, "nothing recorded");
+        require(
+            executor.verifierApplication(address(token), ACTION_ID, VERIFIER2_ID).applicationId == 0, "no application"
+        );
+
+        token.mint(VERIFIER2, VERIFIER_STAKE);
+        vm.prank(VERIFIER2);
+        vm.expectRevert();
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
+        require(
+            executor.verifierApplication(address(token), ACTION_ID, VERIFIER2_ID).applicationId == 0, "no application"
+        );
+
+        vm.prank(VERIFIER2);
+        token.approve(address(executor), VERIFIER_STAKE);
+        vm.prank(VERIFIER2);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
+        require(
+            executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == VERIFIER_STAKE, "staked after approval"
+        );
+    }
+
+    function testVerifierStakeRefundFollowsTheMemberNFT() external {
+        _submitApplication();
+
+        address nextHolder = address(0x2001);
+        memberNFT.setOwner(VERIFIER_ID, nextHolder);
+        uint256 before = token.balanceOf(nextHolder);
+        vm.prank(nextHolder);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(token.balanceOf(nextHolder) - before == VERIFIER_STAKE, "refund to the current holder");
+    }
+
+    function testVerifierApplicationGuardsDoNotCharge() external {
+        uint256 before = token.balanceOf(VERIFIER);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, VERIFIER_ID));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
+
+        stake.setValidGovVotes(address(token), VERIFIER_ID, 0);
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.VerifyVotesZero.selector));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
+        stake.setValidGovVotes(address(token), VERIFIER_ID, 100e18);
+
+        bytes memory longDescription = new bytes(1025);
+        for (uint256 i = 0; i < longDescription.length; i++) {
+            longDescription[i] = 0x61;
+        }
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, string(longDescription));
+
+        _atPhase(3);
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 3));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
+
+        require(token.balanceOf(VERIFIER) == before, "no charge on rejected applications");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "nothing staked");
+        require(
+            executor.verifierApplication(address(token), ACTION_ID, VERIFIER_ID).applicationId == 0, "no application"
+        );
+    }
+
+    function testVerifierApplicationDescriptionLimit() external {
+        bytes memory longDescription = new bytes(1025);
+        for (uint256 i = 0; i < longDescription.length; i++) {
+            longDescription[i] = 0x61;
+        }
+        uint256 before = token.balanceOf(VERIFIER);
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, string(longDescription));
+        require(token.balanceOf(VERIFIER) == before, "no charge above the limit");
+
+        bytes memory limitDescription = new bytes(1024);
+        for (uint256 i = 0; i < limitDescription.length; i++) {
+            limitDescription[i] = 0x61;
+        }
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, string(limitDescription));
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "staked at limit");
+        require(token.balanceOf(VERIFIER) == before - VERIFIER_STAKE, "charged at limit");
+    }
+
+    function testVerifierStakeCancelWithoutApplicationReverts() external {
+        uint256 before = token.balanceOf(VERIFIER);
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationNotActive.selector));
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(token.balanceOf(VERIFIER) == before, "no refund without an application");
+    }
+
+    function testVerifierStakeIsPerMember() external {
+        memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
+        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
+
+        _submitApplication();
+        vm.prank(VERIFIER2);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
+        require(token.balanceOf(address(executor)) == VERIFIER_STAKE * 2, "both stakes held");
+
+        vm.prank(VERIFIER2);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID);
+        require(token.balanceOf(address(executor)) == VERIFIER_STAKE, "only the cancelling member is refunded");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "other stake intact");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == 0, "cancelled stake cleared");
+
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(token.balanceOf(address(executor)) == 0, "executor emptied after both cancel");
+    }
+
+    function testVerifierStakeIsPerAction() external {
+        _createActionWith(
+            ACTION_2, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE * 2)
+        );
+        _fundTokenFor(VERIFIER, VERIFIER_STAKE * 2);
+
+        _submitApplication();
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "v");
+        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_2) == VERIFIER_STAKE * 2, "second action config");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "action 1 stake");
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == VERIFIER_STAKE * 2, "action 2 stake");
+        require(token.balanceOf(address(executor)) == VERIFIER_STAKE * 3, "both action stakes held");
+
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_2, VERIFIER_ID);
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "action 1 intact");
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == 0, "action 2 cleared");
+        require(token.balanceOf(address(executor)) == VERIFIER_STAKE, "only action 2 refunded");
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

@@ -47,6 +47,8 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => uint256)) maxJoinAmountRatio;
         // tokenAddress => actionId => activation min gov ratio (1e18 precision)
         mapping(address => mapping(uint256 => uint256)) activationMinGovRatio;
+        // tokenAddress => actionId => verifier stake amount required to apply
+        mapping(address => mapping(uint256 => uint256)) verifierStakeAmount;
         // tokenAddress => actionId => creation vote round
         mapping(address => mapping(uint256 => uint256)) createdRound;
         // tokenAddress => actionId => verification schema keys

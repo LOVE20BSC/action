@@ -131,6 +131,8 @@ contract GroupActionEventsTest is
 
     function testVerificationEvents() external {
         vm.expectEmit(true, true, true, true);
+        emit VerifierStakeDeposited(address(token), ACTION_ID, VERIFIER_ID, 2, VERIFIER_STAKE);
+        vm.expectEmit(true, true, true, true);
         emit VerifierApplicationSubmitted(address(token), ACTION_ID, VERIFIER_ID, 2, 1);
         _submitApplication();
 
@@ -158,9 +160,51 @@ contract GroupActionEventsTest is
         _submitApplication();
 
         vm.expectEmit(true, true, true, true);
+        emit VerifierStakeRefunded(address(token), ACTION_ID, VERIFIER_ID, 2, VERIFIER_STAKE);
+        vm.expectEmit(true, true, true, true);
         emit VerifierApplicationCancelled(address(token), ACTION_ID, VERIFIER_ID, 2, 1);
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+    }
+
+    function testVerifierStakeEventsFireOncePerPayment() external {
+        vm.recordLogs();
+        _submitApplication();
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
+        GroupActionExecutorVm.Log[] memory logs = vm.getRecordedLogs();
+
+        uint256 deposits;
+        uint256 submissions;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == keccak256("VerifierStakeDeposited(address,uint256,uint256,uint256,uint256)")) {
+                deposits++;
+                (uint256 round, uint256 amount) = abi.decode(logs[i].data, (uint256, uint256));
+                require(round == 2 && amount == VERIFIER_STAKE, "deposit payload");
+                require(logs[i].topics[3] == bytes32(VERIFIER_ID), "deposit member topic");
+            }
+            if (
+                logs[i].topics[0]
+                    == keccak256("VerifierApplicationSubmitted(address,uint256,uint256,uint256,uint256)")
+            ) {
+                submissions++;
+            }
+        }
+        require(deposits == 1 && submissions == 2, "stake paid once across replacement");
+
+        vm.recordLogs();
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        logs = vm.getRecordedLogs();
+        uint256 refunds;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == keccak256("VerifierStakeRefunded(address,uint256,uint256,uint256,uint256)")) {
+                refunds++;
+                (uint256 round, uint256 amount) = abi.decode(logs[i].data, (uint256, uint256));
+                require(round == 2 && amount == VERIFIER_STAKE, "refund payload");
+            }
+        }
+        require(refunds == 1, "refund event once");
     }
 
     function testMemberRewardMintedEvent() external {

@@ -15,6 +15,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(executor.ACTIVATION_STAKE_AMOUNT(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake stored");
         require(executor.MAX_JOIN_AMOUNT_RATIO(address(token), ACTION_ID) == PRECISION, "ratio stored");
         require(executor.ACTIVATION_MIN_GOV_RATIO(address(token), ACTION_ID) == 0, "min gov ratio stored");
+        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "verifier stake stored");
         uint256[] memory splits = executor.SPLITS();
         require(splits.length == 1 && splits[0] == 5e17, "splits stored");
 

@@ -42,6 +42,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         return s.activationMinGovRatio[tokenAddress][actionId];
     }
 
+    function VERIFIER_STAKE_AMOUNT(address tokenAddress, uint256 actionId) external view returns (uint256) {
+        return s.verifierStakeAmount[tokenAddress][actionId];
+    }
+
     function SPLITS() external view returns (uint256[] memory) {
         return s.splits;
     }
@@ -396,13 +400,21 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         uint256 actionId,
         uint256 memberId,
         string calldata description
-    ) external returns (uint256 applicationId) {
+    ) external nonReentrant returns (uint256 applicationId) {
         return GroupActionVerify.submitVerifierApplication(s, tokenAddress, actionId, memberId, description);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
-    function cancelVerifierApplication(address tokenAddress, uint256 actionId, uint256 memberId) external {
+    function cancelVerifierApplication(address tokenAddress, uint256 actionId, uint256 memberId) external nonReentrant {
         GroupActionVerify.cancelVerifierApplication(s, tokenAddress, actionId, memberId);
+    }
+
+    function verifierStake(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (uint256) {
+        return GroupActionVerify.verifierStake(s, tokenAddress, actionId, memberId);
     }
 
     function verifierApplication(

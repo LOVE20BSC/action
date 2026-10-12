@@ -49,6 +49,25 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         );
     }
 
+    function testVerifierStakeStaysOutOfActivationLedgers() external {
+        _submitApplication();
+        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
+
+        _castCandidateVotes();
+        _atPhase(3);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
+        _activateGroup();
+
+        require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "action ledger holds the activation stake only");
+        require(executor.totalStaked(address(token)) == ACTIVATION_STAKE, "token total holds the activation stake only");
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "group owner stake");
+        require(executor.totalStakedByMemberId(address(token), VERIFIER_ID) == 0, "verifier stake excluded");
+        require(executor.hasActiveGroups(address(token), VERIFIER_ID) == false, "verifier stake grants no group");
+        require(
+            token.balanceOf(address(executor)) == VERIFIER_STAKE + ACTIVATION_STAKE, "both stakes held by the executor"
+        );
+    }
+
     function testActivateGroupReverts() external {
         _openJoinPhase();
 
@@ -100,7 +119,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
     }
 
     function testActivationMinGovRatioGate() external {
-        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, PRECISION, 1e17));
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, PRECISION, 1e17, VERIFIER_STAKE));
         _atPhase(3);
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
 
@@ -227,7 +246,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.maxJoinAmount(address(token), ACTION_ID) == 0, "zero action votes");
 
         vote.setVotesNum(address(token), 2, 1000e18);
-        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, 0, 0));
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, 0, 0, 0));
         require(executor.maxJoinAmount(address(token), ACTION_2) == 0, "zero ratio");
     }
 
@@ -245,11 +264,25 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
         executor.onProposalCreated(address(token), ACTION_2, four);
 
+        bytes[] memory five = new bytes[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            five[i] = data[i];
+        }
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        executor.onProposalCreated(address(token), ACTION_2, five);
+
         bytes[] memory badItem = _clone(data);
         badItem[2] = new bytes(31);
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
         executor.onProposalCreated(address(token), ACTION_2, badItem);
+
+        bytes[] memory badVerifierStake = _clone(data);
+        badVerifierStake[5] = new bytes(31);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        executor.onProposalCreated(address(token), ACTION_2, badVerifierStake);
 
         bytes[] memory zeroToken = _clone(data);
         zeroToken[1] = abi.encode(address(0));
@@ -274,13 +307,13 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         string[] memory descriptions = new string[](2);
         descriptions[0] = "a";
         descriptions[1] = "b";
-        bytes[] memory six = new bytes[](6);
-        for (uint256 i = 0; i < 5; i++) {
-            six[i] = data[i];
+        bytes[] memory seven = new bytes[](7);
+        for (uint256 i = 0; i < 6; i++) {
+            seven[i] = data[i];
         }
-        six[5] = abi.encode(keys, descriptions);
+        seven[6] = abi.encode(keys, descriptions);
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector));
-        executor.onProposalCreated(address(token), ACTION_2, six);
+        executor.onProposalCreated(address(token), ACTION_2, seven);
     }
 }

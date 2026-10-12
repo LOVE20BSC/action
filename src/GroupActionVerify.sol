@@ -11,6 +11,8 @@ import {
 import {IStake} from "core/src/interfaces/IStake.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
@@ -23,6 +25,7 @@ library GroupActionVerify {
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
     using RoundHistoryString for RoundHistoryString.History;
+    using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
@@ -194,10 +197,23 @@ library GroupActionVerify {
             revert IActionExecutorErrors.InvalidRound(currentRound);
         }
 
+        uint256 previousApplicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
         applicationId = _replaceApplication(s, tokenAddress, actionId, memberId, createdRound);
         s.applicationMemberId[tokenAddress][actionId][applicationId] = memberId;
         s.applicationDescription[tokenAddress][actionId][applicationId] = description;
         s.applicationCreatedRound[tokenAddress][actionId][applicationId] = createdRound;
+
+        uint256 stakeAmount = previousApplicationId == 0 ? s.verifierStakeAmount[tokenAddress][actionId] : 0;
+        if (stakeAmount != 0) {
+            IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), stakeAmount);
+            emit IGroupActionVerifyEvents.VerifierStakeDeposited({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                memberId: memberId,
+                round: createdRound,
+                amount: stakeAmount
+            });
+        }
 
         emit IGroupActionVerifyEvents.VerifierApplicationSubmitted({
             tokenAddress: tokenAddress,
@@ -230,6 +246,19 @@ library GroupActionVerify {
         _removeFromRank(s, tokenAddress, actionId, createdRound, applicationId);
         s.currentApplicationId[tokenAddress][actionId][memberId] = 0;
 
+        // Load-bearing: staked is equivalent to holding a current application.
+        uint256 stakeAmount = s.verifierStakeAmount[tokenAddress][actionId];
+        if (stakeAmount != 0) {
+            IERC20(tokenAddress).safeTransfer(IMemberNFT(s.memberNFTAddress).ownerOf(memberId), stakeAmount);
+            emit IGroupActionVerifyEvents.VerifierStakeRefunded({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                memberId: memberId,
+                round: createdRound,
+                amount: stakeAmount
+            });
+        }
+
         emit IGroupActionVerifyEvents.VerifierApplicationCancelled({
             tokenAddress: tokenAddress,
             actionId: actionId,
@@ -237,6 +266,18 @@ library GroupActionVerify {
             round: createdRound,
             applicationId: applicationId
         });
+    }
+
+    function verifierStake(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (uint256) {
+        if (s.currentApplicationId[tokenAddress][actionId][memberId] == 0) {
+            return 0;
+        }
+        return s.verifierStakeAmount[tokenAddress][actionId];
     }
 
     function verifierApplication(

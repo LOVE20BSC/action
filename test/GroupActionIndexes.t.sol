@@ -49,7 +49,7 @@ contract GroupActionIndexesTest is GroupActionExecutorTestBase {
         token2.mint(GROUP_OWNER, ACTIVATION_STAKE);
         vm.prank(GROUP_OWNER);
         token2.approve(address(executor), type(uint256).max);
-        _createActionOn(address(token2), ACTION_3, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0));
+        _createActionOn(address(token2), ACTION_3, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE));
         _activateGroupOn(address(token2), ACTION_3, GROUP_ID);
         _joinOn(address(token2), ACTION_3, GROUP_ID, MEMBER1_ID, 1e18);
 

@@ -6,6 +6,30 @@ import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionFuzzTest is GroupActionExecutorTestBase {
+    uint256 internal constant ACTION_2 = 22;
+
+    function testFuzzVerifierStakeRoundTrip(uint96 stakeSeed) external {
+        uint256 stake = uint256(stakeSeed);
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, stake));
+        token.mint(VERIFIER, stake);
+
+        uint256 before = token.balanceOf(VERIFIER);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "v");
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == stake, "stake recorded");
+        require(token.balanceOf(VERIFIER) == before - stake, "stake pulled");
+        require(token.balanceOf(address(executor)) == stake, "executor holds the stake");
+
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "v2");
+        require(token.balanceOf(VERIFIER) == before - stake, "replace does not stake twice");
+
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_2, VERIFIER_ID);
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == 0, "stake cleared");
+        require(token.balanceOf(VERIFIER) == before, "stake refunded");
+        require(token.balanceOf(address(executor)) == 0, "executor emptied");
+    }
     function testFuzzJoinAppendAndWithdrawConserveAmounts(uint96 seed1, uint96 seed2) external {
         _openJoinPhase();
         uint256 amount1 = uint256(seed1) % 100e18 + 1e18;

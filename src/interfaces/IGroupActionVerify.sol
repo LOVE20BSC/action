@@ -33,6 +33,20 @@ interface IGroupActionVerifyEvents {
         uint256 round,
         uint256 applicationId
     );
+    event VerifierStakeDeposited(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed memberId,
+        uint256 round,
+        uint256 amount
+    );
+    event VerifierStakeRefunded(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed memberId,
+        uint256 round,
+        uint256 amount
+    );
     event VerifierLocked(
         address indexed tokenAddress,
         uint256 indexed actionId,
@@ -121,6 +135,12 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 actionId,
         uint256 memberId
     ) external;
+
+    function verifierStake(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (uint256);
 
     function verifierApplication(
         address tokenAddress,

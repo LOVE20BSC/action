@@ -32,6 +32,8 @@ interface IGroupActionExecutor is
 
     function ACTIVATION_MIN_GOV_RATIO(address tokenAddress, uint256 actionId) external view returns (uint256);
 
+    function VERIFIER_STAKE_AMOUNT(address tokenAddress, uint256 actionId) external view returns (uint256);
+
     function SPLITS() external view returns (uint256[] memory);
 
     function init(

@@ -30,10 +30,10 @@ library GroupActionManager {
         uint256 actionId,
         bytes[] calldata targetData
     ) external {
-        if (targetData.length != 5 && targetData.length != 6) {
+        if (targetData.length != 6 && targetData.length != 7) {
             revert IGroupActionExecutorErrors.InvalidTargetDataLength();
         }
-        for (uint256 i = 1; i < 5; i++) {
+        for (uint256 i = 1; i < 6; i++) {
             if (targetData[i].length != 32) {
                 // forge-lint: disable-next-line(require-revert-in-loop)
                 revert IGroupActionExecutorErrors.InvalidTargetDataLength();
@@ -44,6 +44,7 @@ library GroupActionManager {
         uint256 activationStakeAmount = abi.decode(targetData[2], (uint256));
         uint256 maxJoinAmountRatio = abi.decode(targetData[3], (uint256));
         uint256 activationMinGovRatio = abi.decode(targetData[4], (uint256));
+        uint256 verifierStakeAmount = abi.decode(targetData[5], (uint256));
         if (joinTokenAddress == address(0)) {
             revert IGroupActionExecutorErrors.InvalidAddress();
         }
@@ -55,9 +56,10 @@ library GroupActionManager {
         s.activationStakeAmount[tokenAddress][actionId] = activationStakeAmount;
         s.maxJoinAmountRatio[tokenAddress][actionId] = maxJoinAmountRatio;
         s.activationMinGovRatio[tokenAddress][actionId] = activationMinGovRatio;
+        s.verifierStakeAmount[tokenAddress][actionId] = verifierStakeAmount;
 
-        if (targetData.length == 6) {
-            (string[] memory keys, string[] memory descriptions) = abi.decode(targetData[5], (string[], string[]));
+        if (targetData.length == 7) {
+            (string[] memory keys, string[] memory descriptions) = abi.decode(targetData[6], (string[], string[]));
             if (keys.length != descriptions.length) {
                 revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch();
             }

@@ -43,6 +43,7 @@ abstract contract GroupActionExecutorTestBase {
     uint256 internal constant PHASE_BLOCKS = 1000;
     uint256 internal constant PROPOSAL_REWARD = 1000e18;
     uint256 internal constant ACTIVATION_STAKE = 100e18;
+    uint256 internal constant VERIFIER_STAKE = 40e18;
     uint256 internal constant PROVIDER_QUOTA = 150e18;
 
     uint256 internal constant MEMBER1_ID = 1;
@@ -74,6 +75,7 @@ abstract contract GroupActionExecutorTestBase {
         executor.init(address(actionTarget), address(stake), splits);
         _configurePhase();
         _createAction(ACTION_ID);
+        _fundTokenFor(VERIFIER, VERIFIER_STAKE);
     }
 
     function _deployMocks() internal {
@@ -116,20 +118,23 @@ abstract contract GroupActionExecutorTestBase {
     }
 
     function _targetData() internal view returns (bytes[] memory targetData) {
-        return _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0);
+        return _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE);
     }
 
-    function _targetDataWith(address joinTokenAddress, uint256 stakeAmount, uint256 ratio, uint256 minGovRatio)
-        internal
-        view
-        returns (bytes[] memory targetData)
-    {
-        targetData = new bytes[](5);
+    function _targetDataWith(
+        address joinTokenAddress,
+        uint256 stakeAmount,
+        uint256 ratio,
+        uint256 minGovRatio,
+        uint256 verifierStake
+    ) internal view returns (bytes[] memory targetData) {
+        targetData = new bytes[](6);
         targetData[0] = abi.encode(address(executor));
         targetData[1] = abi.encode(joinTokenAddress);
         targetData[2] = abi.encode(stakeAmount);
         targetData[3] = abi.encode(ratio);
         targetData[4] = abi.encode(minGovRatio);
+        targetData[5] = abi.encode(verifierStake);
     }
 
     function _createAction(uint256 actionId) internal {
@@ -215,6 +220,10 @@ abstract contract GroupActionExecutorTestBase {
         joinToken.mint(account, amount);
         vm.prank(account);
         joinToken.approve(address(executor), type(uint256).max);
+    }
+
+    function _fundVerifierStakeFor(address account) internal {
+        _fundTokenFor(account, VERIFIER_STAKE);
     }
 
     function _grantQuota(uint256 providerId, uint256 memberId, uint256 amount) internal {
