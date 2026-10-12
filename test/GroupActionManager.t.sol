@@ -68,6 +68,20 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         );
     }
 
+    function testHasActiveGroupsChecksMembershipAsGroup() external {
+        _openJoinPhase();
+
+        require(executor.hasActiveGroups(address(token), GROUP_ID), "owner counts without personal participation");
+
+        _fundJoinTokenFor(MEMBER1, 1e18);
+        _join(MEMBER1_ID, 1e18, 0);
+        require(!executor.hasActiveGroups(address(token), MEMBER1_ID), "participant is not an active group");
+
+        _atPhase(4);
+        _deactivateGroup(GROUP_ID);
+        require(!executor.hasActiveGroups(address(token), GROUP_ID), "deactivation clears the qualification");
+    }
+
     function testActivateGroupReverts() external {
         _openJoinPhase();
 

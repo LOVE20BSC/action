@@ -316,17 +316,7 @@ library GroupActionManager {
         address tokenAddress,
         uint256 memberId
     ) external view returns (bool) {
-        uint256 count = s.gGroupIdsByMemberId[memberId].count();
-        if (count == 0) {
-            return false;
-        }
-        (uint256[] memory groupIds, ) = s.gGroupIdsByMemberId[memberId].values(0, count, false);
-        for (uint256 i = 0; i < groupIds.length; i++) {
-            if (s.actionIdsByGroupId[tokenAddress][groupIds[i]].count() != 0) {
-                return true;
-            }
-        }
-        return false;
+        return s.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
     }
 
     function _requireGroupOwner(GroupActionStorage.Layout storage s, uint256 groupId) internal view {
