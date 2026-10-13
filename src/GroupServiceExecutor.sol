@@ -1,534 +1,895 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
-import {IGroupManager} from "./interface/IGroupManager.sol";
-import {IGroupAction} from "./interface/IGroupAction.sol";
-import {IGroupVerify} from "./interface/IGroupVerify.sol";
-import {
-    IExtensionGroupActionFactory
-} from "./interface/IExtensionGroupActionFactory.sol";
-import {
-    IExtensionGroupServiceFactory
-} from "./interface/IExtensionGroupServiceFactory.sol";
-import {IGroupService} from "./interface/IGroupService.sol";
-import {IGroupRecipients} from "./interface/IGroupRecipients.sol";
-import {
-    ExtensionBaseRewardJoin
-} from "@extension/src/ExtensionBaseRewardJoin.sol";
-import {ExtensionBase} from "@extension/src/ExtensionBase.sol";
-import {IReward} from "@extension/src/interface/IReward.sol";
+import {GroupServiceStorage} from "./GroupServiceStorage.sol";
+import {GroupRecipients} from "./GroupRecipients.sol";
+import {IGroupServiceExecutor} from "./interfaces/IGroupServiceExecutor.sol";
+import {IActionTarget} from "./interfaces/IActionTarget.sol";
+import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
+import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
+import {ILaunch} from "core/src/interfaces/ILaunch.sol";
+import {ILOVE20Token} from "core/src/interfaces/ILOVE20Token.sol";
+import {IPhase} from "core/src/interfaces/IPhase.sol";
+import {IStake} from "core/src/interfaces/IStake.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {
-    IERC721Enumerable
-} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
-import {ILOVE20Token} from "@core/interfaces/ILOVE20Token.sol";
-import {ILOVE20Stake} from "@core/interfaces/ILOVE20Stake.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract ExtensionGroupService is ExtensionBaseRewardJoin, IGroupService {
+contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
+    using GroupServiceStorage for GroupServiceStorage.Layout;
     using SafeERC20 for IERC20;
 
-    uint256 public constant PRECISION = 1e18;
+    uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
+    uint256 public constant DEFAULT_MAX_RECIPIENTS = GroupServiceStorage.DEFAULT_MAX_RECIPIENTS;
 
-    address public immutable GROUP_ACTION_TOKEN_ADDRESS;
-    address public immutable GROUP_ACTION_FACTORY_ADDRESS;
-    uint256 public immutable GOV_RATIO_MULTIPLIER;
+    GroupServiceStorage.Layout internal s;
 
-    IGroupRecipients internal immutable _groupRecipients;
-    IGroupManager internal immutable _groupManager;
-    IERC721Enumerable internal immutable _group;
-    IGroupVerify internal immutable _groupVerify;
-    IExtensionGroupActionFactory internal immutable _actionFactory;
-    ILOVE20Stake internal immutable _stake;
-
-    /// @dev round => account => gov ratio at claim time
-    mapping(uint256 => mapping(address => uint256)) internal _govRatio;
-
-    constructor(
-        address factory_,
-        address groupActionFactoryAddress_,
-        address tokenAddress_,
-        address groupActionTokenAddress_,
-        uint256 govRatioMultiplier_
-    ) ExtensionBaseRewardJoin(factory_, tokenAddress_) {
-        GROUP_ACTION_TOKEN_ADDRESS = groupActionTokenAddress_;
-        GROUP_ACTION_FACTORY_ADDRESS = groupActionFactoryAddress_;
-        GOV_RATIO_MULTIPLIER = govRatioMultiplier_;
-        _groupRecipients = IGroupRecipients(
-            IExtensionGroupServiceFactory(factory_).GROUP_RECIPIENTS_ADDRESS()
-        );
-
-        _actionFactory = IExtensionGroupActionFactory(
-            groupActionFactoryAddress_
-        );
-        _groupManager = IGroupManager(_actionFactory.GROUP_MANAGER_ADDRESS());
-        _group = IERC721Enumerable(_actionFactory.GROUP_ADDRESS());
-        _groupVerify = IGroupVerify(_actionFactory.GROUP_VERIFY_ADDRESS());
-        _stake = ILOVE20Stake(_center.stakeAddress());
+    struct Settlement {
+        address actionTokenAddress;
+        uint256 ratioForPublicVerifier;
+        uint256 govRatioMultiplier;
+        uint256 verifierWeight;
+        uint256 ownerWeight;
+        uint256 denominator;
+        uint256 serviceReward;
+        bool actionMinted;
+        uint256 verifierReward;
+        uint256 ownerReward;
+        uint256 ownerBurned;
     }
 
-    function join(
-        string[] memory verificationInfos
-    ) public override(ExtensionBaseRewardJoin) {
+    function init(
+        address actionTargetAddress,
+        address stakeAddress,
+        address groupActionExecutorAddress
+    ) external {
+        if (s.initialized) {
+            revert AlreadyInitialized();
+        }
+        s.initialized = true;
+
         if (
-            !_groupManager.hasActiveGroups(
-                GROUP_ACTION_TOKEN_ADDRESS,
-                msg.sender
-            )
-        ) revert NoActiveGroups();
-        super.join(verificationInfos);
+            actionTargetAddress == address(0) || stakeAddress == address(0)
+                || groupActionExecutorAddress == address(0)
+        ) {
+            revert InvalidAddress();
+        }
+
+        IStake stake = IStake(stakeAddress);
+        address memberNFTAddress = stake.memberNFTAddress();
+        address phaseAddress = stake.phaseAddress();
+        address launchAddress = stake.launchAddress();
+        if (memberNFTAddress == address(0) || phaseAddress == address(0) || launchAddress == address(0)) {
+            revert InvalidAddress();
+        }
+
+        s.actionTarget = actionTargetAddress;
+        s.stakeAddress = stakeAddress;
+        s.groupActionExecutorAddress = groupActionExecutorAddress;
+        s.memberNFTAddress = memberNFTAddress;
+        s.phaseAddress = phaseAddress;
+        s.launchAddress = launchAddress;
     }
 
-    function _checkActionId(
-        uint256 actionId_
-    ) internal view returns (address extension) {
-        extension = _center.extension(GROUP_ACTION_TOKEN_ADDRESS, actionId_);
-        if (!_actionFactory.exists(extension)) revert InvalidExtension();
-        return extension;
+    // Load-bearing: the service rounds are the served GroupAction rounds shifted by the same phase
+    // base (vote = phase, join = phase - 1, verify = phase - 2, mint = phase - 3). The service runs
+    // no verification of its own: it reads `generatedActionRewardByGroupId` for the round the
+    // GroupAction verified at phase - 2 and settles it at phase - 3. If either side shifts, the
+    // service reads a round the GroupAction has not verified yet and the divisor silently reads 0.
+    function currentVerifyRound() public view returns (uint256) {
+        uint256 phase = IPhase(s.phaseAddress).currentPhase();
+        if (phase < 3) {
+            revert RoundNotStarted();
+        }
+        return phase - 2;
+    }
+
+    function currentVoteRound() external view returns (uint256) {
+        uint256 phase = IPhase(s.phaseAddress).currentPhase();
+        if (phase < 1) {
+            revert RoundNotStarted();
+        }
+        return phase;
+    }
+
+    function currentJoinRound() public view returns (uint256) {
+        uint256 round = s.joinRound();
+        if (round == 0) {
+            revert RoundNotStarted();
+        }
+        return round;
+    }
+
+    function currentMintRound() external view returns (uint256) {
+        uint256 round = _mintRound();
+        if (round == 0) {
+            revert RoundNotStarted();
+        }
+        return round;
+    }
+
+    function GOV_RATIO_MULTIPLIER(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (uint256) {
+        return s.govRatioMultiplier[serviceTokenAddress][serviceActionId];
+    }
+
+    function ACTION_TOKEN_ADDRESS(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (address) {
+        return s.actionTokenAddress[serviceTokenAddress][serviceActionId];
+    }
+
+    function RATIO_FOR_PUBLIC_VERIFIER(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (uint256) {
+        return s.ratioForPublicVerifier[serviceTokenAddress][serviceActionId];
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function join(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 memberId
+    ) external nonReentrant {
+        s.requireMemberOwner(memberId);
+        if (IActionTarget(s.actionTarget).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
+            revert AlreadyJoined();
+        }
+
+        address actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
+        if (!_isQualified(actionTokenAddress, s.createdRound[serviceTokenAddress][serviceActionId], memberId)) {
+            revert NoActiveGroups();
+        }
+
+        uint256 round = s.currentJoinRound();
+        IActionTarget(s.actionTarget).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
+
+        emit Joined({
+            serviceTokenAddress: serviceTokenAddress,
+            serviceActionId: serviceActionId,
+            memberId: memberId,
+            round: round
+        });
+    }
+
+    function joinInfo(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 memberId
+    ) external view returns (bool joined) {
+        return IActionTarget(s.actionTarget).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round);
     }
 
     function rewardByRecipient(
-        address verifier,
+        address serviceTokenAddress,
         uint256 round,
-        uint256 actionId_,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
         uint256 groupId,
-        address recipient
+        uint256 recipientId
     ) external view returns (uint256) {
-        uint256 groupReward = _scaledGroupReward(
-            verifier,
-            round,
-            actionId_,
-            groupId
-        );
-        if (groupReward == 0) return 0;
+        GroupRecipients.Distribution memory distribution =
+            _distribution(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
 
-        (address[] memory addrs, uint256[] memory ratios, ) = _groupRecipients
-            .recipients(
-                verifier,
-                GROUP_ACTION_TOKEN_ADDRESS,
-                actionId_,
-                groupId,
-                round
-            );
-
-        if (recipient == verifier) {
-            uint256 distributed;
-            for (uint256 i; i < addrs.length; ) {
-                distributed += (groupReward * ratios[i]) / PRECISION;
-                unchecked {
-                    ++i;
-                }
-            }
-            return groupReward - distributed;
+        if (recipientId == groupId) {
+            return distribution.ownerAmount;
         }
-
-        for (uint256 i; i < addrs.length; ) {
-            if (addrs[i] == recipient) {
-                return (groupReward * ratios[i]) / PRECISION;
-            }
-            unchecked {
-                ++i;
+        for (uint256 i = 0; i < distribution.recipientIds.length; i++) {
+            if (distribution.recipientIds[i] == recipientId) {
+                return distribution.amounts[i];
             }
         }
         return 0;
     }
 
     function rewardDistribution(
-        address verifier,
+        address serviceTokenAddress,
         uint256 round,
-        uint256 actionId_,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
         uint256 groupId
     )
         external
         view
         returns (
-            address[] memory addrs,
+            uint256[] memory recipientIds,
             uint256[] memory ratios,
             uint256[] memory amounts,
             uint256 ownerAmount
         )
     {
-        uint256 groupReward = _scaledGroupReward(
-            verifier,
-            round,
-            actionId_,
-            groupId
-        );
-        (addrs, ratios, amounts, ownerAmount) = _groupRecipients
-            .getDistribution(
-                verifier,
-                GROUP_ACTION_TOKEN_ADDRESS,
-                actionId_,
-                groupId,
-                groupReward,
-                round
-            );
+        GroupRecipients.Distribution memory distribution =
+            _distribution(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
+        return (distribution.recipientIds, distribution.ratios, distribution.amounts, distribution.ownerAmount);
     }
 
-    function joinedAmountTokenAddress()
-        external
-        view
-        override(ExtensionBase)
-        returns (address)
-    {
-        return GROUP_ACTION_TOKEN_ADDRESS;
+    function joinedAmountTokenAddress(
+        address tokenAddress,
+        uint256 actionId
+    ) external view returns (address joinedTokenAddress) {
+        return s.actionTokenAddress[tokenAddress][actionId];
     }
 
-    function joinedAmount()
-        external
-        view
-        override(ExtensionBase)
-        returns (uint256)
-    {
-        return _groupManager.totalStaked(GROUP_ACTION_TOKEN_ADDRESS);
-    }
-
-    function joinedAmountByAccount(
-        address account
-    ) external view override(ExtensionBase) returns (uint256) {
-        return
-            _groupManager.totalStakedByOwner(
-                GROUP_ACTION_TOKEN_ADDRESS,
-                account
-            );
-    }
-
-    function hasActiveGroups(address owner) public view returns (bool) {
-        return _groupManager.hasActiveGroups(GROUP_ACTION_TOKEN_ADDRESS, owner);
-    }
-
-    function govRatio(
-        uint256 round,
-        address account
-    ) external view returns (uint256 ratio, bool claimed) {
-        claimed = _claimedByAccount[round][account];
-        if (claimed) {
-            ratio = _govRatio[round][account];
-        } else {
-            ratio = _calculateGovRatio(account);
-        }
-    }
-
-    function generatedActionRewardByVerifier(
-        address verifier,
+    function joinedAmount(
+        address tokenAddress,
+        uint256 actionId,
         uint256 round
-    ) public view override returns (uint256 amount) {
-        uint256[] memory actionIds_ = _groupVerify.actionIdsByVerifier(
-            GROUP_ACTION_TOKEN_ADDRESS,
-            round,
-            verifier
-        );
-        for (uint256 i; i < actionIds_.length; ) {
-            address ext = _center.extension(
-                GROUP_ACTION_TOKEN_ADDRESS,
-                actionIds_[i]
-            );
-            amount += IGroupAction(ext).generatedActionRewardByVerifier(
-                verifier,
-                round
-            );
-            unchecked {
-                ++i;
-            }
+    ) external view returns (uint256 amount) {
+        if (round > s.joinRound()) {
+            return 0;
         }
+        return IGroupActionExecutor(s.groupActionExecutorAddress).totalStaked(
+            s.actionTokenAddress[tokenAddress][actionId]
+        );
     }
 
-    function generatedActionReward(
+    function joinedAmountByMemberId(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 memberId
+    ) external view returns (uint256 amount) {
+        if (round > s.joinRound()) {
+            return 0;
+        }
+        return IGroupActionExecutor(s.groupActionExecutorAddress).totalStakedByMemberId(
+            s.actionTokenAddress[tokenAddress][actionId], memberId
+        );
+    }
+
+    function totalGroupActionReward(
+        address actionTokenAddress,
         uint256 round
     ) public view returns (uint256) {
-        uint256[] memory actionIds_ = _groupVerify.actionIds(
-            GROUP_ACTION_TOKEN_ADDRESS,
-            round
-        );
-        uint256 totalReward;
-        for (uint256 i; i < actionIds_.length; ) {
-            address ext = _center.extension(
-                GROUP_ACTION_TOKEN_ADDRESS,
-                actionIds_[i]
-            );
-            totalReward += IReward(ext).reward(round);
-            unchecked {
-                ++i;
-            }
-        }
-        return totalReward;
+        uint256 cached = s.totalGroupActionRewardByRound[actionTokenAddress][round];
+        return cached != 0 ? cached : _computeTotalGroupActionReward(actionTokenAddress, round);
     }
 
-    function _getRewardContext(
+    function serviceRewardByMember(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 memberId
+    )
+        external
+        view
+        returns (
+            uint256 verifierReward,
+            uint256 ownerReward,
+            uint256 ownerBurned,
+            uint256 ownerDistributed,
+            uint256 ownerRemaining,
+            bool claimed
+        )
+    {
+        if (s.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
+            verifierReward = s.verifierRewardByMember[serviceTokenAddress][serviceActionId][round][memberId];
+            ownerDistributed = s.ownerDistributedByMember[serviceTokenAddress][serviceActionId][round][memberId];
+            ownerRemaining = s.ownerRemainingByMember[serviceTokenAddress][serviceActionId][round][memberId];
+            ownerReward = ownerDistributed + ownerRemaining;
+            ownerBurned = s.ownerBurnedByMember[serviceTokenAddress][serviceActionId][round][memberId];
+            // forge-lint: disable-next-line(boolean-cst)
+            return (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining, true);
+        }
+
+        if (!_isSettleableRound(serviceTokenAddress, serviceActionId, round)) {
+            // forge-lint: disable-next-line(boolean-cst)
+            return (0, 0, 0, 0, 0, false);
+        }
+
+        Settlement memory settlement = _settlement(serviceTokenAddress, serviceActionId, round, memberId);
+        verifierReward = settlement.verifierReward;
+        ownerReward = settlement.ownerReward;
+        ownerBurned = settlement.ownerBurned;
+        if (ownerReward != 0) {
+            ownerDistributed = GroupRecipients.projectedDistribution(
+                s, settlement.actionTokenAddress, round, memberId, ownerReward, settlement.ownerWeight
+            );
+            ownerRemaining = ownerReward - ownerDistributed;
+        }
+        // forge-lint: disable-next-line(boolean-cst)
+        return (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining, false);
+    }
+
+    function memberReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
         uint256 round
+    ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
+        if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
+            return (
+                s.verifierRewardByMember[tokenAddress][actionId][round][memberId]
+                    + s.ownerDistributedByMember[tokenAddress][actionId][round][memberId]
+                    + s.ownerRemainingByMember[tokenAddress][actionId][round][memberId],
+                s.ownerBurnedByMember[tokenAddress][actionId][round][memberId],
+                // forge-lint: disable-next-line(boolean-cst)
+                true
+            );
+        }
+
+        if (!_isSettleableRound(tokenAddress, actionId, round)) {
+            // forge-lint: disable-next-line(boolean-cst)
+            return (0, 0, false);
+        }
+
+        Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
+        // forge-lint: disable-next-line(boolean-cst)
+        return (settlement.verifierReward + settlement.ownerReward, settlement.ownerBurned, false);
+    }
+
+    function needBurnReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (bool needed) {
+        if (round != s.createdRound[tokenAddress][actionId] || !_isSettleableRound(tokenAddress, actionId, round)) {
+            return false;
+        }
+        return totalGroupActionReward(s.actionTokenAddress[tokenAddress][actionId], round) == 0;
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
+    function mintMemberReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round
+    ) public nonReentrant returns (uint256 mintAmount, uint256 burnAmount) {
+        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        if (createdRound == 0 || round < createdRound) {
+            revert RoundNotStarted();
+        }
+        if (round > _mintRound()) {
+            revert InvalidRound(round);
+        }
+        s.requireMemberOwner(memberId);
+
+        if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
+            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
+        }
+
+        Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
+        mintAmount = settlement.verifierReward + settlement.ownerReward;
+        burnAmount = settlement.ownerBurned;
+        if (mintAmount == 0 && burnAmount == 0) {
+            revert NoRewardAvailable();
+        }
+
+        if (!settlement.actionMinted) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            settlement.serviceReward = IActionTarget(s.actionTarget).mintActionReward(tokenAddress, actionId, round);
+            _applyFormulas(settlement, memberId);
+            mintAmount = settlement.verifierReward + settlement.ownerReward;
+            burnAmount = settlement.ownerBurned;
+            if (mintAmount == 0 && burnAmount == 0) {
+                revert NoRewardAvailable();
+            }
+        }
+
+        s.memberMinted[tokenAddress][actionId][round][memberId] = true;
+        s.verifierRewardByMember[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
+        s.ownerBurnedByMember[tokenAddress][actionId][round][memberId] = burnAmount;
+        _cacheActionRewards(settlement.actionTokenAddress, round);
+
+        if (burnAmount != 0) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            ILOVE20Token(tokenAddress).burn(burnAmount);
+        }
+
+        uint256 distributed = 0;
+        if (settlement.ownerReward != 0) {
+            // forge-lint: disable-next-item(reentrancy-no-eth)
+            distributed = GroupRecipients.distribute(
+                s,
+                settlement.actionTokenAddress,
+                tokenAddress,
+                actionId,
+                round,
+                memberId,
+                settlement.ownerReward,
+                settlement.ownerWeight
+            );
+        }
+        uint256 remaining = settlement.ownerReward - distributed;
+        s.ownerDistributedByMember[tokenAddress][actionId][round][memberId] = distributed;
+        s.ownerRemainingByMember[tokenAddress][actionId][round][memberId] = remaining;
+
+        if (remaining != 0) {
+            IERC20(tokenAddress).safeTransfer(msg.sender, remaining);
+        }
+        if (settlement.verifierReward != 0) {
+            IERC20(tokenAddress).safeTransfer(msg.sender, settlement.verifierReward);
+        }
+
+        emit MemberRewardMinted({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: round,
+            mintAmount: mintAmount,
+            burnAmount: burnAmount
+        });
+        emit ServiceRewardDistributed({
+            serviceTokenAddress: tokenAddress,
+            round: round,
+            serviceActionId: actionId,
+            actionTokenAddress: settlement.actionTokenAddress,
+            memberId: memberId,
+            verifierReward: settlement.verifierReward,
+            ownerReward: settlement.ownerReward,
+            ownerBurned: burnAmount,
+            ownerDistributed: distributed,
+            ownerRemaining: remaining
+        });
+    }
+
+    function mintMemberRewards(
+        address tokenAddress,
+        uint256[] calldata actionIds,
+        uint256 memberId,
+        uint256[] calldata rounds
+    ) external returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
+        uint256 length = actionIds.length;
+        if (length != rounds.length) {
+            revert BatchLengthMismatch(length, rounds.length);
+        }
+
+        mintAmounts = new uint256[](length);
+        burnAmounts = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
+            (mintAmounts[i], burnAmounts[i]) = mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
+        }
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function setRecipients(
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256[] calldata recipientIds,
+        uint256[] calldata ratios,
+        string[] calldata remarks
+    ) external {
+        GroupRecipients.setRecipients(
+            s, currentVerifyRound(), sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks
+        );
+    }
+
+    function recipients(
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 round
+    )
+        external
+        view
+        returns (
+            uint256[] memory recipientIds,
+            uint256[] memory ratios,
+            string[] memory remarks
+        )
+    {
+        return GroupRecipients.recipients(s, sourceTokenAddress, sourceActionId, groupId, round);
+    }
+
+    function actionIdsWithRecipients(
+        address sourceTokenAddress,
+        uint256 groupId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 total) {
+        return GroupRecipients.actionIdsWithRecipients(s, sourceTokenAddress, groupId, round, offset, limit, reverse);
+    }
+
+    function getDistribution(
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 groupReward,
+        uint256 round
+    )
+        external
+        view
+        returns (
+            uint256[] memory recipientIds,
+            uint256[] memory ratios,
+            uint256[] memory amounts,
+            uint256 ownerAmount
+        )
+    {
+        GroupRecipients.Distribution memory distribution =
+            GroupRecipients.getDistribution(s, sourceTokenAddress, sourceActionId, groupId, groupReward, round);
+        return (distribution.recipientIds, distribution.ratios, distribution.amounts, distribution.ownerAmount);
+    }
+
+    function actionTarget() external view returns (address) {
+        return s.actionTarget;
+    }
+
+    function initialized() external view returns (bool) {
+        return s.initialized;
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function exit(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    ) external nonReentrant {
+        s.requireMemberOwner(memberId);
+        if (!IActionTarget(s.actionTarget).isJoined(tokenAddress, actionId, memberId)) {
+            revert NotJoined();
+        }
+
+        uint256 round = s.currentJoinRound();
+        IActionTarget(s.actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+
+        emit Exited({
+            serviceTokenAddress: tokenAddress,
+            serviceActionId: actionId,
+            memberId: memberId,
+            round: round
+        });
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function onProposalCreated(
+        address tokenAddress,
+        uint256 proposalId,
+        bytes[] calldata targetData
+    ) external override {
+        if (msg.sender != s.actionTarget) {
+            revert UnauthorizedCallback();
+        }
+        if (
+            targetData.length != 4 || targetData[0].length != 32 || targetData[1].length != 32
+                || targetData[2].length != 32 || targetData[3].length != 32
+        ) {
+            revert InvalidTargetDataLength();
+        }
+
+        address actionTokenAddress = abi.decode(targetData[1], (address));
+        uint256 govRatioMultiplier = abi.decode(targetData[2], (uint256));
+        uint256 ratioForPublicVerifier = abi.decode(targetData[3], (uint256));
+
+        if (actionTokenAddress == address(0)) {
+            revert InvalidAddress();
+        }
+        if (ratioForPublicVerifier > PRECISION) {
+            revert InvalidRatio();
+        }
+        if (
+            actionTokenAddress != tokenAddress
+                && ILaunch(s.launchAddress).parentTokenOf(actionTokenAddress) != tokenAddress
+        ) {
+            revert InvalidParentToken();
+        }
+
+        s.actionTokenAddress[tokenAddress][proposalId] = actionTokenAddress;
+        s.govRatioMultiplier[tokenAddress][proposalId] = govRatioMultiplier;
+        s.ratioForPublicVerifier[tokenAddress][proposalId] = ratioForPublicVerifier;
+        s.createdRound[tokenAddress][proposalId] = IPhase(s.phaseAddress).currentPhase();
+    }
+
+    function onProposalSubmitted(
+        address,
+        uint256,
+        uint256,
+        bytes[] calldata
+    ) external virtual override {
+        if (msg.sender != s.actionTarget) {
+            revert UnauthorizedCallback();
+        }
+    }
+
+    function onProposalVoted(
+        address,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        bytes[] calldata targetData
+    ) external virtual override {
+        if (msg.sender != s.actionTarget) {
+            revert UnauthorizedCallback();
+        }
+        if (targetData.length > 1) {
+            revert InvalidTargetDataLength();
+        }
+    }
+
+    function _distribution(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 sourceActionId,
+        uint256 groupId
+    ) internal view returns (GroupRecipients.Distribution memory) {
+        (address actionTokenAddress, uint256 slice) =
+            _ownerSlice(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
+        return GroupRecipients.getDistribution(s, actionTokenAddress, sourceActionId, groupId, slice, round);
+    }
+
+    function _ownerSlice(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 sourceActionId,
+        uint256 groupId
+    ) internal view returns (address actionTokenAddress, uint256 slice) {
+        uint256 ownerReward;
+        uint256 ownerWeight;
+        (actionTokenAddress, ownerReward, ownerWeight) =
+            _ownerRewardAndWeight(serviceTokenAddress, serviceActionId, round, groupId);
+        if (ownerReward != 0 && ownerWeight != 0) {
+            slice = GroupRecipients.ownerSlice(
+                s, actionTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight
+            );
+        }
+    }
+
+    function _settlement(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 memberId
+    ) internal view returns (Settlement memory settlement) {
+        settlement.actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
+        if (!IActionTarget(s.actionTarget).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round)) {
+            return settlement;
+        }
+
+        (settlement.verifierWeight, settlement.ownerWeight) =
+            _memberWeights(settlement.actionTokenAddress, round, memberId);
+        if (settlement.verifierWeight == 0 && settlement.ownerWeight == 0) {
+            return settlement;
+        }
+
+        settlement.ratioForPublicVerifier = s.ratioForPublicVerifier[serviceTokenAddress][serviceActionId];
+        settlement.govRatioMultiplier = s.govRatioMultiplier[serviceTokenAddress][serviceActionId];
+        settlement.denominator = totalGroupActionReward(settlement.actionTokenAddress, round);
+        if (settlement.denominator == 0) {
+            return settlement;
+        }
+
+        (settlement.serviceReward, settlement.actionMinted) =
+            IActionTarget(s.actionTarget).actionReward(serviceTokenAddress, serviceActionId, round);
+        if (settlement.serviceReward == 0) {
+            return settlement;
+        }
+
+        _applyFormulas(settlement, memberId);
+    }
+
+    function _applyFormulas(
+        Settlement memory settlement,
+        uint256 memberId
+    ) internal view {
+        settlement.ownerBurned = 0;
+        settlement.verifierReward = Math.mulDiv(
+            settlement.serviceReward,
+            settlement.ratioForPublicVerifier * settlement.verifierWeight,
+            settlement.denominator * PRECISION
+        );
+
+        uint256 ownerRatioWeight = (PRECISION - settlement.ratioForPublicVerifier) * settlement.ownerWeight;
+        uint256 theoreticalOwnerReward =
+            Math.mulDiv(settlement.serviceReward, ownerRatioWeight, settlement.denominator * PRECISION);
+
+        if (settlement.govRatioMultiplier == 0) {
+            settlement.ownerReward = theoreticalOwnerReward;
+            return;
+        }
+
+        uint256 cap = 0;
+        uint256 globalGovVotes = IStake(s.stakeAddress).globalGovVotes(settlement.actionTokenAddress);
+        if (globalGovVotes != 0) {
+            uint256 govRatio = Math.mulDiv(
+                IStake(s.stakeAddress).validGovVotes(settlement.actionTokenAddress, memberId),
+                PRECISION,
+                globalGovVotes
+            );
+            cap = Math.mulDiv(govRatio, settlement.govRatioMultiplier, PRECISION);
+        }
+
+        if (cap * settlement.denominator >= ownerRatioWeight) {
+            settlement.ownerReward = theoreticalOwnerReward;
+        } else {
+            settlement.ownerReward = Math.mulDiv(settlement.serviceReward, cap, PRECISION);
+            settlement.ownerBurned = theoreticalOwnerReward - settlement.ownerReward;
+        }
+    }
+
+    function _ownerRewardAndWeight(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 memberId
     )
         internal
         view
-        returns (uint256 totalServiceReward, uint256 totalActionReward)
+        returns (
+            address actionTokenAddress,
+            uint256 ownerReward,
+            uint256 ownerWeight
+        )
     {
-        totalServiceReward = reward(round);
-        totalActionReward = generatedActionReward(round);
+        actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
+        if (s.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
+            ownerReward = s.ownerDistributedByMember[serviceTokenAddress][serviceActionId][round][memberId]
+                + s.ownerRemainingByMember[serviceTokenAddress][serviceActionId][round][memberId];
+            if (ownerReward != 0) {
+                (, ownerWeight) = _memberWeights(actionTokenAddress, round, memberId);
+            }
+            return (actionTokenAddress, ownerReward, ownerWeight);
+        }
+
+        Settlement memory settlement = _settlement(serviceTokenAddress, serviceActionId, round, memberId);
+        return (actionTokenAddress, settlement.ownerReward, settlement.ownerWeight);
     }
 
-    /// @return Account's gov ratio (1e18): govValid / govTotal; 0 if govTotal==0
-    function _calculateGovRatio(
-        address account
-    ) internal view returns (uint256) {
-        uint256 govTotal = _stake.govVotesNum(GROUP_ACTION_TOKEN_ADDRESS);
-        if (govTotal == 0) return 0;
-        uint256 govValid = _stake.validGovVotes(
-            GROUP_ACTION_TOKEN_ADDRESS,
-            account
-        );
-        return (govValid * PRECISION) / govTotal;
-    }
-
-    function _calculateReward(
+    function _isQualified(
+        address actionTokenAddress,
         uint256 round,
-        address account
-    ) internal view override returns (uint256 mintReward, uint256 burnReward) {
-        if (
-            !_center.isAccountJoinedByRound(
-                TOKEN_ADDRESS,
-                actionId,
-                account,
-                round
-            )
-        ) return (0, 0);
+        uint256 memberId
+    ) internal view returns (bool) {
+        IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(s.groupActionExecutorAddress);
+        if (groupActionExecutor.hasActiveGroups(actionTokenAddress, memberId)) {
+            return true;
+        }
 
-        (
-            uint256 totalServiceReward,
-            uint256 totalActionReward
-        ) = _getRewardContext(round);
-        if (totalServiceReward == 0 || totalActionReward == 0) return (0, 0);
-
-        uint256 generatedByVerifier = generatedActionRewardByVerifier(
-            account,
-            round
-        );
-        if (generatedByVerifier == 0) return (0, 0);
-
-        uint256 rewardRatio = (generatedByVerifier * PRECISION) /
-            totalActionReward;
-        uint256 theoryReward = (totalServiceReward * rewardRatio) / PRECISION;
-        uint256 govRatioCap = GOV_RATIO_MULTIPLIER == 0
-            ? 0
-            : _calculateGovRatio(account) * GOV_RATIO_MULTIPLIER;
-        uint256 effectiveRatio = GOV_RATIO_MULTIPLIER == 0
-            ? rewardRatio
-            : (rewardRatio < govRatioCap ? rewardRatio : govRatioCap);
-        mintReward = (totalServiceReward * effectiveRatio) / PRECISION;
-        burnReward = theoryReward - mintReward;
-        return (mintReward, burnReward);
+        uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
+        for (uint256 i = 0; i < actionIds.length; i++) {
+            VerifierApplication memory application =
+                groupActionExecutor.verifierApplication(actionTokenAddress, actionIds[i], memberId);
+            if (application.applicationId != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /// @dev Group reward scaled by verifier's mintReward/theoryReward so distribution does not exceed mint.
-    ///      Uses stored mint/burn when round already claimed by verifier.
-    function _scaledGroupReward(
-        address verifier,
+    function _memberWeights(
+        address actionTokenAddress,
         uint256 round,
-        uint256 actionId_,
+        uint256 memberId
+    ) internal view returns (uint256 verifierWeight, uint256 ownerWeight) {
+        uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
+        for (uint256 i = 0; i < actionIds.length; i++) {
+            uint256 actionId = actionIds[i];
+            ownerWeight += _groupReward(actionTokenAddress, actionId, round, memberId);
+            if (_lockedVerifierId(actionTokenAddress, actionId, round) == memberId) {
+                verifierWeight += _actionRewardTotal(actionTokenAddress, actionId, round);
+            }
+        }
+    }
+
+    function _computeTotalGroupActionReward(
+        address actionTokenAddress,
+        uint256 round
+    ) internal view returns (uint256 total) {
+        uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
+        for (uint256 i = 0; i < actionIds.length; i++) {
+            total += _actionRewardTotal(actionTokenAddress, actionIds[i], round);
+        }
+    }
+
+    // Load-bearing: the first successful settlement freezes the round's divisor and each action's
+    // total, and every later settlement must read those same numbers. Recomputing would let the
+    // served GroupAction's live reward book move the divisor between two members' settlements,
+    // which shifts payouts silently instead of reverting. Zero amounts stay uncached on purpose:
+    // an action total of 0 is indistinguishable from "not yet cached" and is simply recomputed.
+    function _cacheActionRewards(
+        address actionTokenAddress,
+        uint256 round
+    ) internal {
+        if (s.totalGroupActionRewardByRound[actionTokenAddress][round] != 0) {
+            return;
+        }
+
+        uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
+        uint256 total = 0;
+        for (uint256 i = 0; i < actionIds.length; i++) {
+            uint256 actionTotal = _computeActionRewardTotal(actionTokenAddress, actionIds[i], round);
+            if (actionTotal != 0) {
+                s.actionRewardByRound[actionTokenAddress][round][actionIds[i]] = actionTotal;
+            }
+            total += actionTotal;
+        }
+        s.totalGroupActionRewardByRound[actionTokenAddress][round] = total;
+    }
+
+    function _votedGroupActions(
+        address actionTokenAddress,
+        uint256 round
+    ) internal view returns (uint256[] memory) {
+        (uint256[] memory actionIds, address[] memory executors, ) =
+            IActionTarget(s.actionTarget).votedActions(actionTokenAddress, round, 0, type(uint256).max, false);
+
+        uint256 count = 0;
+        for (uint256 i = 0; i < actionIds.length; i++) {
+            if (executors[i] == s.groupActionExecutorAddress) {
+                count++;
+            }
+        }
+
+        uint256[] memory groupActionIds = new uint256[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < actionIds.length; i++) {
+            if (executors[i] == s.groupActionExecutorAddress) {
+                groupActionIds[index] = actionIds[i];
+                index++;
+            }
+        }
+        return groupActionIds;
+    }
+
+    function _actionRewardTotal(
+        address actionTokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) internal view returns (uint256 total) {
+        total = s.actionRewardByRound[actionTokenAddress][round][actionId];
+        if (total != 0) {
+            return total;
+        }
+        return _computeActionRewardTotal(actionTokenAddress, actionId, round);
+    }
+
+    function _computeActionRewardTotal(
+        address actionTokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) internal view returns (uint256 total) {
+        IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(s.groupActionExecutorAddress);
+        (uint256[] memory groupIds, ) =
+            groupActionExecutor.groupIds(actionTokenAddress, actionId, round, 0, type(uint256).max, false);
+        for (uint256 i = 0; i < groupIds.length; i++) {
+            total += groupActionExecutor.generatedActionRewardByGroupId(
+                actionTokenAddress, actionId, round, groupIds[i]
+            );
+        }
+    }
+
+    function _groupReward(
+        address actionTokenAddress,
+        uint256 actionId,
+        uint256 round,
         uint256 groupId
     ) internal view returns (uint256) {
-        (
-            uint256 totalServiceReward,
-            uint256 totalActionReward
-        ) = _getRewardContext(round);
-        return
-            _scaledGroupRewardWithContext(
-                verifier,
-                round,
-                actionId_,
-                groupId,
-                totalServiceReward,
-                totalActionReward
-            );
+        return IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
+            actionTokenAddress, actionId, round, groupId
+        );
     }
 
-    function _scaledGroupRewardWithContext(
-        address verifier,
-        uint256 round,
-        uint256 actionId_,
-        uint256 groupId,
-        uint256 totalServiceReward,
-        uint256 totalActionReward
+    function _lockedVerifierId(
+        address actionTokenAddress,
+        uint256 actionId,
+        uint256 round
     ) internal view returns (uint256) {
-        // Theory-based group share (no gov cap): totalServiceReward * groupActionReward / totalActionReward
-        if (totalServiceReward == 0 || totalActionReward == 0) return 0;
-
-        address extension = _checkActionId(actionId_);
-        if (
-            _groupVerify.verifierByGroupId(extension, round, groupId) !=
-            verifier
-        ) return 0;
-        uint256 groupActionReward = IGroupAction(extension)
-            .generatedActionRewardByGroupId(round, groupId);
-        if (groupActionReward == 0) return 0;
-        uint256 theoryGroupReward = (totalServiceReward * groupActionReward) /
-            totalActionReward;
-        if (theoryGroupReward == 0) return 0;
-
-        // Verifier's mint vs theory (use stored if already claimed)
-        uint256 mintReward;
-        uint256 burnReward;
-        if (_claimedByAccount[round][verifier]) {
-            mintReward = _mintedRewardByAccount[round][verifier];
-            burnReward = _burnedRewardByAccount[round][verifier];
-        } else {
-            (mintReward, burnReward) = _calculateReward(round, verifier);
-        }
-        uint256 theoryReward = mintReward + burnReward;
-        if (theoryReward == 0) return 0;
-
-        return (theoryGroupReward * mintReward) / theoryReward;
+        return IGroupActionExecutor(s.groupActionExecutorAddress).lockedVerifierId(actionTokenAddress, actionId, round);
     }
 
-    function _claimReward(
+    function _isSettleableRound(
+        address tokenAddress,
+        uint256 actionId,
         uint256 round
-    ) internal override returns (uint256 mintReward, uint256 burnReward) {
-        if (_claimedByAccount[round][msg.sender]) {
-            revert AlreadyClaimed();
-        }
-
-        (mintReward, burnReward) = _calculateReward(round, msg.sender);
-
-        _claimedByAccount[round][msg.sender] = true;
-        _mintedRewardByAccount[round][msg.sender] = mintReward;
-        _burnedRewardByAccount[round][msg.sender] = burnReward;
-        _govRatio[round][msg.sender] = _calculateGovRatio(msg.sender);
-
-        // Burn overflow reward first
-        if (burnReward > 0) {
-            ILOVE20Token(TOKEN_ADDRESS).burn(burnReward);
-        }
-
-        uint256 distributed;
-        uint256 remaining;
-        if (mintReward > 0) {
-            distributed = _distributeToRecipients(round);
-            remaining = mintReward - distributed;
-            if (remaining > 0)
-                IERC20(TOKEN_ADDRESS).safeTransfer(msg.sender, remaining);
-        }
-
-        emit ClaimReward({
-            tokenAddress: TOKEN_ADDRESS,
-            round: round,
-            actionId: actionId,
-            account: msg.sender,
-            mintAmount: mintReward,
-            burnAmount: burnReward
-        });
-        emit ClaimRewardDistribution({
-            tokenAddress: TOKEN_ADDRESS,
-            round: round,
-            actionId: actionId,
-            account: msg.sender,
-            mintAmount: mintReward,
-            burnAmount: burnReward,
-            distributed: distributed,
-            remaining: remaining
-        });
-        return (mintReward, burnReward);
+    ) internal view returns (bool) {
+        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        return createdRound != 0 && round >= createdRound && round <= _mintRound();
     }
 
-    /// @notice Distributes rewards to all configured recipients for the caller
-    /// @dev Iterates through all actionIds and groupIds where caller has set recipients,
-    ///      calculates each group's reward share, and transfers to recipients based on ratios
-    /// @param round The round to distribute rewards for
-    /// @return distributed Total amount distributed to recipients
-    function _distributeToRecipients(
-        uint256 round
-    ) internal returns (uint256 distributed) {
-        (
-            uint256 totalServiceReward,
-            uint256 totalActionReward
-        ) = _getRewardContext(round);
-        if (totalServiceReward == 0 || totalActionReward == 0) return 0;
-
-        address account = msg.sender;
-        address actionToken = GROUP_ACTION_TOKEN_ADDRESS;
-
-        uint256[] memory aids = _groupRecipients.actionIdsWithRecipients(
-            account,
-            actionToken,
-            round
-        );
-        uint256 aidsLength = aids.length;
-        for (uint256 i; i < aidsLength; ) {
-            uint256[] memory gids = _groupRecipients
-                .groupIdsByActionIdWithRecipients(
-                    account,
-                    actionToken,
-                    aids[i],
-                    round
-                );
-            uint256 gidsLength = gids.length;
-            for (uint256 j; j < gidsLength; ) {
-                distributed += _distributeForGroup(
-                    round,
-                    aids[i],
-                    gids[j],
-                    totalServiceReward,
-                    totalActionReward
-                );
-                unchecked {
-                    ++j;
-                }
-            }
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
-    function _distributeForGroup(
-        uint256 round,
-        uint256 actionId_,
-        uint256 groupId,
-        uint256 totalServiceReward,
-        uint256 totalActionReward
-    ) internal returns (uint256 distributed) {
-        uint256 groupReward = _scaledGroupRewardWithContext(
-            msg.sender,
-            round,
-            actionId_,
-            groupId,
-            totalServiceReward,
-            totalActionReward
-        );
-        if (groupReward == 0) return 0;
-
-        (
-            address[] memory addrs,
-            ,
-            uint256[] memory amounts,
-
-        ) = _groupRecipients.getDistribution(
-                msg.sender,
-                GROUP_ACTION_TOKEN_ADDRESS,
-                actionId_,
-                groupId,
-                groupReward,
-                round
-            );
-
-        uint256 len = addrs.length;
-        IERC20 token = IERC20(TOKEN_ADDRESS);
-        for (uint256 i; i < len; ) {
-            if (amounts[i] > 0) {
-                token.safeTransfer(addrs[i], amounts[i]);
-                distributed += amounts[i];
-                emit DistributeRecipient({
-                    tokenAddress: TOKEN_ADDRESS,
-                    round: round,
-                    actionId: actionId_,
-                    groupId: groupId,
-                    account: msg.sender,
-                    recipient: addrs[i],
-                    amount: amounts[i]
-                });
-            }
-            unchecked {
-                ++i;
-            }
-        }
+    function _mintRound() internal view returns (uint256) {
+        uint256 phase = IPhase(s.phaseAddress).currentPhase();
+        return phase < 4 ? 0 : phase - 3;
     }
 }

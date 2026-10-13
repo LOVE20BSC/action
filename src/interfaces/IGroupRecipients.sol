@@ -1,28 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
 interface IGroupRecipientsEvents {
     event SetRecipients(
-        address indexed tokenAddress,
+        address indexed sourceTokenAddress,
         uint256 round,
-        uint256 indexed actionId,
+        uint256 indexed sourceActionId,
         uint256 indexed groupId,
-        address account,
-        address[] recipients,
-        uint256[] ratios,
-        string[] remarks
+        uint256[] recipientIds,
+        uint256[] ratios
     );
 }
 
 interface IGroupRecipientsErrors {
-    error InvalidRatio();
+    error DistributionOverflow(uint256 configured, uint256 available);
     error TooManyRecipients();
-    error ZeroAddress();
     error ZeroRatio();
     error ArrayLengthMismatch();
-    error DuplicateAddress();
+    error DuplicateMemberId(uint256 memberId);
     error RecipientCannotBeSelf();
-    error OnlyGroupOwner();
 }
 
 interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
@@ -30,39 +26,33 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
     function DEFAULT_MAX_RECIPIENTS() external view returns (uint256);
 
     function setRecipients(
-        address tokenAddress,
-        uint256 actionId,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
         uint256 groupId,
-        address[] calldata addrs,
+        uint256[] calldata recipientIds,
         uint256[] calldata ratios,
         string[] calldata remarks
     ) external;
 
     function recipients(
-        address groupOwner,
-        address tokenAddress,
-        uint256 actionId,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
         uint256 groupId,
         uint256 round
-    ) external view returns (address[] memory addrs, uint256[] memory ratios, string[] memory remarks);
+    ) external view returns (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory remarks);
 
     function actionIdsWithRecipients(
-        address groupOwner,
-        address tokenAddress,
-        uint256 round
-    ) external view returns (uint256[] memory);
-
-    function groupIdsByActionIdWithRecipients(
-        address groupOwner,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (uint256[] memory);
+        address sourceTokenAddress,
+        uint256 groupId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 total);
 
     function getDistribution(
-        address groupOwner,
-        address tokenAddress,
-        uint256 actionId,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
         uint256 groupId,
         uint256 groupReward,
         uint256 round
@@ -70,7 +60,7 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
         external
         view
         returns (
-            address[] memory addrs,
+            uint256[] memory recipientIds,
             uint256[] memory ratios,
             uint256[] memory amounts,
             uint256 ownerAmount

@@ -1,77 +1,137 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
-interface IGroupServiceEvents {
+import {IActionExecutor} from "./IActionExecutor.sol";
+import {IGroupRecipients} from "./IGroupRecipients.sol";
+
+interface IGroupServiceExecutorEvents {
     event DistributeRecipient(
-        address indexed tokenAddress,
+        address indexed serviceTokenAddress,
         uint256 round,
-        uint256 indexed actionId,
+        uint256 indexed serviceActionId,
         uint256 indexed groupId,
-        address account,
-        address recipient,
+        uint256 sourceActionId,
+        uint256 recipientId,
         uint256 amount
     );
-    event ClaimRewardDistribution(
-        address indexed tokenAddress,
+    event ServiceRewardDistributed(
+        address indexed serviceTokenAddress,
         uint256 round,
-        uint256 indexed actionId,
-        address indexed account,
-        uint256 mintAmount,
-        uint256 burnAmount,
-        uint256 distributed,
-        uint256 remaining
+        uint256 indexed serviceActionId,
+        address indexed actionTokenAddress,
+        uint256 memberId,
+        uint256 verifierReward,
+        uint256 ownerReward,
+        uint256 ownerBurned,
+        uint256 ownerDistributed,
+        uint256 ownerRemaining
+    );
+    event Joined(
+        address indexed serviceTokenAddress,
+        uint256 indexed serviceActionId,
+        uint256 indexed memberId,
+        uint256 round
+    );
+    event Exited(
+        address indexed serviceTokenAddress,
+        uint256 indexed serviceActionId,
+        uint256 indexed memberId,
+        uint256 round
     );
 }
 
-interface IGroupServiceErrors {
+interface IGroupServiceExecutorErrors {
     error NoActiveGroups();
-    error InvalidExtension();
+    error InvalidAddress();
+    error InvalidTargetDataLength();
+    error InvalidParentToken();
+    error InvalidRatio();
+    error NotJoined();
+    error AlreadyJoined();
 }
 
-interface IGroupService is IGroupServiceEvents, IGroupServiceErrors {
-    function PRECISION() external view returns (uint256);
+interface IGroupServiceExecutor is
+    IActionExecutor,
+    IGroupRecipients,
+    IGroupServiceExecutorEvents,
+    IGroupServiceExecutorErrors
+{
+    function init(
+        address actionTargetAddress,
+        address stakeAddress,
+        address groupActionExecutorAddress
+    ) external;
+    function currentVerifyRound() external view returns (uint256);
 
-    function GOV_RATIO_MULTIPLIER() external view returns (uint256);
+    function GOV_RATIO_MULTIPLIER(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (uint256);
 
-    function GROUP_ACTION_TOKEN_ADDRESS() external view returns (address);
-    function GROUP_ACTION_FACTORY_ADDRESS() external view returns (address);
+    function ACTION_TOKEN_ADDRESS(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (address);
+    function RATIO_FOR_PUBLIC_VERIFIER(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (uint256);
 
     function rewardByRecipient(
-        address verifier,
+        address serviceTokenAddress,
         uint256 round,
-        uint256 actionId,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
         uint256 groupId,
-        address recipient
+        uint256 recipientId
     ) external view returns (uint256);
 
     function rewardDistribution(
-        address verifier,
+        address serviceTokenAddress,
         uint256 round,
-        uint256 actionId,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
         uint256 groupId
     )
         external
         view
         returns (
-            address[] memory addrs,
+            uint256[] memory recipientIds,
             uint256[] memory ratios,
             uint256[] memory amounts,
             uint256 ownerAmount
         );
 
-    function hasActiveGroups(address owner) external view returns (bool);
-
-    function generatedActionRewardByVerifier(
-        address verifier,
-        uint256 round
-    ) external view returns (uint256 amount);
-
-    function generatedActionReward(
+    function serviceRewardByMember(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 memberId
+    )
+        external
+        view
+        returns (
+            uint256 verifierReward,
+            uint256 ownerReward,
+            uint256 ownerBurned,
+            uint256 ownerDistributed,
+            uint256 ownerRemaining,
+            bool claimed
+        );
+    function totalGroupActionReward(
+        address actionTokenAddress,
         uint256 round
     ) external view returns (uint256);
 
-    function govRatio(
+    function join(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 memberId
+    ) external;
+    function joinInfo(
+        address serviceTokenAddress,
+        uint256 serviceActionId,
         uint256 round,
-        address account
-    ) external view returns (uint256 ratio, bool claimed);
+        uint256 memberId
+    ) external view returns (bool joined);
 }

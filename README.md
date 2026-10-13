@@ -22,8 +22,8 @@ Core 的接口以 `core` 代码库为准：生产代码直接从 `lib/core/src/i
 - 仓库骨架与工具链已建立，编译基线为 Solidity `0.8.37`、Foundry `1.8.1`、`evm_version = "osaka"`，不使用 `via_ir`。
 - ActionTarget 与 LP 迁移完成：旧代码基线、改名、BSC 实现与测试均已提交（第 2-4 步）；LP 含真实 core 栈集成测试，`src/LpExecutor.sol` 达 100% 行与分支覆盖。
 - acceptance.md 的 LP 全周期集成场景（`love20-anvil/scenarios/lp-action-full-cycle.yml`）依赖 BSC 版 `love20-anvil` 仓库，该仓库尚在规划中未创建，属仓库级阻塞项，不影响 LP 四步迁移收口；仓库创建后补跑该场景。
-- GroupAction 已完成旧代码基线、改名与 BSC 实现（第 1-3 步），单元测试待第 4 步提交；GroupService 尚未开始。
-- 自有接口以 `matt-gov` 的 `interfaces/action/` 为唯一来源，`src/interfaces/` 与本轮迁移范围内的接口逐字节同步（`IGroupServiceExecutor.sol` 待 GroupService 迁移启动时纳入）；Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
+- GroupAction 已完成旧代码基线、改名、BSC 实现与单元测试（第 1-4 步），测试含事件、边界、fuzz 与 invariant 覆盖；GroupService 已完成旧代码基线、改名与 BSC 实现（第 1-3 步），单元测试未开始。
+- 自有接口以 `matt-gov` 的 `interfaces/action/` 为唯一来源，`src/interfaces/` 与本轮迁移范围内的接口逐字节同步（`IGroupServiceExecutor.sol`、`IGroupRecipients.sol` 已随 GroupService 迁移启动纳入）；Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
 
 ## 构建与测试
 

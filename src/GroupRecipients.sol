@@ -1,284 +1,274 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.17;
+pragma solidity =0.8.37;
 
-import {IGroupRecipients} from "./interface/IGroupRecipients.sol";
-import {
-    RoundHistoryAddressArray
-} from "@extension/src/lib/RoundHistoryAddressArray.sol";
-import {
-    RoundHistoryUint256Array
-} from "@extension/src/lib/RoundHistoryUint256Array.sol";
-import {
-    RoundHistoryStringArray
-} from "@extension/src/lib/RoundHistoryStringArray.sol";
-import {
-    IERC721Enumerable
-} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
-import {ILOVE20Verify} from "@core/interfaces/ILOVE20Verify.sol";
-import {IGroupActionFactory} from "./interface/IGroupActionFactory.sol";
-import {
-    IExtensionFactory
-} from "@extension/src/interface/IExtensionFactory.sol";
-import {IExtensionCenter} from "@extension/src/interface/IExtensionCenter.sol";
+import {GroupServiceStorage} from "./GroupServiceStorage.sol";
+import {IGroupRecipientsEvents, IGroupRecipientsErrors} from "./interfaces/IGroupRecipients.sol";
+import {IGroupServiceExecutorEvents} from "./interfaces/IGroupServiceExecutor.sol";
+import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {RoundHistoryStringArray} from "libs/RoundHistoryStringArray.sol";
+import {RoundHistoryUint256Array} from "libs/RoundHistoryUint256Array.sol";
+import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
 
-contract GroupRecipients is IGroupRecipients {
-    using RoundHistoryAddressArray for RoundHistoryAddressArray.History;
+library GroupRecipients {
+    using GroupServiceStorage for GroupServiceStorage.Layout;
     using RoundHistoryUint256Array for RoundHistoryUint256Array.History;
     using RoundHistoryStringArray for RoundHistoryStringArray.History;
+    using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
+    using SafeERC20 for IERC20;
 
-    uint256 public constant PRECISION = 1e18;
-    uint256 public constant DEFAULT_MAX_RECIPIENTS = 10;
-
-    IERC721Enumerable internal immutable _group;
-    ILOVE20Verify internal immutable _verify;
-
-    // groupOwner => tokenAddress => actionId => groupId => recipients
-    mapping(address => mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryAddressArray.History))))
-        internal _recipientsHistory;
-    // groupOwner => tokenAddress => actionId => groupId => ratios
-    mapping(address => mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Array.History))))
-        internal _ratiosHistory;
-    // groupOwner => tokenAddress => actionId => groupId => remarks
-    mapping(address => mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryStringArray.History))))
-        internal _remarksHistory;
-    // groupOwner => tokenAddress => actionIds
-    mapping(address => mapping(address => RoundHistoryUint256Array.History))
-        internal _actionIdsWithRecipients;
-    // groupOwner => tokenAddress => actionId => groupIds
-    mapping(address => mapping(address => mapping(uint256 => RoundHistoryUint256Array.History)))
-        internal _groupIdsByActionIdWithRecipients;
-
-    constructor(address groupActionFactoryAddress_) {
-        if (groupActionFactoryAddress_ == address(0)) revert ZeroAddress();
-        IGroupActionFactory factory = IGroupActionFactory(
-            groupActionFactoryAddress_
-        );
-        address groupAddress = factory.GROUP_ADDRESS();
-        if (groupAddress == address(0)) revert ZeroAddress();
-        _group = IERC721Enumerable(groupAddress);
-
-        address verifyAddress = IExtensionCenter(
-            IExtensionFactory(groupActionFactoryAddress_).CENTER_ADDRESS()
-        ).verifyAddress();
-        if (verifyAddress == address(0)) revert ZeroAddress();
-        _verify = ILOVE20Verify(verifyAddress);
+    struct Distribution {
+        uint256[] recipientIds;
+        uint256[] ratios;
+        uint256[] amounts;
+        uint256 ownerAmount;
     }
 
-    modifier onlyGroupOwner(uint256 groupId) {
-        if (_group.ownerOf(groupId) != msg.sender) revert OnlyGroupOwner();
-        _;
-    }
-
+    // forge-lint: disable-next-item(missing-events-access-control)
     function setRecipients(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 groupId,
-        address[] calldata addrs,
-        uint256[] calldata ratios,
-        string[] calldata remarks
-    ) external onlyGroupOwner(groupId) {
-        address owner = msg.sender;
-        uint256 round = _verify.currentRound();
-        _validateRecipients(owner, addrs, ratios, remarks);
-        _recordRecipients(owner, tokenAddress, actionId, groupId, round, addrs, ratios, remarks);
-        _updateTrackingAndEmit(
-            owner,
-            tokenAddress,
-            actionId,
-            groupId,
-            round,
-            addrs,
-            ratios,
-            remarks
-        );
-    }
-
-    function _updateTrackingAndEmit(
-        address owner,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 groupId,
+        GroupServiceStorage.Layout storage s,
         uint256 round,
-        address[] calldata addrs,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256[] calldata recipientIds,
         uint256[] calldata ratios,
         string[] calldata remarks
-    ) internal {
-        if (addrs.length > 0) {
-            _actionIdsWithRecipients[owner][tokenAddress].add(round, actionId);
-            _groupIdsByActionIdWithRecipients[owner][tokenAddress][actionId]
-                .add(round, groupId);
-        } else if (
-            _groupIdsByActionIdWithRecipients[owner][tokenAddress][actionId]
-                .remove(round, groupId)
-        ) {
-            if (
-                _groupIdsByActionIdWithRecipients[owner][tokenAddress][actionId]
-                    .values(round)
-                    .length == 0
-            ) {
-                _actionIdsWithRecipients[owner][tokenAddress].remove(
-                    round,
-                    actionId
-                );
-            }
+    ) external {
+        s.requireMemberOwner(groupId);
+        _validateRecipients(s, recipientIds, ratios, remarks, groupId);
+
+        s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].record(round, recipientIds);
+        s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].record(round, ratios);
+        s.remarksHistory[sourceTokenAddress][sourceActionId][groupId].record(round, remarks);
+
+        if (recipientIds.length != 0) {
+            s.actionIdsWithRecipients[sourceTokenAddress][groupId].add(round, sourceActionId);
+        } else {
+            s.actionIdsWithRecipients[sourceTokenAddress][groupId].remove(round, sourceActionId);
         }
-        emit SetRecipients({
-            tokenAddress: tokenAddress,
+
+        emit IGroupRecipientsEvents.SetRecipients({
+            sourceTokenAddress: sourceTokenAddress,
             round: round,
-            actionId: actionId,
+            sourceActionId: sourceActionId,
             groupId: groupId,
-            account: owner,
-            recipients: addrs,
-            ratios: ratios,
-            remarks: remarks
+            recipientIds: recipientIds,
+            ratios: ratios
         });
     }
 
-    function _recordRecipients(
-        address owner,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 groupId,
-        uint256 round,
-        address[] calldata addrs,
-        uint256[] calldata ratios,
-        string[] calldata remarks
-    ) internal {
-        _recipientsHistory[owner][tokenAddress][actionId][groupId].record(
-            round,
-            addrs
-        );
-        _ratiosHistory[owner][tokenAddress][actionId][groupId].record(
-            round,
-            ratios
-        );
-        _remarksHistory[owner][tokenAddress][actionId][groupId].record(
-            round,
-            remarks
-        );
-    }
-
     function recipients(
-        address groupOwner,
-        address tokenAddress,
-        uint256 actionId,
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
         uint256 groupId,
         uint256 round
     )
         external
         view
         returns (
-            address[] memory addrs,
+            uint256[] memory recipientIds,
             uint256[] memory ratios,
             string[] memory remarks
         )
     {
-        addrs = _recipientsHistory[groupOwner][tokenAddress][actionId][groupId]
-            .values(round);
-        ratios = _ratiosHistory[groupOwner][tokenAddress][actionId][groupId]
-            .values(round);
-        remarks = _remarksHistory[groupOwner][tokenAddress][actionId][groupId]
-            .values(round);
+        recipientIds = s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        ratios = s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        remarks = s.remarksHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
     }
 
     function actionIdsWithRecipients(
-        address groupOwner,
-        address tokenAddress,
-        uint256 round
-    ) external view returns (uint256[] memory) {
-        return _actionIdsWithRecipients[groupOwner][tokenAddress].values(round);
-    }
-
-    function groupIdsByActionIdWithRecipients(
-        address groupOwner,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (uint256[] memory) {
-        return
-            _groupIdsByActionIdWithRecipients[groupOwner][tokenAddress][
-                actionId
-            ].values(round);
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        uint256 groupId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 total) {
+        return s.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, offset, limit, reverse);
     }
 
     function getDistribution(
-        address groupOwner,
-        address tokenAddress,
-        uint256 actionId,
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
         uint256 groupId,
         uint256 groupReward,
         uint256 round
-    )
-        external
-        view
-        returns (
-            address[] memory addrs,
-            uint256[] memory ratios,
-            uint256[] memory amounts,
-            uint256 ownerAmount
-        )
-    {
-        addrs = _recipientsHistory[groupOwner][tokenAddress][actionId][groupId]
-            .values(round);
-        ratios = _ratiosHistory[groupOwner][tokenAddress][actionId][groupId]
-            .values(round);
+    ) external view returns (Distribution memory distribution) {
+        distribution.recipientIds = s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        distribution.ratios = s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
         uint256 distributed;
-        (amounts, distributed) = _calculateRecipientAmounts(
-            groupReward,
-            addrs,
-            ratios
-        );
-        ownerAmount = groupReward - distributed;
+        (distribution.amounts, distributed) =
+            _calculateRecipientAmounts(groupReward, distribution.recipientIds, distribution.ratios);
+        distribution.ownerAmount = groupReward - distributed;
     }
 
+    function distribute(
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 ownerReward,
+        uint256 ownerWeight
+    ) external returns (uint256 distributed) {
+        if (ownerReward == 0 || ownerWeight == 0) {
+            return 0;
+        }
+
+        (uint256[] memory sourceActionIds, ) =
+            s.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, 0, type(uint256).max, false);
+        for (uint256 i = 0; i < sourceActionIds.length; i++) {
+            uint256 sourceActionId = sourceActionIds[i];
+            uint256 slice = ownerSlice(s, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight);
+            if (slice == 0) {
+                continue;
+            }
+            distributed +=
+                _distributeToRecipients(s, slice, sourceTokenAddress, serviceTokenAddress, serviceActionId, round, groupId, sourceActionId);
+        }
+    }
+
+    function projectedDistribution(
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 ownerReward,
+        uint256 ownerWeight
+    ) external view returns (uint256 distributed) {
+        if (ownerReward == 0 || ownerWeight == 0) {
+            return 0;
+        }
+
+        (uint256[] memory sourceActionIds, ) =
+            s.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, 0, type(uint256).max, false);
+        for (uint256 i = 0; i < sourceActionIds.length; i++) {
+            distributed +=
+                _projectedForAction(s, sourceTokenAddress, sourceActionIds[i], round, groupId, ownerReward, ownerWeight);
+        }
+    }
+
+    function _distributeToRecipients(
+        GroupServiceStorage.Layout storage s,
+        uint256 slice,
+        address sourceTokenAddress,
+        address serviceTokenAddress,
+        uint256 serviceActionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 sourceActionId
+    ) internal returns (uint256 distributed) {
+        uint256[] memory recipientIds =
+            s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        uint256[] memory ratios = s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        uint256[] memory amounts;
+        (amounts, distributed) = _calculateRecipientAmounts(slice, recipientIds, ratios);
+        for (uint256 j = 0; j < amounts.length; j++) {
+            uint256 amount = amounts[j];
+            if (amount == 0) {
+                continue;
+            }
+            IERC20(serviceTokenAddress).safeTransfer(IMemberNFT(s.memberNFTAddress).ownerOf(recipientIds[j]), amount);
+            emit IGroupServiceExecutorEvents.DistributeRecipient(
+                serviceTokenAddress, round, serviceActionId, groupId, sourceActionId, recipientIds[j], amount
+            );
+        }
+    }
+
+    function _projectedForAction(
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 ownerReward,
+        uint256 ownerWeight
+    ) internal view returns (uint256 distributed) {
+        uint256 slice = ownerSlice(s, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight);
+        if (slice == 0) {
+            return 0;
+        }
+        (, distributed) = _calculateRecipientAmounts(
+            slice,
+            s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round),
+            s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round)
+        );
+    }
+
+    function ownerSlice(
+        GroupServiceStorage.Layout storage s,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 ownerReward,
+        uint256 ownerWeight
+    ) internal view returns (uint256) {
+        uint256 groupReward = IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
+            sourceTokenAddress, sourceActionId, round, groupId
+        );
+        if (groupReward == 0) {
+            return 0;
+        }
+        return Math.mulDiv(ownerReward, groupReward, ownerWeight);
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
     function _validateRecipients(
-        address account,
-        address[] calldata addrs,
+        GroupServiceStorage.Layout storage s,
+        uint256[] calldata recipientIds,
         uint256[] calldata ratios,
-        string[] calldata remarks
-    ) internal pure {
-        uint256 len = addrs.length;
-        if (len != ratios.length || len != remarks.length)
-            revert ArrayLengthMismatch();
-        if (len > DEFAULT_MAX_RECIPIENTS) revert TooManyRecipients();
+        string[] calldata remarks,
+        uint256 groupId
+    ) internal view {
+        uint256 length = recipientIds.length;
+        if (length != ratios.length || length != remarks.length) {
+            revert IGroupRecipientsErrors.ArrayLengthMismatch();
+        }
+        if (length > GroupServiceStorage.DEFAULT_MAX_RECIPIENTS) {
+            revert IGroupRecipientsErrors.TooManyRecipients();
+        }
 
-        uint256 totalRatios;
-        for (uint256 i; i < len; ) {
-            if (addrs[i] == address(0)) revert ZeroAddress();
-            if (addrs[i] == account) revert RecipientCannotBeSelf();
-            if (ratios[i] == 0) revert ZeroRatio();
-            totalRatios += ratios[i];
-
-            if (i > 0) {
-                address addr = addrs[i];
-                for (uint256 j; j < i; ) {
-                    if (addrs[j] == addr) revert DuplicateAddress();
-                    unchecked {
-                        ++j;
-                    }
+        uint256 totalRatios = 0;
+        for (uint256 i = 0; i < length; i++) {
+            uint256 recipientId = recipientIds[i];
+            if (recipientId == groupId) {
+                revert IGroupRecipientsErrors.RecipientCannotBeSelf();
+            }
+            if (ratios[i] == 0) {
+                revert IGroupRecipientsErrors.ZeroRatio();
+            }
+            for (uint256 j = 0; j < i; j++) {
+                if (recipientIds[j] == recipientId) {
+                    revert IGroupRecipientsErrors.DuplicateMemberId(recipientId);
                 }
             }
-
-            unchecked {
-                ++i;
-            }
+            IMemberNFT(s.memberNFTAddress).ownerOf(recipientId);
+            totalRatios += ratios[i];
         }
-        if (totalRatios > PRECISION) revert InvalidRatio();
+        if (totalRatios > GroupServiceStorage.PRECISION) {
+            revert IGroupRecipientsErrors.DistributionOverflow(totalRatios, GroupServiceStorage.PRECISION);
+        }
     }
 
     function _calculateRecipientAmounts(
         uint256 groupReward,
-        address[] memory addrs,
+        uint256[] memory recipientIds,
         uint256[] memory ratios
     ) internal pure returns (uint256[] memory amounts, uint256 distributed) {
-        uint256 len = addrs.length;
-        amounts = new uint256[](len);
-        for (uint256 i; i < len; ) {
-            amounts[i] = (groupReward * ratios[i]) / PRECISION;
+        uint256 length = recipientIds.length;
+        amounts = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
+            amounts[i] = Math.mulDiv(groupReward, ratios[i], GroupServiceStorage.PRECISION);
             distributed += amounts[i];
-            unchecked {
-                ++i;
-            }
         }
     }
 }
