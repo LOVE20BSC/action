@@ -4,12 +4,12 @@ set -euo pipefail
 # 部署与初始化正确性校验：只读配置与链上状态，可重复运行。自行独立载入校验所需文件，
 # 不依赖调用方预载环境：network.params 提供 RPC 与链 ID，addresses.core.params 提供期望的
 # core 绑定，action.params 提供期望的 splits，addresses.action.params 提供待校验的已部署地址。
-# 用法：script/deploy/99_check.sh <network>
+# 用法：script/deploy/21_check.sh <network>
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-network="${1:?usage: script/deploy/99_check.sh <network>}"
+network="${1:?usage: script/deploy/21_check.sh <network>}"
 NETWORK_DIR="$PROJECT_ROOT/script/network/$network"
 if [ ! -d "$NETWORK_DIR" ]; then
     echo "Error: Network directory not found: $NETWORK_DIR"
@@ -27,6 +27,18 @@ source "$NETWORK_DIR/addresses.core.params"
 source "$NETWORK_DIR/action.params"
 source "$NETWORK_DIR/addresses.action.params"
 set +a
+
+# 地址文件的键集合必须与期望合约集合一致：键名漏改会让后续变量静默为空，
+# 逐项 cast 调用要到很后面才以难以定位的形式失败，故在此显式断言。
+address_file="$NETWORK_DIR/addresses.action.params"
+expected_keys="ACTIONTARGET_ADDRESS GROUPACTIONEXECUTOR_ADDRESS GROUPSERVICEEXECUTOR_ADDRESS LPEXECUTOR_ADDRESS"
+actual_keys=$(grep -oE '^[A-Z0-9_]+=' "$address_file" | sed 's/=$//' | sort | tr '\n' ' ' || true)
+if [ "$actual_keys" != "$(printf '%s\n' $expected_keys | sort | tr '\n' ' ')" ]; then
+    echo "Error: $address_file key set mismatch"
+    echo "  expected: $(printf '%s\n' $expected_keys | sort | tr '\n' ' ')"
+    echo "  actual:   $actual_keys"
+    exit 1
+fi
 
 # 颜色定义
 RED='\033[0;31m'

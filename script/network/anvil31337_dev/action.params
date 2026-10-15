@@ -1,4 +1,4 @@
 # GroupActionExecutor 初始化参数
 # 奖励分层阈值（splits）：严格递增、每项小于 1e18；留空表示不配置分层。
-# 经 01_deploy.sh 以 --sig "run(uint256[])" 传入 DeployAction.s.sol。
+# 经 11_deploy.sh 以 --sig "run(uint256[])" 传入 DeployAction.s.sol。
 GROUP_ACTION_SPLITS=100000000000000000,400000000000000000,700000000000000000

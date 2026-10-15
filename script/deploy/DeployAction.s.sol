@@ -21,7 +21,7 @@ contract DeployAction is Script {
 
         // Core 依赖必须是已部署合约：ActionTarget 从 Mint 派生 vote/submit/memberNFT/phase，
         // 三个 Executor 从 Stake 派生 memberNFT/phase/vote/launch/pairFactory，
-        // 地址配错时模拟阶段不会回滚，会白广播 4 个合约（要到 99_check.sh 才拦下）。
+        // 地址配错时模拟阶段不会回滚，会白广播 4 个合约（要到 21_check.sh 才拦下）。
         address mint = vm.envAddress("MINT_ADDRESS");
         address stake = vm.envAddress("STAKE_ADDRESS");
         require(mint.code.length != 0, "Mint must be a deployed contract");
