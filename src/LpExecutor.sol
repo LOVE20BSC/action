@@ -326,14 +326,6 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         burnAmount = theoreticalReward - mintAmount;
     }
 
-    function needBurnReward(address tokenAddress, uint256 actionId, uint256 round) external view returns (bool) {
-        uint256 createdRound = _createdRound[tokenAddress][actionId];
-        if (createdRound == 0 || round < createdRound || round > _mintRound()) {
-            return false;
-        }
-        return _joinedAmount[tokenAddress][actionId].value(round) == _totalDeduction[tokenAddress][actionId][round];
-    }
-
     function deduction(
         address tokenAddress,
         uint256 actionId,

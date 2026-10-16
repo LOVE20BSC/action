@@ -10,7 +10,6 @@ import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
 import {IMint} from "core/src/interfaces/IMint.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 import {IVote} from "core/src/interfaces/IVote.sol";
-import {ILOVE20Token} from "core/src/interfaces/ILOVE20Token.sol";
 
 contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
@@ -41,22 +40,6 @@ contract ActionTarget is IActionTarget {
 
     // tokenAddress => actionId => creation vote round
     mapping(address => mapping(uint256 => uint256)) internal _createdRound;
-
-    // tokenAddress => actionId => round => minted amount
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
-        internal _actionReward;
-
-    // tokenAddress => actionId => round => whether this round's reward was minted
-    mapping(address => mapping(uint256 => mapping(uint256 => bool)))
-        internal _actionMinted;
-
-    // tokenAddress => actionId => round => burned amount
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256)))
-        internal _burnedReward;
-
-    // tokenAddress => actionId => round => whether this round's reward was burned
-    mapping(address => mapping(uint256 => mapping(uint256 => bool)))
-        internal _rewardBurned;
 
     // tokenAddress => all bound actionIds
     mapping(address => uint256[]) internal _allActionIds;
@@ -274,61 +257,15 @@ contract ActionTarget is IActionTarget {
         uint256 actionId,
         uint256 round
     ) external onlyBoundExecutor(tokenAddress, actionId) returns (uint256 amount) {
-        if (_actionMinted[tokenAddress][actionId][round]) {
-            revert AlreadyMinted(tokenAddress, actionId, round);
-        }
         if (!IVote(voteAddress).isProposalIdVoted(tokenAddress, round, actionId)) {
             revert ProposalNotVoted(tokenAddress, actionId);
         }
 
-        // forge-lint: disable-next-line(reentrancy-no-eth)
-        amount = IMint(mintAddress).mintProposalReward(tokenAddress, round, actionId);
-        _actionMinted[tokenAddress][actionId][round] = true;
-        _actionReward[tokenAddress][actionId][round] = amount;
-
         address bound = _executorByActionId[tokenAddress][actionId];
-        if (!ILOVE20Token(tokenAddress).transfer(bound, amount)) {
-            revert TransferFailed(tokenAddress, bound, amount);
-        }
+        // forge-lint: disable-next-line(reentrancy-no-eth)
+        amount = IMint(mintAddress).mintProposalReward(tokenAddress, round, actionId, bound);
 
         emit ActionRewardMinted({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            round: round,
-            amount: amount
-        });
-    }
-
-    function burnRewardIfNeeded(address tokenAddress, uint256 actionId, uint256 round) external {
-        address bound = _executorByActionId[tokenAddress][actionId];
-        if (bound == address(0)) {
-            return;
-        }
-        if (_rewardBurned[tokenAddress][actionId][round]) {
-            return;
-        }
-        if (!IVote(voteAddress).isRoundEnded(round)) {
-            revert InvalidRound(round);
-        }
-
-        (uint256 mintableAmount, bool minted) =
-            IMint(mintAddress).proposalRewardByProposalId(tokenAddress, round, actionId);
-        if (minted || mintableAmount == 0) {
-            return;
-        }
-
-        if (!IActionExecutor(bound).needBurnReward(tokenAddress, actionId, round)) {
-            return;
-        }
-
-        // Mint is a fixed dependency and its burn path makes no calls back into this
-        // contract; the ledger writes are safe to follow the call.
-        // forge-lint: disable-next-line(reentrancy-no-eth)
-        uint256 amount = IMint(mintAddress).burnUnmintedProposalReward(tokenAddress, round, actionId);
-        _rewardBurned[tokenAddress][actionId][round] = true;
-        _burnedReward[tokenAddress][actionId][round] = amount;
-
-        emit RewardBurned({
             tokenAddress: tokenAddress,
             actionId: actionId,
             round: round,
@@ -341,23 +278,10 @@ contract ActionTarget is IActionTarget {
         uint256 actionId,
         uint256 round
     ) external view returns (uint256 amount, bool minted) {
-        address bound = _executorByActionId[tokenAddress][actionId];
-        if (bound != address(0)) {
-            minted = _actionMinted[tokenAddress][actionId][round];
-            if (minted) {
-                amount = _actionReward[tokenAddress][actionId][round];
-            } else if (!_rewardBurned[tokenAddress][actionId][round]) {
-                (amount, ) = IMint(mintAddress).proposalRewardByProposalId(tokenAddress, round, actionId);
-            }
+        bool isBound = _executorByActionId[tokenAddress][actionId] != address(0);
+        if (isBound) {
+            (amount, minted) = IMint(mintAddress).proposalRewardByProposalId(tokenAddress, round, actionId);
         }
-    }
-
-    function burnInfo(address tokenAddress, uint256 actionId, uint256 round)
-        external view
-        returns (uint256 amount, bool burned)
-    {
-        amount = _burnedReward[tokenAddress][actionId][round];
-        burned = _rewardBurned[tokenAddress][actionId][round];
     }
 
     function actionIdsByExecutor(

@@ -83,7 +83,6 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
 
         if (total == 0) {
-            require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn on zero total");
             vm.prank(MEMBER1);
             vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
             executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);

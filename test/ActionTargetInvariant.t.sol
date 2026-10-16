@@ -97,22 +97,11 @@ contract ActionTargetHandler {
     function mintReward(uint256 seed) external {
         uint256 actionId = ACTION_ID_BASE + seed % ACTION_COUNT;
         uint256 round = seed % ROUND_COUNT;
-        if (!created[actionId] || minted[actionId][round] || burned[actionId][round]) return;
+        if (!created[actionId] || minted[actionId][round]) return;
         minted[actionId][round] = true;
         vote.setProposalVoted(address(token), round, actionId, true);
         vm.prank(executorAddress);
         actionTarget.mintActionReward(address(token), actionId, round);
-    }
-
-    function burn(uint256 seed) external {
-        uint256 actionId = ACTION_ID_BASE + seed % ACTION_COUNT;
-        uint256 round = seed % ROUND_COUNT;
-        if (!created[actionId] || minted[actionId][round] || burned[actionId][round]) return;
-        burned[actionId][round] = true;
-        vote.setRoundEnded(round, true);
-        mint.setProposalReward(address(token), round, actionId, BURN_AMOUNT, false);
-        vm.prank(executorAddress);
-        actionTarget.burnRewardIfNeeded(address(token), actionId, round);
     }
 
     function actionIdAt(uint256 index) external pure returns (uint256) {
@@ -125,7 +114,6 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
 
     function setUp() public override {
         super.setUp();
-        executor.setNeedBurn(true);
         handler = new ActionTargetHandler(
             address(actionTarget),
             address(phase),
@@ -232,7 +220,7 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
         }
     }
 
-    function invariant_RewardLedgersMatchModel() public view {
+    function invariant_ActionRewardMatchesModel() public view {
         for (uint256 i = 0; i < 4; i++) {
             uint256 actionId = handler.actionIdAt(i);
             for (uint256 round = 0; round < 3; round++) {
@@ -241,12 +229,6 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
                     require(mintedFlag && amount == handler.MINT_AMOUNT(), "minted ledger");
                 } else {
                     require(mintedFlag == false && amount == 0, "unminted ledger");
-                }
-                (uint256 burnedAmount, bool burnedFlag) = actionTarget.burnInfo(address(token), actionId, round);
-                if (handler.burned(actionId, round)) {
-                    require(burnedFlag && burnedAmount == handler.BURN_AMOUNT(), "burned ledger");
-                } else {
-                    require(burnedFlag == false && burnedAmount == 0, "unburned ledger");
                 }
             }
         }

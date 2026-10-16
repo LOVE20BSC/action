@@ -113,6 +113,7 @@ abstract contract GroupServiceTestBase {
         return deployed;
     }
 
+
     function _atPhase(uint256 currentPhase) internal {
         _currentPhase = currentPhase;
         phase.setCurrentPhase(currentPhase);

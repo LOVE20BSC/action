@@ -80,22 +80,4 @@ contract ActionTargetStubTest is ActionTargetTestBase {
         stub.callCreated(address(token), 11, _targetData(address(broken)));
         require(stubTarget.executor(address(token), 11) == address(0), "no binding created");
     }
-
-    function testStubTokenTransferFalseRevertsTransferFailed() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
-        vote.setProposalVoted(address(token), round, 11, true);
-        token.setTransferResult(false);
-
-        vm.prank(address(executor));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionTargetErrors.TransferFailed.selector, address(token), address(executor), MINT_AMOUNT
-            )
-        );
-        actionTarget.mintActionReward(address(token), 11, round);
-        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
-        require(amount == MINT_AMOUNT && minted == false, "expected amount remains after rollback");
-    }
 }

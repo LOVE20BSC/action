@@ -341,7 +341,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, MEMBER2_ID, SERVICE_ROUND);
     }
 
-    function testNeedBurnRewardFlagsZeroDenominatorOnly() external {
+    function testZeroDenominatorBlocksSettlement() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
@@ -350,80 +350,16 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        require(executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND), "zero denominator burns");
-        require(
-            !executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND - 1), "earlier round never burns"
-        );
-        require(
-            !executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1),
-            "later round is not settleable"
-        );
-
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
-        require(!executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND), "denominator exists");
-
-        // Before the mint round opens the flag is false even with a zero denominator.
-        _atPhase(VERIFY_PHASE);
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, GROUP_ID, 0);
-        require(!executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND), "round not settleable yet");
-    }
-
-    function testBurnRewardIfNeededWritesOffZeroDenominatorRounds() external {
-        // No group action ever verified a reward: the divisor stays zero and the
-        // whole reserved service reward is written off through ActionTarget, the
-        // executor deciding via needBurnReward.
-        _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
-        _atPhase(JOIN_PHASE);
-        _qualifyGroupOwner(GROUP_ID);
-        _joinService(GROUP_ID);
-        actionTarget.setBoundExecutor(address(token), SERVICE_ACTION_ID, address(executor));
-        _armServiceReward(SERVICE_REWARD);
-        _atPhase(MINT_PHASE);
-
-        require(executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND), "zero denominator burns");
-
-        // Any address can trigger the write-off; nothing is minted or moved.
-        vm.expectEmit(true, true, true, true);
-        emit IActionTargetEvents.RewardBurned(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, SERVICE_REWARD);
-        actionTarget.burnRewardIfNeeded(address(token), SERVICE_ACTION_ID, SERVICE_ROUND);
-
-        require(token.balanceOf(address(executor)) == SERVICE_REWARD, "executor balance untouched");
-        require(token.burnedTotal() == 0, "service token not burned by the write-off");
-        require(actionTarget.mintRewardCalls() == 0, "no mint happened");
-        (uint256 burnedAmount, bool burned) = actionTarget.burnInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND);
-        require(burned && burnedAmount == SERVICE_REWARD, "burn recorded");
-        (uint256 rewardAfter,) = actionTarget.actionReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND);
-        require(rewardAfter == 0, "written-off reward reads zero");
-
-        // The repeat call is a no-op: no second event, no revert.
-        vm.recordLogs();
-        actionTarget.burnRewardIfNeeded(address(token), SERVICE_ACTION_ID, SERVICE_ROUND);
-        require(vm.getRecordedLogs().length == 0, "repeat write-off is a no-op");
-
-        // After the write-off the projections stay zero and settlement is
-        // impossible, so the two burn paths can never both fire.
-        (,,,,, bool claimed) =
-            executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
-        require(!claimed, "nothing claimable after the write-off");
+        // No group action produced a reward, so the divisor is zero and nothing can be paid out.
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
-    }
 
-    function testBurnRewardIfNeededSkipsRoundsWithRewards() external {
-        _standardScenario();
-        actionTarget.setBoundExecutor(address(token), SERVICE_ACTION_ID, address(executor));
-        require(!executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND), "divisor exists");
-
-        vm.recordLogs();
-        actionTarget.burnRewardIfNeeded(address(token), SERVICE_ACTION_ID, SERVICE_ROUND);
-        require(vm.getRecordedLogs().length == 0, "no write-off while the divisor lives");
-
-        // The settlement still pays out untouched.
-        (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
-        require(ownerMint == 450e18 && ownerBurn == 0, "settlement unaffected by the skipped write-off");
+        // Once a group action yields a reward the divisor exists and the round settles normally.
+        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
+        (uint256 ownerMint,) = _settleService(GROUP_ID);
+        require(ownerMint > 0, "settles once the divisor exists");
     }
 
     function testSettlementRoundWindow() external {

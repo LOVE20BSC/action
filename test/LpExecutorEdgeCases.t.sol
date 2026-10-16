@@ -51,10 +51,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _exit(1);
 
         require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "total cleared");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction cleared");
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2), "round is burnable");
-    }
+        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction cleared");    }
 
     function testJoinMinimumAmount() external {
         _atPhaseBlock(3, 3300);
@@ -102,12 +99,9 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
             "member 2 retained"
         );
         require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 200e18, "total retained");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 60e18, "deduction retained");
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2) == false, "still allocatable");
-    }
+        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 60e18, "deduction retained");    }
 
-    function testAllMembersExitMakesRoundBurnable() external {
+    function testAllMembersExitClearsEffectiveAmount() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _join(2, 200e18);
@@ -115,10 +109,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _exit(2);
 
         require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "total cleared");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction cleared");
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2), "round is burnable");
-    }
+        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction cleared");    }
 
     function testGovRatioFloorRounding() external {
         stake.setGlobalGovVotes(address(token), 3);
@@ -202,14 +193,6 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
             lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
         require(minted && mintAmount == 200e18 && burnAmount == 800e18, "recorded settlement is stable");
-    }
-
-    function testNeedBurnRewardWithPartialWithdrawKeepsFalse() external {
-        _atPhaseBlock(3, 3300);
-        _join(1, 100e18);
-        _withdraw(1, 50e18);
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2) == false, "half the balance remains");
     }
 
     function testJoinSecondActionRequiresOwnMinRatio() external {

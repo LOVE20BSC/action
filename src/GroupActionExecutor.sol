@@ -771,18 +771,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         return (Math.mulDiv(proposalReward, memberFinalScore, totalFinal), 0, false);
     }
 
-    function needBurnReward(address tokenAddress, uint256 actionId, uint256 round) external view returns (bool) {
-        uint256 createdRound_ = s.createdRound[tokenAddress][actionId];
-        if (createdRound_ == 0 || round != createdRound_ || round > _mintRound()) {
-            return false;
-        }
-        if (!GroupActionVerify.isRoundVerified(s, tokenAddress, actionId, round)) {
-            return true;
-        }
-        return s.totalFinalScore[tokenAddress][actionId][round] == 0;
-    }
-
-
     function _memberFinalScore(
         address tokenAddress,
         uint256 actionId,

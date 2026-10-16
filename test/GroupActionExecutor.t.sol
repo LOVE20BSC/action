@@ -75,7 +75,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
             executor.generatedActionRewardByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == PROPOSAL_REWARD,
             "group reward"
         );
-        require(!executor.needBurnReward(address(token), ACTION_ID, 2), "no burn after verification");
 
         uint256 balanceBefore = token.balanceOf(MEMBER1);
         (uint256 mint1, uint256 burn1) = _settle(MEMBER1_ID, 2);
@@ -97,7 +96,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _prepareRound();
 
         _atPhase(5);
-        require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn flagged");
         require(
             executor.generatedActionRewardByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == 0,
             "no group reward"
@@ -125,7 +123,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(!executor.isRoundVerified(address(token), ACTION_ID, 2), "round not complete");
 
         _atPhase(5);
-        require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn flagged on partial");
         require(
             executor.generatedActionRewardByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == 0,
             "partial batches unlock nothing"
@@ -265,7 +262,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(fresh.currentMintRound() == 1, "mint at phase 4");
     }
 
-    function testNeedBurnWhenAllScoresZero() external {
+    function testZeroTotalScoreBlocksSettle() external {
         _prepareRound();
         _atPhase(4);
         _submitScores(_scores(0, 0));
@@ -274,7 +271,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(executor.totalFinalScore(address(token), ACTION_ID, 2) == 0, "zero total");
 
         _atPhase(5);
-        require(executor.needBurnReward(address(token), ACTION_ID, 2), "burn flagged on zero total");
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);

@@ -203,12 +203,6 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
         }
     }
 
-    function invariant_NeedBurnRewardMatchesModel() public view {
-        if (!handler.mintPhase()) return;
-        bool expected = handler.totalJoinedModel() == handler.totalDeductionModel();
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2) == expected, "burn judgement");
-    }
-
     function invariant_MintRecordsMatchModel() public view {
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
             (uint256 mintAmount, uint256 burnAmount, bool minted) =

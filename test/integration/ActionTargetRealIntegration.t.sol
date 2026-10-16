@@ -262,9 +262,7 @@ contract ActionTargetRealIntegrationTest {
         require(recorded == amount && mintedFlag, "action reward query");
 
         vm.prank(address(executor));
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.AlreadyMinted.selector, address(token), proposalId, round)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
         actionTarget.mintActionReward(address(token), proposalId, round);
     }
 
@@ -318,38 +316,36 @@ contract ActionTargetRealIntegrationTest {
         require(actionTarget.isJoined(address(token), proposalId, 1) == false, "clear after forceExit is idempotent");
     }
 
-    function testRealIntegration_BurnSettlement() external {
+    function testRealIntegration_SettlesToExecutorAndVoidsNothing() external {
         uint256 proposalId = _createActionProposal(1);
         uint256 round = phase.currentPhase();
         _voteOne(1, proposalId, MEMBER1_VOTES, new bytes[](0));
         vm.roll(block.number + BLOCKS_PER_PHASE);
         require(vote.isRoundEnded(round), "round ended");
 
-        executor.setNeedBurn(true);
-        uint256 burnedBefore = mint.rewardBurned(address(token));
         uint256 supplyBefore = token.totalSupply();
-        uint256 executorBalanceBefore = token.balanceOf(address(executor));
-        (uint256 expectedBurn,) = mint.proposalRewardByProposalId(address(token), round, proposalId);
-        require(expectedBurn > 0, "burnable reward");
+        (uint256 expectedShare, bool settledBefore) = actionTarget.actionReward(address(token), proposalId, round);
+        require(expectedShare > 0 && !settledBefore, "expected share before settlement");
 
-        vm.prank(address(0xBEEF));
-        actionTarget.burnRewardIfNeeded(address(token), proposalId, round);
+        vm.prank(address(executor));
+        uint256 settled = actionTarget.mintActionReward(address(token), proposalId, round);
+        require(settled == expectedShare, "settled share");
+        require(token.balanceOf(address(executor)) == settled, "reward minted straight to the executor");
+        require(token.totalSupply() == supplyBefore + settled, "supply grew by the reward");
 
-        require(mint.rewardBurned(address(token)) - burnedBefore == expectedBurn, "mint burned ledger");
-        (uint256 recorded, bool burned) = actionTarget.burnInfo(address(token), proposalId, round);
-        require(recorded == expectedBurn && burned, "action burn ledger matches mint");
-        require(token.totalSupply() == supplyBefore, "burn moves no tokens");
-        require(token.balanceOf(address(executor)) == executorBalanceBefore, "executor balance untouched");
-        (, bool settled) = mint.proposalRewardByProposalId(address(token), round, proposalId);
-        require(settled, "proposal settled by burn");
+        (uint256 recorded, bool settledAfter) = actionTarget.actionReward(address(token), proposalId, round);
+        require(recorded == settled && settledAfter, "settled query");
 
+        // ActionTarget holds no void path any more: a repeat settlement is rejected by Mint, and no
+        // protocol path burns an unallocatable reward (ADR-004). The burn below only probes the
+        // token ledger.
         vm.prank(address(executor));
         vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
         actionTarget.mintActionReward(address(token), proposalId, round);
 
-        vm.prank(address(0xBEEF));
-        actionTarget.burnRewardIfNeeded(address(token), proposalId, round);
-        require(mint.rewardBurned(address(token)) - burnedBefore == expectedBurn, "repeat burn is a no-op");
+        vm.prank(address(executor));
+        token.burn(settled);
+        require(token.totalSupply() == supplyBefore, "destroying restores supply");
     }
 
     function testRealIntegration_UnvotedActionCannotMint() external {

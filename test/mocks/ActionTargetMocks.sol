@@ -60,7 +60,7 @@ contract MockVote {
 
 contract MockMint {
     error MintProposalRewardReverted();
-    error BurnUnmintedProposalRewardReverted();
+    error AlreadyMinted();
 
     address public voteAddress;
     address public submitAddress;
@@ -68,17 +68,12 @@ contract MockMint {
     address public phaseAddress;
     uint256 public mintAmount;
     bool public revertOnMint;
-    bool public revertOnBurn;
     uint256 public mintCalls;
-    uint256 public burnCalls;
     address public lastMintCaller;
+    address public lastMintRecipient;
     address public lastMintTokenAddress;
     uint256 public lastMintRound;
     uint256 public lastMintProposalId;
-    address public lastBurnCaller;
-    address public lastBurnTokenAddress;
-    uint256 public lastBurnRound;
-    uint256 public lastBurnProposalId;
 
     // tokenAddress => round => proposalId => amount
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _proposalRewardAmount;
@@ -109,9 +104,6 @@ contract MockMint {
         revertOnMint = revertOnMint_;
     }
 
-    function setRevertOnBurn(bool revertOnBurn_) external {
-        revertOnBurn = revertOnBurn_;
-    }
 
     function setProposalReward(
         address tokenAddress,
@@ -132,32 +124,24 @@ contract MockMint {
         return (_proposalRewardAmount[tokenAddress][round][proposalId], _proposalMinted[tokenAddress][round][proposalId]);
     }
 
-    function mintProposalReward(address tokenAddress, uint256 round, uint256 proposalId)
-        external
-        returns (uint256 amount)
-    {
+    function mintProposalReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 proposalId,
+        address recipient
+    ) external returns (uint256 amount) {
         if (revertOnMint) revert MintProposalRewardReverted();
+        // Mirror Mint: it owns the per-round dedup ledger, and the minted amount stays queryable.
+        if (_proposalMinted[tokenAddress][round][proposalId]) revert AlreadyMinted();
         mintCalls++;
         lastMintCaller = msg.sender;
         lastMintTokenAddress = tokenAddress;
         lastMintRound = round;
         lastMintProposalId = proposalId;
+        lastMintRecipient = recipient;
+        _proposalRewardAmount[tokenAddress][round][proposalId] = mintAmount;
         _proposalMinted[tokenAddress][round][proposalId] = true;
         return mintAmount;
-    }
-
-    function burnUnmintedProposalReward(address tokenAddress, uint256 round, uint256 proposalId)
-        external
-        returns (uint256 amount)
-    {
-        if (revertOnBurn) revert BurnUnmintedProposalRewardReverted();
-        burnCalls++;
-        lastBurnCaller = msg.sender;
-        lastBurnTokenAddress = tokenAddress;
-        lastBurnRound = round;
-        lastBurnProposalId = proposalId;
-        _proposalMinted[tokenAddress][round][proposalId] = true;
-        return _proposalRewardAmount[tokenAddress][round][proposalId];
     }
 }
 
@@ -200,15 +184,12 @@ contract MockExecutor {
     error CreatedCallbackReverted();
     error SubmittedCallbackReverted();
     error VotedCallbackReverted();
-    error NeedBurnRewardReverted();
 
     address internal _actionTargetAddress;
     bool public revertActionTarget;
     bool public revertCreated;
     bool public revertSubmitted;
     bool public revertVoted;
-    bool public needBurn;
-    bool public revertNeedBurn;
 
     uint256 public createdCalls;
     uint256 public submittedCalls;
@@ -249,13 +230,7 @@ contract MockExecutor {
         revertVoted = revertVoted_;
     }
 
-    function setNeedBurn(bool needBurn_) external {
-        needBurn = needBurn_;
-    }
 
-    function setRevertNeedBurn(bool revertNeedBurn_) external {
-        revertNeedBurn = revertNeedBurn_;
-    }
 
     function actionTarget() external view returns (address) {
         if (revertActionTarget) revert ActionTargetUnavailable();
@@ -306,12 +281,4 @@ contract MockExecutor {
         if (revertVoted) revert VotedCallbackReverted();
     }
 
-    function needBurnReward(
-        address,
-        uint256,
-        uint256
-    ) external view returns (bool) {
-        if (revertNeedBurn) revert NeedBurnRewardReverted();
-        return needBurn;
-    }
 }

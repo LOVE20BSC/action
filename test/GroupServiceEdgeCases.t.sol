@@ -184,11 +184,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
         require(actionTarget.mintRewardCalls() == 0, "no mint attempted without a reward");
 
-        // A zero divisor burns, a zero reward does not.
-        require(
-            !executor.needBurnReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND),
-            "the denominator exists, only the reward is missing"
-        );
 
         // The failed attempt is not a one-way door.
         _armServiceReward(SERVICE_REWARD);

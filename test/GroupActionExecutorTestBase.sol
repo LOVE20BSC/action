@@ -278,6 +278,7 @@ abstract contract GroupActionExecutorTestBase {
         token.mint(address(executor), amount);
     }
 
+
     /// @dev Drives creation-phase voting plus the join phase up to two members
     ///      (one own-amount join, one provider-quota join); ends at phase 3.
     function _prepareRound() internal {

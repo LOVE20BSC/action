@@ -92,7 +92,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         require(mintAmount + burnAmount == reward, "reward is conserved");
     }
 
-    function testFuzzNeedBurnRewardMatchesModel(uint96 amount, uint16 elapsed, bool fullWithdraw) external {
+    function testFuzzWithdrawClearsJoinedAmount(uint96 amount, uint16 elapsed, bool fullWithdraw) external {
         uint256 joinAmount = uint256(amount) + 1;
         uint256 joinElapsed = uint256(elapsed) % PHASE_BLOCKS;
         _atPhaseBlock(3, 3000 + joinElapsed);
@@ -101,8 +101,6 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         if (fullWithdraw) {
             _withdraw(1, joinAmount);
         }
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2) == fullWithdraw, "burn judgement");
     }
 
     function testFuzzGovRatioFloor(uint96 validSeed, uint96 globalSeed) external {

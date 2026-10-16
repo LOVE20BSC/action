@@ -281,33 +281,27 @@ contract LpExecutorRealIntegrationTest {
         burnAmount = proposalReward - mintAmount;
     }
 
-    function testRealIntegration_BurnSettlement() external {
+    function testRealIntegration_UnallocatedRoundStaysUnsettled() external {
         uint256 round = phase.currentPhase();
         uint256 proposalId = _createLpProposal(member1, 1);
         _voteOne(member1, 1, proposalId, MEMBER1_VOTES);
 
         _advanceToPhaseStart(round + 2);
         require(lpExecutor.currentMintRound() == round, "mint round reached");
-        require(lpExecutor.needBurnReward(address(token), proposalId, round), "nobody joined the round");
 
-        (uint256 expectedBurn,) = mint.proposalRewardByProposalId(address(token), round, proposalId);
-        require(expectedBurn > 0, "reward available");
-        uint256 burnedBefore = mint.rewardBurned(address(token));
-
-        vm.prank(address(0xBEEF));
-        actionTarget.burnRewardIfNeeded(address(token), proposalId, round);
-        require(mint.rewardBurned(address(token)) - burnedBefore == expectedBurn, "mint burned ledger");
-        (uint256 recorded, bool burned) = actionTarget.burnInfo(address(token), proposalId, round);
-        require(burned && recorded == expectedBurn, "action burn ledger");
+        // Nobody joined the round, so its reserved share has no distribution path and stays
+        // unsettled for good: the reservation is never released and no member can be paid.
+        (uint256 expectedShare, bool minted) = mint.proposalRewardByProposalId(address(token), round, proposalId);
+        require(expectedShare > 0 && !minted, "share reserved but unminted");
 
         vm.prank(member1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
         lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
 
-        vm.prank(address(0xBEEF));
-        actionTarget.burnRewardIfNeeded(address(token), proposalId, round);
-        require(mint.rewardBurned(address(token)) - burnedBefore == expectedBurn, "repeat burn is a no-op");
+        (expectedShare, minted) = mint.proposalRewardByProposalId(address(token), round, proposalId);
+        require(!minted, "still unallocatable after the attempt");
     }
+
 
     function testRealIntegration_WithdrawAndExit() external {
         uint256 round = phase.currentPhase();

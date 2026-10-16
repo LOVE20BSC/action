@@ -115,7 +115,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(fresh.initialized(), "retry succeeds after bindings are restored");
     }
 
-    function testCreateStoresConfigAndCreationRound() external {
+    function testCreateStoresConfig() external view {
         require(
             lpExecutor.joinedAmountTokenAddress(address(token), ACTION_ID) == address(joinToken),
             "join token stored"
@@ -125,10 +125,6 @@ contract LpExecutorTest is LpExecutorTestBase {
             "multiplier stored"
         );
         require(lpExecutor.MIN_GOV_RATIO(address(token), ACTION_ID) == MIN_GOV_RATIO, "min ratio stored");
-
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 1) == false, "round before creation");
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2), "creation round is in range");
     }
 
     function testCreateRejectsNonActionTargetCaller() external {
@@ -1155,29 +1151,10 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "fully withdrawn round");
     }
 
-    function testNeedBurnRewardJudgement() external {
-        require(lpExecutor.needBurnReward(address(token), SECOND_ACTION_ID, 2) == false, "unbound action");
+    function testUnallocatedRoundBlocksSettlement() external {
         _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 1) == false, "round before creation");
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 3) == false, "round after mint round");
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2), "nobody joined");
-
-        _atPhaseBlock(3, 3300);
-        _join(1, 100e18);
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2) == false, "effective participation");
-
-        _atPhaseBlock(3, 3400);
-        _withdraw(1, 100e18);
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2), "all effective participation gone");
-    }
-
-    function testNeedBurnRewardWithPartialWithdrawStaysFalse() external {
-        _atPhaseBlock(3, 3000);
-        _join(1, 100e18);
-        _withdraw(1, 40e18);
-        _atPhase(4);
-        require(lpExecutor.needBurnReward(address(token), ACTION_ID, 2) == false, "remaining balance keeps it false");
+        // Nobody joined the creation round, so its reserved share has no distribution path.
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        _mintMemberReward(1, 2);
     }
 }

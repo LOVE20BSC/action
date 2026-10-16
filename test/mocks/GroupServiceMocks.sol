@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {IActionExecutor} from "../../src/interfaces/IActionExecutor.sol";
-import {IActionTargetEvents} from "../../src/interfaces/IActionTarget.sol";
 import {VerifierApplication} from "../../src/interfaces/IGroupActionVerify.sol";
 
 /// @notice Phase mock: GroupService only reads `currentPhase`.
@@ -94,9 +92,7 @@ contract MockGroupServiceLaunch {
 /// @notice ActionTarget mock. Replicates the behaviors GroupService leans on: the
 ///         join round is `currentPhase - 1` with a `JoinNotOpen` window
 ///         (`currentRound > createdRound`), round snapshots keep history —
-///         clearing only removes the current join round, never past rounds — and
-///         the zero-divisor write-off delegates to the bound executor's
-///         `needBurnReward` like the real `burnRewardIfNeeded` chain.
+///         clearing only removes the current join round, never past rounds.
 contract MockGroupServiceActionTarget {
     error JoinNotOpen(address tokenAddress, uint256 actionId, uint256 currentRound, uint256 createdRound);
 
@@ -119,12 +115,8 @@ contract MockGroupServiceActionTarget {
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _actionReward;
     mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _actionMinted;
 
-    // tokenAddress => actionId => the bound executor, for the write-off delegation
+    // tokenAddress => actionId => the bound executor
     mapping(address => mapping(uint256 => address)) internal _executorByActionId;
-
-    // tokenAddress => actionId => round => written-off amount / burned flag
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _burnedReward;
-    mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _rewardBurned;
 
     uint256 public mintReturnAmount;
     uint256 public mintRewardCalls;
@@ -199,55 +191,8 @@ contract MockGroupServiceActionTarget {
         view
         returns (uint256 amount, bool minted)
     {
-        // Mirrors ActionTarget.actionReward: a written-off round reads (0, false)
-        // even though the reserve was armed, like the real burned state.
+        amount = _actionReward[tokenAddress][actionId][round];
         minted = _actionMinted[tokenAddress][actionId][round];
-        if (!_rewardBurned[tokenAddress][actionId][round]) {
-            amount = _actionReward[tokenAddress][actionId][round];
-        }
-    }
-
-    function burnInfo(address tokenAddress, uint256 actionId, uint256 round)
-        external
-        view
-        returns (uint256 amount, bool burned)
-    {
-        amount = _burnedReward[tokenAddress][actionId][round];
-        burned = _rewardBurned[tokenAddress][actionId][round];
-    }
-
-    /// @notice Mirrors `ActionTarget.burnRewardIfNeeded` (ActionTarget.sol:302) for the
-    ///         zero-divisor write-off: bound lookup, the already-burned short circuit,
-    ///         the unminted-reward check and the executor's `needBurnReward` decision
-    ///         are kept. The vote round-ended gate stays with the real ActionTarget
-    ///         (the executor's own `needBurnReward` gates the round), and the burn is
-    ///         a ledger write plus `RewardBurned`, standing in for Mint's
-    ///         `burnUnmintedProposalReward`.
-    function burnRewardIfNeeded(address tokenAddress, uint256 actionId, uint256 round) external {
-        address bound = _executorByActionId[tokenAddress][actionId];
-        if (bound == address(0)) {
-            return;
-        }
-        if (_rewardBurned[tokenAddress][actionId][round]) {
-            return;
-        }
-        if (_actionMinted[tokenAddress][actionId][round]) {
-            return;
-        }
-        uint256 amount = _actionReward[tokenAddress][actionId][round];
-        if (amount == 0) {
-            return;
-        }
-        if (!IActionExecutor(bound).needBurnReward(tokenAddress, actionId, round)) {
-            return;
-        }
-
-        _rewardBurned[tokenAddress][actionId][round] = true;
-        _burnedReward[tokenAddress][actionId][round] = amount;
-
-        emit IActionTargetEvents.RewardBurned({
-            tokenAddress: tokenAddress, actionId: actionId, round: round, amount: amount
-        });
     }
 
     function mintActionReward(address tokenAddress, uint256 actionId, uint256 round) external returns (uint256) {

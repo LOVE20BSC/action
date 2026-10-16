@@ -29,12 +29,6 @@ interface IActionTargetEvents {
         uint256 indexed round,
         uint256 amount
     );
-    event RewardBurned(
-        address indexed tokenAddress,
-        uint256 indexed actionId,
-        uint256 indexed round,
-        uint256 amount
-    );
 }
 
 interface IActionTargetErrors {
@@ -53,9 +47,6 @@ interface IActionTargetErrors {
     error ProposalNotVoted(address tokenAddress, uint256 proposalId);
     error InvalidExecutor();
     error AlreadyCreated(address tokenAddress, uint256 actionId);
-    error AlreadyMinted(address tokenAddress, uint256 actionId, uint256 round);
-    error InvalidRound(uint256 round);
-    error TransferFailed(address tokenAddress, address to, uint256 amount);
 }
 
 interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetErrors {
@@ -88,11 +79,6 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 actionId,
         uint256 round
     ) external returns (uint256 amount);
-    function burnRewardIfNeeded(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external;
 
     function isJoined(
         address tokenAddress,
@@ -119,11 +105,6 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 actionId,
         uint256 round
     ) external view returns (uint256 amount, bool minted);
-    function burnInfo(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (uint256 amount, bool burned);
     function actionIdsByMemberId(
         address tokenAddress,
         uint256 memberId,

@@ -104,17 +104,6 @@ contract GroupServiceInitTest is GroupServiceTestBase {
             "verifier ratio bound"
         );
 
-        // createdRound is pinned through the burn-flag window: with no voted
-        // group actions the denominator is 0, so only the creation round burns.
-        _atPhase(MINT_PHASE);
-        require(executor.needBurnReward(address(token), SERVICE_ACTION_ID, CREATION_PHASE), "creation round burns");
-        require(
-            !executor.needBurnReward(address(token), SERVICE_ACTION_ID, CREATION_PHASE - 1), "earlier round never burns"
-        );
-        require(
-            !executor.needBurnReward(address(token), SERVICE_ACTION_ID, CREATION_PHASE + 1),
-            "later round is not settleable yet"
-        );
     }
 
     function testOnProposalCreatedAcceptsDirectParentToken() external {

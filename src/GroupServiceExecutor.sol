@@ -326,17 +326,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         return (settlement.verifierReward + settlement.ownerReward, settlement.ownerBurned, false);
     }
 
-    function needBurnReward(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (bool needed) {
-        if (round != s.createdRound[tokenAddress][actionId] || !_isSettleableRound(tokenAddress, actionId, round)) {
-            return false;
-        }
-        return totalGroupActionReward(s.actionTokenAddress[tokenAddress][actionId], round) == 0;
-    }
-
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function mintMemberReward(
         address tokenAddress,

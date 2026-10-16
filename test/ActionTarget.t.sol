@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {ActionTarget} from "../src/ActionTarget.sol";
 import {IActionTargetErrors} from "../src/interfaces/IActionTarget.sol";
+import {IMintErrors} from "core/src/interfaces/IMint.sol";
 import {MockExecutor, MockMint} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
@@ -383,7 +384,6 @@ contract ActionTargetTest is ActionTargetTestBase {
         executor.setRevertCreated(true);
         executor.setRevertSubmitted(true);
         executor.setRevertVoted(true);
-        executor.setRevertNeedBurn(true);
         _forceExit(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "membership cleared");
         (uint256[] memory actionIds, uint256 actionTotal) =
@@ -650,7 +650,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(actionIds[0] == 2 && actionIds[1] == 4, "filtering precedes the caller window");
     }
 
-    function testMintActionRewardMintsOnceAndTransfers() external {
+    function testMintActionRewardMintsOnceToExecutor() external {
         _createAction(11);
         uint256 round = 5;
         vote.setProposalVoted(address(token), round, 11, true);
@@ -663,9 +663,9 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(mint.lastMintTokenAddress() == address(token), "token forwarded");
         require(mint.lastMintRound() == round, "round forwarded");
         require(mint.lastMintProposalId() == 11, "actionId forwarded");
-        require(token.transferCalls() == 1, "single transfer");
-        require(token.lastTransferTo() == address(executor), "reward forwarded to executor");
-        require(token.lastTransferAmount() == MINT_AMOUNT, "full amount forwarded");
+        // The reward is minted straight to the executor; there is no forwarding transfer any more.
+        require(mint.lastMintRecipient() == address(executor), "executor named as recipient");
+        require(token.transferCalls() == 0, "no token transfer on the mint path");
         (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), 11, round);
         require(recorded == MINT_AMOUNT && minted, "reward query");
     }
@@ -690,13 +690,12 @@ contract ActionTargetTest is ActionTargetTestBase {
         vm.prank(address(executor));
         actionTarget.mintActionReward(address(token), 11, round);
 
+        // Dedup belongs to Mint; the repeat must be rejected there.
         vm.prank(address(executor));
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.AlreadyMinted.selector, address(token), 11, round)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
         actionTarget.mintActionReward(address(token), 11, round);
         require(mint.mintCalls() == 1, "mint not repeated");
-        require(token.transferCalls() == 1, "transfer not repeated");
+        require(token.transferCalls() == 0, "no token transfer on the mint path");
     }
 
     function testMintActionRewardRejectsUnvotedProposal() external {
@@ -720,24 +719,6 @@ contract ActionTargetTest is ActionTargetTestBase {
         (uint256 amount6, bool minted6) = actionTarget.actionReward(address(token), 11, 6);
         require(amount5 == MINT_AMOUNT && minted5 && amount6 == MINT_AMOUNT && minted6, "per-round dedup");
         require(mint.mintCalls() == 2, "one mint per round");
-    }
-
-    function testMintActionRewardRollsBackOnTransferFailure() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
-        vote.setProposalVoted(address(token), round, 11, true);
-        token.setTransferResult(false);
-        vm.prank(address(executor));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionTargetErrors.TransferFailed.selector, address(token), address(executor), MINT_AMOUNT
-            )
-        );
-        actionTarget.mintActionReward(address(token), 11, round);
-        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
-        require(amount == MINT_AMOUNT && minted == false, "expected amount remains after rollback");
-        require(mint.mintCalls() == 0, "mock mint call rolled back");
     }
 
     function testMintActionRewardPropagatesMintRevert() external {
@@ -770,146 +751,11 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(recorded == MINT_AMOUNT && minted, "recorded amount after mint");
     }
 
-    function testActionRewardZeroAfterBurn() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
-        require(amount == 0 && minted == false, "burned round has nothing mintable");
-    }
-
     function testRewardQueriesDefaultForUnboundRounds() external view {
         (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, 5);
         require(amount == 0 && minted == false, "unbound action defaults");
         (amount, minted) = actionTarget.actionReward(address(token), 11, 0);
         require(amount == 0 && minted == false, "round zero defaults");
-        (uint256 burnedAmount, bool burned) = actionTarget.burnInfo(address(token), 99, 5);
-        require(burnedAmount == 0 && burned == false, "burn defaults");
-    }
-
-    function testBurnRewardIfNeededIsPermissionless() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 1, "burn called once");
-        require(mint.lastBurnCaller() == address(actionTarget), "action target is the caller");
-        require(mint.lastBurnTokenAddress() == address(token), "token forwarded");
-        require(mint.lastBurnRound() == round, "round forwarded");
-        require(mint.lastBurnProposalId() == 11, "actionId forwarded");
-        require(token.transferCalls() == 0, "no token movement");
-        (uint256 recorded, bool burned) = actionTarget.burnInfo(address(token), 11, round);
-        require(recorded == BURN_AMOUNT && burned, "burn ledger");
-    }
-
-    function testBurnRewardIfNeededNoOps() external {
-        uint256 round = 5;
-        executor.setNeedBurn(true);
-
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 99, round);
-        require(mint.burnCalls() == 0, "unbound action no-op even before round end");
-
-        vote.setRoundEnded(round, true);
-        _createAction(11);
-        mint.setProposalReward(address(token), round, 11, 0, false);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 0, "zero amount no-op");
-
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, true);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 0, "already minted no-op");
-
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        executor.setNeedBurn(false);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 0, "judgment false no-op");
-
-        (uint256 recorded, bool burned) = actionTarget.burnInfo(address(token), 11, round);
-        require(recorded == 0 && burned == false, "ledger untouched");
-    }
-
-    function testBurnRewardIfNeededRejectsOpenRound() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, false);
-        executor.setNeedBurn(true);
-        vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidRound.selector, round));
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 0, "no burn on open round");
-    }
-
-    function testBurnRewardIfNeededSkipsJudgmentWhenAlreadyMinted() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, true);
-        vote.setRoundEnded(round, true);
-        executor.setRevertNeedBurn(true);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 0, "no burn when minted");
-    }
-
-    function testBurnRewardIfNeededSkipsJudgmentWhenAmountZero() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, 0, false);
-        vote.setRoundEnded(round, true);
-        executor.setRevertNeedBurn(true);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 0, "no burn when the amount is zero");
-    }
-
-    function testBurnRewardIfNeededPropagatesJudgmentRevert() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, true);
-        executor.setRevertNeedBurn(true);
-        vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(MockExecutor.NeedBurnRewardReverted.selector));
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-    }
-
-    function testBurnRewardIfNeededPropagatesBurnRevert() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-        mint.setRevertOnBurn(true);
-        vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(MockMint.BurnUnmintedProposalRewardReverted.selector));
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        (uint256 recorded, bool burned) = actionTarget.burnInfo(address(token), 11, round);
-        require(recorded == 0 && burned == false, "ledger rolled back");
-    }
-
-    function testBurnRewardIfNeededIsIdempotent() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(mint.burnCalls() == 1, "repeat is a no-op");
     }
 
     function testExecutorGetterReturnsZeroForUnboundAction() external {

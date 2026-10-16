@@ -53,18 +53,6 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         require(recorded == 777 && mintedFlag, "event amount matches the ledger");
     }
 
-    function testRewardBurnedEvent() external {
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, BURN_AMOUNT, false);
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-        vm.expectEmit(true, true, true, true);
-        emit RewardBurned(address(token), 11, round, BURN_AMOUNT);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-    }
-
     function testNoEventOnDuplicateJoin() external {
         _createAction(11);
         phase.setPhase(2);
@@ -83,21 +71,6 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         _clear(11, 1);
         _forceExit(11, 1);
         require(vm.getRecordedLogs().length == 0, "no-op exits emit nothing");
-    }
-
-    function testNoEventsOnBurnNoOps() external {
-        _createAction(11);
-        uint256 round = 5;
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-        vm.recordLogs();
-
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 99, round);
-        mint.setProposalReward(address(token), round, 11, 640, true);
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        require(vm.getRecordedLogs().length == 0, "no events on burn no-ops");
     }
 
     function testEventsCarryJoinRoundNotVoteRound() external {

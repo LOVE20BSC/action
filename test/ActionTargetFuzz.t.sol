@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionTargetErrors} from "../src/interfaces/IActionTarget.sol";
+import {IMintErrors} from "core/src/interfaces/IMint.sol";
 import {MockExecutor} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
@@ -152,24 +153,8 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         require(amountB == MINT_AMOUNT && mintedB, "round B minted");
 
         vm.prank(address(executor));
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.AlreadyMinted.selector, address(token), 11, roundA)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
         actionTarget.mintActionReward(address(token), 11, roundA);
-    }
-
-    function testFuzzBurnAmount(uint96 amount) external {
-        vm.assume(amount != 0);
-        _createAction(11);
-        uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, amount, false);
-        vote.setRoundEnded(round, true);
-        executor.setNeedBurn(true);
-
-        vm.prank(OUTSIDER);
-        actionTarget.burnRewardIfNeeded(address(token), 11, round);
-        (uint256 recorded, bool burned) = actionTarget.burnInfo(address(token), 11, round);
-        require(recorded == amount && burned, "burn amount recorded");
     }
 
     function testFuzzVotedActionsFiltering(uint256 idA, uint256 idB, uint256 idC) external {

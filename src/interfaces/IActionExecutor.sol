@@ -47,11 +47,6 @@ interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExec
         uint256 memberId,
         uint256[] calldata rounds
     ) external returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts);
-    function needBurnReward(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (bool needed);
 
     function currentVoteRound() external view returns (uint256);
     function currentJoinRound() external view returns (uint256);
