@@ -5,6 +5,7 @@ import {RoundHistoryStringArray} from "libs/RoundHistoryStringArray.sol";
 import {RoundHistoryUint256Array} from "libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
+import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 
@@ -31,7 +32,7 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => uint256)) createdRound;
         // actionTokenAddress => round => cached total group action reward denominator
         mapping(address => mapping(uint256 => uint256)) totalGroupActionRewardByRound;
-        // actionTokenAddress => round => actionId => cached action reward total (non-zero entries only)
+        // actionTokenAddress => round => actionId => cached action reward total
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) actionRewardByRound;
 
         // serviceTokenAddress => serviceActionId => round => memberId => settlement record
@@ -49,6 +50,14 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryStringArray.History))) remarksHistory;
         // sourceTokenAddress => groupId => round => source action ids with recipients
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) actionIdsWithRecipients;
+
+        // actionTokenAddress => round => actionId => groupId => frozen generated reward
+        // Load-bearing: the owner weight and the verifier weight are read per group, so the frozen
+        // divisor alone is not enough. Freezing each group's slice too is what keeps every member of
+        // a round dividing by, and being divided into, the same reward book.
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) groupRewardByRound;
+        // actionTokenAddress => round => whether the reward book above has been frozen
+        mapping(address => mapping(uint256 => bool)) rewardBookFrozen;
     }
 
     // Load-bearing: this must stay equal to ActionTarget's own join round (phase - 1). ActionTarget
@@ -66,6 +75,25 @@ library GroupServiceStorage {
             revert IActionExecutorErrors.RoundNotStarted();
         }
         return round;
+    }
+
+    // Load-bearing: every weight in a round must come from the same book the divisor came from.
+    // Before the first settlement the book is the served GroupAction's live ledger; afterwards it is
+    // the frozen snapshot taken by `GroupServiceExecutor._cacheActionRewards`. Reading live after the
+    // freeze is what lets a later ledger move hand one member a second helping of the same reward.
+    function groupReward(
+        Layout storage s,
+        address actionTokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId
+    ) internal view returns (uint256) {
+        if (s.rewardBookFrozen[actionTokenAddress][round]) {
+            return s.groupRewardByRound[actionTokenAddress][round][actionId][groupId];
+        }
+        return IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
+            actionTokenAddress, actionId, round, groupId
+        );
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)

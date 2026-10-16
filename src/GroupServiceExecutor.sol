@@ -247,8 +247,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         address actionTokenAddress,
         uint256 round
     ) public view returns (uint256) {
-        uint256 cached = s.totalGroupActionRewardByRound[actionTokenAddress][round];
-        return cached != 0 ? cached : _computeTotalGroupActionReward(actionTokenAddress, round);
+        if (s.rewardBookFrozen[actionTokenAddress][round]) {
+            return s.totalGroupActionRewardByRound[actionTokenAddress][round];
+        }
+        return _computeTotalGroupActionReward(actionTokenAddress, round);
     }
 
     function serviceRewardByMember(
@@ -355,6 +357,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
             revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
         }
 
+        // Freeze the round's reward book before reading it, so the member who settles first divides
+        // by exactly the numbers every later member will read. A revert below rolls the freeze back.
+        _cacheActionRewards(s.actionTokenAddress[tokenAddress][actionId], round);
+
         Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
         mintAmount = settlement.verifierReward + settlement.ownerReward;
         burnAmount = settlement.ownerBurned;
@@ -376,7 +382,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         s.memberMinted[tokenAddress][actionId][round][memberId] = true;
         s.verifierRewardByMember[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
         s.ownerBurnedByMember[tokenAddress][actionId][round][memberId] = burnAmount;
-        _cacheActionRewards(settlement.actionTokenAddress, round);
 
         if (burnAmount != 0) {
             // forge-lint: disable-next-line(reentrancy-no-eth)
@@ -701,7 +706,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
             cap = Math.mulDiv(govRatio, settlement.govRatioMultiplier, PRECISION);
         }
 
-        if (cap * settlement.denominator >= ownerRatioWeight) {
+        // Load-bearing: compare against the smallest cap that reaches the theoretical reward instead
+        // of cross-multiplying. `cap * denominator >= ownerRatioWeight` is exactly
+        // `cap >= ceil(ownerRatioWeight / denominator)`, and the division form cannot overflow. The
+        // multiplication overflows for an extreme `govRatioMultiplier`, which would revert every
+        // settlement of the action and strand its reward forever.
+        uint256 capForTheoreticalOwnerReward =
+            Math.mulDiv(ownerRatioWeight, 1, settlement.denominator, Math.Rounding.Ceil);
+        if (cap >= capForTheoreticalOwnerReward) {
             settlement.ownerReward = theoreticalOwnerReward;
         } else {
             settlement.ownerReward = Math.mulDiv(settlement.serviceReward, cap, PRECISION);
@@ -766,7 +778,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
         for (uint256 i = 0; i < actionIds.length; i++) {
             uint256 actionId = actionIds[i];
-            ownerWeight += _groupReward(actionTokenAddress, actionId, round, memberId);
+            ownerWeight += s.groupReward(actionTokenAddress, actionId, round, memberId);
             if (_lockedVerifierId(actionTokenAddress, actionId, round) == memberId) {
                 verifierWeight += _actionRewardTotal(actionTokenAddress, actionId, round);
             }
@@ -783,26 +795,38 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         }
     }
 
-    // Load-bearing: the first successful settlement freezes the round's divisor and each action's
-    // total, and every later settlement must read those same numbers. Recomputing would let the
-    // served GroupAction's live reward book move the divisor between two members' settlements,
-    // which shifts payouts silently instead of reverting. Zero amounts stay uncached on purpose:
-    // an action total of 0 is indistinguishable from "not yet cached" and is simply recomputed.
+    // Load-bearing: the first successful settlement freezes the round's whole reward book — the
+    // divisor, each action's total and each group's slice inside it — and every later settlement must
+    // read those same numbers. Recomputing would let the served GroupAction's live reward book move
+    // the divisor between two members' settlements, which shifts payouts silently instead of
+    // reverting. Zeros are frozen as zeros as well: an action or group that earned nothing this round
+    // has to keep earning nothing, otherwise a later ledger move would hand it a second helping of
+    // the same service reward.
     function _cacheActionRewards(
         address actionTokenAddress,
         uint256 round
     ) internal {
-        if (s.totalGroupActionRewardByRound[actionTokenAddress][round] != 0) {
+        if (s.rewardBookFrozen[actionTokenAddress][round]) {
             return;
         }
+        s.rewardBookFrozen[actionTokenAddress][round] = true;
 
+        IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(s.groupActionExecutorAddress);
         uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
         uint256 total = 0;
         for (uint256 i = 0; i < actionIds.length; i++) {
-            uint256 actionTotal = _computeActionRewardTotal(actionTokenAddress, actionIds[i], round);
-            if (actionTotal != 0) {
-                s.actionRewardByRound[actionTokenAddress][round][actionIds[i]] = actionTotal;
+            uint256 actionId = actionIds[i];
+            (uint256[] memory groupIds,) =
+                groupActionExecutor.groupIds(actionTokenAddress, actionId, round, 0, type(uint256).max, false);
+            uint256 actionTotal = 0;
+            for (uint256 j = 0; j < groupIds.length; j++) {
+                uint256 reward = groupActionExecutor.generatedActionRewardByGroupId(
+                    actionTokenAddress, actionId, round, groupIds[j]
+                );
+                s.groupRewardByRound[actionTokenAddress][round][actionId][groupIds[j]] = reward;
+                actionTotal += reward;
             }
+            s.actionRewardByRound[actionTokenAddress][round][actionId] = actionTotal;
             total += actionTotal;
         }
         s.totalGroupActionRewardByRound[actionTokenAddress][round] = total;
@@ -838,9 +862,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 actionId,
         uint256 round
     ) internal view returns (uint256 total) {
-        total = s.actionRewardByRound[actionTokenAddress][round][actionId];
-        if (total != 0) {
-            return total;
+        if (s.rewardBookFrozen[actionTokenAddress][round]) {
+            return s.actionRewardByRound[actionTokenAddress][round][actionId];
         }
         return _computeActionRewardTotal(actionTokenAddress, actionId, round);
     }
@@ -858,17 +881,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
                 actionTokenAddress, actionId, round, groupIds[i]
             );
         }
-    }
-
-    function _groupReward(
-        address actionTokenAddress,
-        uint256 actionId,
-        uint256 round,
-        uint256 groupId
-    ) internal view returns (uint256) {
-        return IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
-            actionTokenAddress, actionId, round, groupId
-        );
     }
 
     function _lockedVerifierId(

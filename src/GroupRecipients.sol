@@ -4,7 +4,6 @@ pragma solidity =0.8.37;
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {IGroupRecipientsEvents, IGroupRecipientsErrors} from "./interfaces/IGroupRecipients.sol";
 import {IGroupServiceExecutorEvents} from "./interfaces/IGroupServiceExecutor.sol";
-import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -212,9 +211,7 @@ library GroupRecipients {
         uint256 ownerReward,
         uint256 ownerWeight
     ) internal view returns (uint256) {
-        uint256 groupReward = IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
-            sourceTokenAddress, sourceActionId, round, groupId
-        );
+        uint256 groupReward = s.groupReward(sourceTokenAddress, sourceActionId, round, groupId);
         if (groupReward == 0) {
             return 0;
         }
