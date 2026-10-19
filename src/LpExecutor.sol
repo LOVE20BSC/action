@@ -308,7 +308,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 effectiveAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(round)
             - _deduction[tokenAddress][actionId][round][memberId];
         uint256 effectiveLpRatio = Math.mulDiv(effectiveAmount, PRECISION, totalEffectiveAmount);
-        uint256 theoreticalReward = Math.mulDiv(proposalReward, effectiveLpRatio, PRECISION);
+        uint256 theoreticalReward = Math.mulDiv(proposalReward, effectiveAmount, totalEffectiveAmount);
 
         uint256 govRatioMultiplier = _govRatioMultiplier[tokenAddress][actionId];
         if (govRatioMultiplier == 0) {
@@ -322,7 +322,11 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 govRatioCap = Math.mulDiv(_calculateGovRatio(tokenAddress, memberId), govRatioMultiplier, PRECISION);
         uint256 cappedRatio = effectiveLpRatio < govRatioCap ? effectiveLpRatio : govRatioCap;
 
-        mintAmount = Math.mulDiv(proposalReward, cappedRatio, PRECISION);
+        // Load-bearing: when the cap does not bind, mint the exact theoretical amount. Re-deriving it
+        // from the truncated ratio can fall short by one unit and turn a no-burn settlement into a
+        // one-unit burn.
+        mintAmount =
+            cappedRatio == effectiveLpRatio ? theoreticalReward : Math.mulDiv(proposalReward, cappedRatio, PRECISION);
         burnAmount = theoreticalReward - mintAmount;
     }
 

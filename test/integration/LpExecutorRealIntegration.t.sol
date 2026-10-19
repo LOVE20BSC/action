@@ -97,7 +97,7 @@ contract LpExecutorRealIntegrationTest {
         (address[] memory tokenList,) = launch.tokens(0, 1, false);
         token = LOVE20Token(tokenList[0]);
 
-        submit.init(address(phase), address(stake), address(memberNFT), 50);
+        submit.init(address(phase), address(stake), address(memberNFT), 5e16);
         stake.init(
             address(phase),
             address(memberNFT),
@@ -107,10 +107,10 @@ contract LpExecutorRealIntegrationTest {
             address(factory),
             1,
             100,
-            10
+            10e18
         );
         vote.init(address(phase), address(stake), address(submit), address(memberNFT));
-        mint.init(address(vote), address(submit), address(launch), address(memberNFT), 50, 100, 100, 2);
+        mint.init(address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17, 2);
 
         actionTarget = new ActionTarget();
         actionTarget.init(address(mint));

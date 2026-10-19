@@ -343,10 +343,13 @@ library GroupActionManager {
         if (actionVotes == 0) {
             return 0;
         }
-        uint256 voteRate = (actionVotes * GroupActionStorage.PRECISION) / totalVotes;
         uint256 totalMinted = IERC20(s.joinTokenAddress[tokenAddress][actionId]).totalSupply();
-        uint256 baseAmount = (totalMinted * s.maxJoinAmountRatio[tokenAddress][actionId]) / GroupActionStorage.PRECISION;
-        return Math.mulDiv(baseAmount, voteRate, GroupActionStorage.PRECISION);
+        uint256 baseAmount = Math.mulDiv(
+            totalMinted,
+            s.maxJoinAmountRatio[tokenAddress][actionId],
+            GroupActionStorage.PRECISION
+        );
+        return Math.mulDiv(baseAmount, actionVotes, totalVotes);
     }
 
     function _validateGroupConfig(GroupConfig calldata config) internal pure {

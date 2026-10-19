@@ -55,7 +55,7 @@ contract ServiceCoreRegressionTest is Test {
         ids[0] = 1;
         _mock(VOTE, abi.encodeWithSignature("votedProposalIds(address,uint256,uint256,uint256,bool)"), abi.encode(ids, uint256(1)));
         mint = new Mint();
-        mint.init(VOTE, SUBMIT, LAUNCH, NFT, 0, 100, 100, 2);
+        mint.init(VOTE, SUBMIT, LAUNCH, NFT, 0, 1e17, 1e17, 2);
         target = new ActionTarget();
         target.init(address(mint));
         _mock(SUBMIT, abi.encodeWithSignature("proposalTarget(address,uint256)"), abi.encode(address(target), TargetMode.Callback));

@@ -703,9 +703,26 @@ contract LpExecutorTest is LpExecutorTestBase {
         (uint256 mint1, uint256 burn1) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
         (uint256 mint2, uint256 burn2) = _mintMemberReward(SECOND_ACTION_ID, 2, 2);
 
-        require(mint1 == 666666666666666666000 && burn1 == 0, "member 1 proportional share");
-        require(mint2 == 333333333333333333000 && burn2 == 0, "member 2 proportional share");
+        require(mint1 == 666666666666666666666 && burn1 == 0, "member 1 proportional share");
+        require(mint2 == 333333333333333333333 && burn2 == 0, "member 2 proportional share");
         require(mint1 + mint2 <= PROPOSAL_REWARD, "not over budget");
+    }
+
+    function testMintMemberRewardKeepsZeroBurnWhenCapDoesNotBind() external {
+        _createActionWithConfig(SECOND_ACTION_ID, 10e18, 0);
+        _atPhaseBlock(3, 3000);
+        _join(SECOND_ACTION_ID, 1, 100e18);
+        _atPhaseBlock(3, 3500);
+        _join(SECOND_ACTION_ID, 2, 100e18);
+        _atPhase(4);
+        _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
+        _fundExecutor(PROPOSAL_REWARD);
+
+        (uint256 mint1, uint256 burn1) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
+        (uint256 mint2, uint256 burn2) = _mintMemberReward(SECOND_ACTION_ID, 2, 2);
+
+        require(mint1 == 666666666666666666666 && burn1 == 0, "truncated ratio must not burn");
+        require(mint2 == 333333333333333333333 && burn2 == 0, "truncated ratio must not burn");
     }
 
     function testMintMemberRewardWithCapDisabled() external {
