@@ -27,6 +27,21 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(actionIds.length == 1 && actionIds[0] == GROUP_ACTION_ID, "action registered");
     }
 
+    function testSetRecipientsRejectsUnknownSourceAction() external {
+        _prepareRecipientsScenario();
+
+        uint256 unknownActionId = 99;
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupRecipientsErrors.UnknownSourceAction.selector, address(token), unknownActionId
+            )
+        );
+        executor.setRecipients(
+            address(token), unknownActionId, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
+        );
+    }
+
     function testSetRecipientsRejectsNonOwner() external {
         _prepareRecipientsScenario();
 

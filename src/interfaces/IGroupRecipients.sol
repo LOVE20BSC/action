@@ -14,6 +14,7 @@ interface IGroupRecipientsEvents {
 
 interface IGroupRecipientsErrors {
     error DistributionOverflow(uint256 configured, uint256 available);
+    error UnknownSourceAction(address sourceTokenAddress, uint256 sourceActionId);
     error TooManyRecipients();
     error ZeroRatio();
     error ArrayLengthMismatch();

@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {IGroupRecipientsEvents, IGroupRecipientsErrors} from "./interfaces/IGroupRecipients.sol";
+import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 import {IGroupServiceExecutorEvents} from "./interfaces/IGroupServiceExecutor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -38,6 +39,16 @@ library GroupRecipients {
         string[] calldata remarks
     ) external {
         s.requireMemberOwner(groupId);
+
+        // Load-bearing: settlement only reads configs for actions this executor created, so any other
+        // key is silently ignored and the owner keeps the whole slice.
+        if (
+            IGroupActionExecutor(s.groupActionExecutorAddress).JOIN_TOKEN_ADDRESS(sourceTokenAddress, sourceActionId)
+                == address(0)
+        ) {
+            revert IGroupRecipientsErrors.UnknownSourceAction(sourceTokenAddress, sourceActionId);
+        }
+
         _validateRecipients(s, recipientIds, ratios, remarks, groupId);
 
         s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].record(round, recipientIds);

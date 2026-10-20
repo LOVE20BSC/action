@@ -103,6 +103,12 @@ abstract contract GroupServiceTestBase {
         launch.setParentToken(address(childToken), address(token));
         launch.setParentToken(address(grandChildToken), address(childToken));
 
+        // The source GroupAction actions exist in the mock's eyes; `setRecipients` now refuses
+        // configurations keyed to actions this executor never created.
+        groupAction.setJoinTokenAddress(address(token), GROUP_ACTION_ID, address(token));
+        groupAction.setJoinTokenAddress(address(token), GROUP_ACTION_ID_B, address(token));
+        groupAction.setJoinTokenAddress(address(childToken), GROUP_ACTION_ID, address(childToken));
+
         executor = _deployExecutor();
         _atPhase(CREATION_PHASE);
     }
