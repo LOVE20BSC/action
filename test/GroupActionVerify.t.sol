@@ -187,6 +187,20 @@ contract GroupActionVerifyTest {
         require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "round stays verified");
     }
 
+    function test_RoundVerifiedCacheShortCircuitsTheGroupWalk() external {
+        _bindVerifier();
+        _submit(GROUP_A, 0, _scores(100, 60, 30));
+        _submit(GROUP_B, 0, _scores(50));
+        require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "verified");
+
+        // Rewind one group's cursor so the derived walk would answer false. Only the cached round flag
+        // can still answer true, which pins that later reads do not re-walk every group.
+        s.verifiedMemberCount[TOKEN][ACTION_ID][ROUND][GROUP_B] = 0;
+        require(
+            GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "cache answers without the walk"
+        );
+    }
+
     function test_SameRoundChurnKeepsFinalOrderVerifiable() external {
         _bindVerifier();
         // Member 2 leaves and re-joins within the round: the round keeps the final arrangement [1, 3, 2].

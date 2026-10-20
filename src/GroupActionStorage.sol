@@ -126,6 +126,10 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeduction;
         // tokenAddress => actionId => round => groupId => verified member count
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
+        // tokenAddress => actionId => round => number of groups whose cursor reached its member count
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCount;
+        // tokenAddress => actionId => round => every group in the round is fully verified
+        mapping(address => mapping(uint256 => mapping(uint256 => bool))) roundVerified;
         // tokenAddress => actionId => round => groupId => accumulated final score
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) finalScoreByGroupId;
         // tokenAddress => actionId => round => total final score across groups

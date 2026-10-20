@@ -84,7 +84,7 @@ library GroupActionVerify {
             });
         }
 
-        _scoreBatch(s, tokenAddress, actionId, round, groupId, verifiedCount, originScores);
+        _scoreBatch(s, tokenAddress, actionId, round, groupId, verifiedCount, memberCount, originScores);
 
         emit IGroupActionVerifyEvents.OriginScoresSubmitted({
             tokenAddress: tokenAddress,
@@ -149,22 +149,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 round
     ) external view returns (bool) {
-        uint256 groupCount = s.groupIdsByRound[tokenAddress][actionId].countByRound(round);
-        if (groupCount == 0) {
-            return true;
-        }
-        (uint256[] memory groupIds, ) =
-            s.groupIdsByRound[tokenAddress][actionId].valuesByRound(round, 0, groupCount, false);
-        for (uint256 i = 0; i < groupIds.length; i++) {
-            uint256 groupId = groupIds[i];
-            if (
-                s.verifiedMemberCount[tokenAddress][actionId][round][groupId]
-                    != s.memberIdsByGroupId[tokenAddress][actionId][groupId].countByRound(round)
-            ) {
-                return false;
-            }
-        }
-        return true;
+        return s.roundVerified[tokenAddress][actionId][round];
     }
 
     function lockedVerifierId(
@@ -446,6 +431,7 @@ library GroupActionVerify {
         uint256 round,
         uint256 groupId,
         uint256 verifiedCount,
+        uint256 memberCount,
         uint256[] calldata originScores
     ) internal {
         (uint256[] memory memberIds, ) =
@@ -459,7 +445,28 @@ library GroupActionVerify {
         }
         s.finalScoreByGroupId[tokenAddress][actionId][round][groupId] = groupFinal;
         s.totalFinalScore[tokenAddress][actionId][round] = totalFinal;
-        s.verifiedMemberCount[tokenAddress][actionId][round][groupId] = verifiedCount + originScores.length;
+        uint256 newVerifiedCount = verifiedCount + originScores.length;
+        s.verifiedMemberCount[tokenAddress][actionId][round][groupId] = newVerifiedCount;
+        _markGroupVerified(s, tokenAddress, actionId, round, newVerifiedCount, memberCount);
+    }
+
+    function _markGroupVerified(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 verifiedCount,
+        uint256 memberCount
+    ) internal {
+        if (verifiedCount != memberCount) {
+            return;
+        }
+        // Load-bearing: a round only ever becomes verified through this branch, and `isRoundVerified`
+        // no longer re-derives it. A missed write leaves the round unsettled forever with no revert.
+        uint256 verifiedGroups = ++s.verifiedGroupCount[tokenAddress][actionId][round];
+        if (verifiedGroups == s.groupIdsByRound[tokenAddress][actionId].countByRound(round)) {
+            s.roundVerified[tokenAddress][actionId][round] = true;
+        }
     }
 
     function _scoreMember(
