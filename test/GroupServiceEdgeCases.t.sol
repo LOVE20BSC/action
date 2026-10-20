@@ -45,7 +45,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         require(token.balanceOf(address(executor)) == 0, "executor drained by the verifier alone");
     }
 
-    function testLateJoinerCannotSettleTheOriginalRound() external {
+    function testLateJoinHoldsFromThatRoundButNotTheEarlierOne() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
@@ -54,12 +54,18 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _joinService(GROUP_ID);
         _atPhase(VERIFY_PHASE);
 
-        // A join after the window snapshots the later round, not the vote round.
+        // A service proposal stays joinable after its creation round: the snapshot starts at the round
+        // joined and runs until exit, so this join covers SERVICE_ROUND + 1 onwards.
         _qualifyGroupOwner(GROUP_OWNER_B_ID);
-        _joinService(GROUP_OWNER_B_ID);
+        vm.prank(GROUP_OWNER_B);
+        executor.join(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
         require(
-            !executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID),
-            "late join is invisible in the original round"
+            executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID) == false,
+            "late join does not reach back to the creation round"
+        );
+        require(
+            executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_OWNER_B_ID),
+            "late join holds from the joined round on"
         );
 
         _setGroupLedger(

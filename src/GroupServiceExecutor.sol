@@ -150,16 +150,18 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 memberId
     ) external nonReentrant {
         s.requireMemberOwner(memberId);
+
+        uint256 round = s.currentJoinRound();
+
         if (IActionTarget(s.actionTarget).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
             revert AlreadyJoined();
         }
 
         address actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
-        if (!_isQualified(actionTokenAddress, s.createdRound[serviceTokenAddress][serviceActionId], memberId)) {
+        if (!_isQualified(actionTokenAddress, round, memberId)) {
             revert NoActiveGroups();
         }
 
-        uint256 round = s.currentJoinRound();
         IActionTarget(s.actionTarget).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
 
         emit Joined({
