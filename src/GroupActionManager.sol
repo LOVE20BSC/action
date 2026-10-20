@@ -53,6 +53,8 @@ library GroupActionManager {
         }
 
         s.joinTokenAddress[tokenAddress][actionId] = joinTokenAddress;
+        // Load-bearing: written only here. Refunds read this value instead of a per-group ledger, so a
+        // later write while groups are active would over-refund out of the other groups' stake.
         s.activationStakeAmount[tokenAddress][actionId] = activationStakeAmount;
         s.maxJoinAmountRatio[tokenAddress][actionId] = maxJoinAmountRatio;
         s.activationMinGovRatio[tokenAddress][actionId] = activationMinGovRatio;
@@ -79,6 +81,13 @@ library GroupActionManager {
         GroupConfig calldata config
     ) external {
         _requireGroupOwner(s, groupId);
+
+        // Activation is only meaningful for an action this executor already created: before the
+        // creation callback the activation stake is still zero and the gov-ratio floor is unset, so
+        // allowing it would let a group join later without ever paying the stake.
+        if (s.createdRound[tokenAddress][actionId] == 0) {
+            revert IActionExecutorErrors.InvalidRound(0);
+        }
 
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (group.active) {

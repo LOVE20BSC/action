@@ -330,4 +330,98 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector));
         executor.onProposalCreated(address(token), ACTION_2, seven);
     }
+
+    function testActivateGroupRevertsForUncreatedAction() external {
+        _atPhase(3);
+        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+
+        // Without a creation callback the activation stake and the gov floor are still zero, so a
+        // pre-activation would silently enter the action without ever paying the stake.
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 0));
+        executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
+
+        require(!executor.isGroupActive(address(token), ACTION_2, GROUP_8), "no activation recorded");
+        require(!executor.hasActiveGroups(address(token), GROUP_8), "no qualification granted");
+    }
+
+    function testDeactivateRefundsThePaidStake() external {
+        _openJoinPhase();
+        uint256 balanceBefore = token.balanceOf(GROUP_OWNER);
+
+        _atPhase(4);
+        _deactivateGroup(GROUP_ID);
+
+        require(
+            token.balanceOf(GROUP_OWNER) == balanceBefore + ACTIVATION_STAKE, "refund equals the paid stake"
+        );
+        require(executor.staked(address(token), ACTION_ID) == 0, "action stake ledger cleared");
+        require(executor.totalStaked(address(token)) == 0, "token stake ledger cleared");
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member stake ledger cleared");
+    }
+
+    function testPreActivationCannotDrainAnotherGroupsStake() external {
+        _atPhase(3);
+        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 4);
+
+        // The attacker pays the stake on a real action, which is what funds the shared
+        // (token, groupId) ledger a forged A2 refund would have drawn from.
+        _activateGroup();
+        require(
+            executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "attacker paid on A1"
+        );
+
+        // A2 does not exist yet: pre-activating it must revert, otherwise it enters the action
+        // for free and later refunds at the configured amount it never paid.
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 0));
+        executor.activateGroup(address(token), ACTION_2, GROUP_ID, _defaultConfig());
+
+        // A2 is created and an honest group pays the stake.
+        _createAction(ACTION_2);
+        vm.prank(GROUP_OWNER);
+        executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
+        require(executor.staked(address(token), ACTION_2) == ACTIVATION_STAKE, "honest stake recorded");
+
+        // The attacker holds no position on A2, so there is nothing to deactivate or refund.
+        _atPhase(4);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));
+        executor.deactivateGroup(address(token), ACTION_2, GROUP_ID);
+
+        require(executor.staked(address(token), ACTION_2) == ACTIVATION_STAKE, "honest stake intact");
+        require(executor.totalStaked(address(token)) == ACTIVATION_STAKE * 2, "both stakes held");
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "A1 stake untouched");
+    }
+
+    function testDeactivateThenReactivateKeepsTheStakeLedgerClosed() external {
+        _openJoinPhase();
+        require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "paid on first activation");
+
+        _atPhase(4);
+        uint256 balanceBefore = token.balanceOf(GROUP_OWNER);
+        _deactivateGroup(GROUP_ID);
+        require(
+            token.balanceOf(GROUP_OWNER) == balanceBefore + ACTIVATION_STAKE, "refunded on first deactivation"
+        );
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed");
+
+        _atPhase(5);
+        _activateGroupWith(GROUP_ID, _defaultConfig());
+        require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "paid on reactivation");
+        require(
+            executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "member ledger reopened"
+        );
+
+        _atPhase(6);
+        balanceBefore = token.balanceOf(GROUP_OWNER);
+        _deactivateGroup(GROUP_ID);
+        require(
+            token.balanceOf(GROUP_OWNER) == balanceBefore + ACTIVATION_STAKE, "refunded on second deactivation"
+        );
+        require(executor.staked(address(token), ACTION_ID) == 0, "action ledger closed");
+        require(executor.totalStaked(address(token)) == 0, "token ledger closed");
+        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed again");
+    }
 }
