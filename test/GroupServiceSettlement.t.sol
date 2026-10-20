@@ -9,14 +9,17 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
     function testSettlementSplitsBetweenVerifierAndOwner() external {
         _standardScenario();
 
-        // The owner settles first: the mint happened, the denominator is frozen.
+        // The owner settles first: the mint happened, and the denominator is read from the live ledger.
         uint256 ownerBefore = token.balanceOf(GROUP_OWNER);
         (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
         require(ownerMint == 450e18, "owner half of the service reward");
         require(ownerBurn == 0, "cap off, nothing burned");
         require(token.balanceOf(GROUP_OWNER) - ownerBefore == 450e18, "owner paid out");
         require(actionTarget.mintRewardCalls() == 1, "reward minted once");
-        require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18, "denominator cached");
+        require(
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18,
+            "denominator tracks the live ledger"
+        );
 
         // The verifier settles second: reads the already minted reward.
         (uint256 verifierMint, uint256 verifierBurn) = _settleService(VERIFIER_ID);
@@ -264,28 +267,157 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(mintAmount == 450e18 && burnAmount == 0, "owner paid on the filtered denominator");
     }
 
-    function testSettlementCachesDenominatorAndActionTotals() external {
+    /// @dev Once Mint has prepared the action token's round every action reward is final, so the
+    ///      divisor must come from the cache instead of another walk over the round's actions.
+    function testDivisorIsServedFromTheCacheOnceTheRoundIsPrepared() external {
+        _standardScenario();
+        mint.setRewardPrepared(address(token), SERVICE_ROUND, true);
+
+        (uint256 verifierMint,) = _settleService(VERIFIER_ID);
+        require(verifierMint == 450e18, "verifier half");
+
+        // Blocking the live reads proves where the number came from: a recomputation would revert.
+        groupAction.setRewardReadsBlocked(true);
+        require(
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
+            "divisor served from the cache"
+        );
+    }
+
+    /// @dev The cache gate must read the action token's round, not the service token's. A service
+    ///      proposal on the parent leaves the child's round open; caching there would freeze the
+    ///      divisor while the child's live reward can still move.
+    function testDivisorCacheRequiresTheActionTokenRound() external {
+        address serviceTokenAddress = address(token);
+        address actionTokenAddress = address(childToken);
+        _atPhase(CREATION_PHASE);
+        _createServiceActionOn(serviceTokenAddress, actionTokenAddress, SERVICE_ACTION_ID, 0, PRECISION / 2);
+        _atPhase(JOIN_PHASE);
+        address[] memory executors = new address[](1);
+        executors[0] = address(groupAction);
+        actionTarget.setVotedActions(actionTokenAddress, SERVICE_ROUND, _ids(GROUP_ACTION_ID), executors);
+        groupAction.setHasActiveGroups(actionTokenAddress, GROUP_ID, true);
+        groupAction.setVerifierApplication(actionTokenAddress, GROUP_ACTION_ID, VERIFIER_ID, 1);
+        _joinService(GROUP_ID);
+        _joinService(VERIFIER_ID);
+        groupAction.setGroupIds(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID));
+        groupAction.setGroupReward(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, GROUP_ID, GROUP_REWARD);
+        groupAction.setLockedVerifierId(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+        _armServiceRewardOn(SERVICE_ACTION_ID, SERVICE_REWARD);
+        _atPhase(MINT_PHASE);
+
+        // The service token's round is prepared; the action token's is not.
+        mint.setRewardPrepared(serviceTokenAddress, SERVICE_ROUND, true);
+        require(!mint.isRewardPrepared(actionTokenAddress, SERVICE_ROUND), "action token round stays open");
+
+        _settleService(GROUP_ID);
+        groupAction.setActionReward(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, 400e18);
+        require(
+            executor.totalGroupActionReward(actionTokenAddress, SERVICE_ROUND) == 400e18,
+            "divisor stays live while the action token round is unprepared"
+        );
+
+        // Once the action token's round is prepared, the next settlement writes the cache.
+        mint.setRewardPrepared(actionTokenAddress, SERVICE_ROUND, true);
+        _settleService(VERIFIER_ID);
+        groupAction.setRewardReadsBlocked(true);
+        require(
+            executor.totalGroupActionReward(actionTokenAddress, SERVICE_ROUND) == 400e18,
+            "divisor served from the cache"
+        );
+    }
+
+    /// @dev The owner weight is the sum of floored per-group slices, so it can stay below the
+    ///      action-level divisor. The difference is not redistributed; it stays in the executor.
+    function testOwnerFloorResidueStaysInTheExecutor() external {
+        _atPhase(CREATION_PHASE);
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
+        _atPhase(JOIN_PHASE);
+        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
+        _qualifyGroupOwner(GROUP_ID);
+        _qualifyGroupOwner(GROUP_OWNER_B_ID);
+        _joinService(GROUP_ID);
+        _joinService(GROUP_OWNER_B_ID);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(1, 1), VERIFIER_ID);
+        // Divisor 3, two slices of floor(3 * 1 / 2) = 1 each: one wei of the action reward is
+        // unallocated at the group level, so the owner weights cover 2/3 of the divisor.
+        groupAction.setActionReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, 3);
+        _armServiceReward(SERVICE_REWARD);
+        _atPhase(MINT_PHASE);
+
+        (uint256 first,) = _settleService(GROUP_ID);
+        (uint256 second,) = _settleService(GROUP_OWNER_B_ID);
+        require(first == 300e18 && second == 300e18, "each owner takes one third");
+        require(
+            token.balanceOf(address(executor)) == 300e18,
+            "the unallocated third stays in the executor"
+        );
+    }
+
+    function testDivisorFollowsTheLiveReward() external {
         _standardScenario();
 
-        // First settlement freezes the round divisor and each action total.
-        _settleService(VERIFIER_ID);
-        require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD, "divisor cached");
-
-        // The served ledger moves afterwards: a new group joins action 21.
-        groupAction.setGroupIds(address(token), GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID, GROUP_OWNER_B_ID));
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID, 400e18);
-
-        // The owner settles on the cached numbers, not the live book.
-        (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        require(mintAmount == 450e18, "owner reward uses the frozen divisor");
-        require(burnAmount == 0, "nothing burned");
+        (uint256 verifierMint,) = _settleService(VERIFIER_ID);
+        require(verifierMint == 450e18, "verifier half");
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD, "view reads the cache too"
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
+            "divisor is the served action's reward"
         );
+
+        // The served action's reward moves. Every action of the round divides the same pool by the same
+        // eligible votes, so the divisor and the owner's slice rescale together and the share holds.
+        groupAction.setActionReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, 400e18);
+        require(
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 400e18,
+            "divisor tracks the live reward"
+        );
+
+        (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
+        require(mintAmount == 450e18, "share is invariant to the reward's scale");
+        require(burnAmount == 0, "nothing burned");
         require(actionTarget.mintRewardCalls() == 1, "still a single mint");
     }
 
-    function testSettlementKeepsZeroDenominatorUncached() external {
+    /// @dev The divisor costs one read per voted action, not one per group: a round whose groups far
+    ///      outnumber its actions settles like any other.
+    function testDivisorCostsOneReadPerAction() external {
+        _atPhase(CREATION_PHASE);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
+        _atPhase(JOIN_PHASE);
+        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
+        _qualifyGroupOwner(GROUP_ID);
+        _qualifyCandidate(VERIFIER_ID);
+        _joinService(GROUP_ID);
+        _joinService(VERIFIER_ID);
+
+        uint256 groupCount = 101;
+        uint256[] memory groupIds = new uint256[](groupCount);
+        uint256[] memory rewards = new uint256[](groupCount);
+        groupIds[0] = GROUP_ID;
+        rewards[0] = GROUP_REWARD;
+        for (uint256 i = 1; i < groupCount; i++) {
+            groupIds[i] = 1000 + i;
+            rewards[i] = GROUP_REWARD;
+        }
+        _setGroupLedger(GROUP_ACTION_ID, groupIds, rewards, VERIFIER_ID);
+        _armServiceReward(SERVICE_REWARD);
+        _atPhase(MINT_PHASE);
+
+        groupAction.setGroupSliceReadsBlocked(true);
+        require(
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == groupCount * GROUP_REWARD,
+            "divisor covers every group without walking them"
+        );
+        groupAction.setGroupSliceReadsBlocked(false);
+
+        (uint256 ownerMint,) = _settleService(GROUP_ID);
+        require(ownerMint > 0, "owner paid on a wide round");
+
+        (uint256 verifierMint,) = _settleService(VERIFIER_ID);
+        require(verifierMint == 450e18, "verifier half on the same divisor");
+    }
+
+    function testZeroDenominatorBlocksSettlementUntilTheLedgerPays() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
@@ -299,7 +431,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
 
-        // The zero divisor is not cached: it is recomputed on every read.
+        // The zero divisor is not cached: the failed settlement leaves no state, so the read recomputes.
         require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 0, "zero denominator");
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
@@ -316,9 +448,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _standardScenario();
 
         // Joined through the candidate branch but neither owner nor verifier.
+        _atPhase(JOIN_PHASE);
         _qualifyCandidate(MEMBER1_ID);
         vm.prank(MEMBER1);
         executor.join(address(token), SERVICE_ACTION_ID, MEMBER1_ID);
+        _atPhase(MINT_PHASE);
 
         (uint256 verifierReward, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
             executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER1_ID);
@@ -339,27 +473,6 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, MEMBER2_ID, SERVICE_ROUND);
-    }
-
-    function testZeroDenominatorBlocksSettlement() external {
-        _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
-        _atPhase(JOIN_PHASE);
-        _qualifyGroupOwner(GROUP_ID);
-        _joinService(GROUP_ID);
-        _armServiceReward(SERVICE_REWARD);
-        _atPhase(MINT_PHASE);
-
-        // No group action produced a reward, so the divisor is zero and nothing can be paid out.
-        vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
-
-        // Once a group action yields a reward the divisor exists and the round settles normally.
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
-        (uint256 ownerMint,) = _settleService(GROUP_ID);
-        require(ownerMint > 0, "settles once the divisor exists");
     }
 
     function testSettlementRoundWindow() external {

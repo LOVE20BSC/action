@@ -8,6 +8,7 @@ import {
     MockGroupServiceStake,
     MockGroupServiceLaunch,
     MockGroupServiceActionTarget,
+    MockGroupServiceMint,
     MockGroupServiceGroupActionExecutor,
     MockGroupServiceToken
 } from "./mocks/GroupServiceMocks.sol";
@@ -73,6 +74,7 @@ abstract contract GroupServiceTestBase {
     MockGroupServiceStake internal stake;
     MockGroupServiceLaunch internal launch;
     MockGroupServiceActionTarget internal actionTarget;
+    MockGroupServiceMint internal mint;
     MockGroupServiceGroupActionExecutor internal groupAction;
     MockGroupServiceToken internal token;
     MockGroupServiceToken internal childToken;
@@ -84,6 +86,7 @@ abstract contract GroupServiceTestBase {
         stake = new MockGroupServiceStake();
         launch = new MockGroupServiceLaunch();
         actionTarget = new MockGroupServiceActionTarget();
+        mint = new MockGroupServiceMint();
         groupAction = new MockGroupServiceGroupActionExecutor();
         token = new MockGroupServiceToken();
         childToken = new MockGroupServiceToken();
@@ -99,6 +102,7 @@ abstract contract GroupServiceTestBase {
         stake.setPhaseAddress(address(phase));
         stake.setLaunchAddress(address(launch));
         actionTarget.setPhaseAddress(address(phase));
+        actionTarget.setMintAddress(address(mint));
 
         launch.setParentToken(address(childToken), address(token));
         launch.setParentToken(address(grandChildToken), address(childToken));

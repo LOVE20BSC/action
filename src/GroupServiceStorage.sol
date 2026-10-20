@@ -20,6 +20,7 @@ library GroupServiceStorage {
         address memberNFTAddress;
         address phaseAddress;
         address launchAddress;
+        address mintAddress;
         bool initialized;
 
         // serviceTokenAddress => serviceActionId => action token address
@@ -30,10 +31,8 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => uint256)) ratioForPublicVerifier;
         // serviceTokenAddress => serviceActionId => creation vote round
         mapping(address => mapping(uint256 => uint256)) createdRound;
-        // actionTokenAddress => round => cached total group action reward denominator
+        // actionTokenAddress => round => cached divisor (0 = not cached)
         mapping(address => mapping(uint256 => uint256)) totalGroupActionRewardByRound;
-        // actionTokenAddress => round => actionId => cached action reward total
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) actionRewardByRound;
 
         // serviceTokenAddress => serviceActionId => round => memberId => settlement record
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) memberMinted;
@@ -50,14 +49,6 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryStringArray.History))) remarksHistory;
         // sourceTokenAddress => groupId => round => source action ids with recipients
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) actionIdsWithRecipients;
-
-        // actionTokenAddress => round => actionId => groupId => frozen generated reward
-        // Load-bearing: the owner weight and the verifier weight are read per group, so the frozen
-        // divisor alone is not enough. Freezing each group's slice too is what keeps every member of
-        // a round dividing by, and being divided into, the same reward book.
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) groupRewardByRound;
-        // actionTokenAddress => round => whether the reward book above has been frozen
-        mapping(address => mapping(uint256 => bool)) rewardBookFrozen;
     }
 
     // Load-bearing: this must stay equal to ActionTarget's own join round (phase - 1). ActionTarget
@@ -77,10 +68,27 @@ library GroupServiceStorage {
         return round;
     }
 
-    // Load-bearing: every weight in a round must come from the same book the divisor came from.
-    // Before the first settlement the book is the served GroupAction's live ledger; afterwards it is
-    // the frozen snapshot taken by `GroupServiceExecutor._cacheActionRewards`. Reading live after the
-    // freeze is what lets a later ledger move hand one member a second helping of the same reward.
+    function cachedDenominator(
+        Layout storage s,
+        address actionTokenAddress,
+        uint256 round
+    ) internal view returns (uint256) {
+        return s.totalGroupActionRewardByRound[actionTokenAddress][round];
+    }
+
+    function cacheDenominator(
+        Layout storage s,
+        address actionTokenAddress,
+        uint256 round,
+        uint256 value
+    ) internal {
+        s.totalGroupActionRewardByRound[actionTokenAddress][round] = value;
+    }
+
+    // Load-bearing: the divisor cached by the executor may only be paired with weights from the same
+    // final ledger. The cache is written only when the action token's round is prepared and the mint
+    // window is open (verification closed); caching earlier pairs a frozen divisor with live weights
+    // and pays a member twice without reverting.
     function groupReward(
         Layout storage s,
         address actionTokenAddress,
@@ -88,9 +96,6 @@ library GroupServiceStorage {
         uint256 round,
         uint256 groupId
     ) internal view returns (uint256) {
-        if (s.rewardBookFrozen[actionTokenAddress][round]) {
-            return s.groupRewardByRound[actionTokenAddress][round][actionId][groupId];
-        }
         return IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
             actionTokenAddress, actionId, round, groupId
         );

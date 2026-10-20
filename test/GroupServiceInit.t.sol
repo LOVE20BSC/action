@@ -45,6 +45,13 @@ contract GroupServiceInitTest is GroupServiceTestBase {
         require(!fresh.initialized(), "zero launch rejected too");
 
         broken.setLaunchAddress(address(launch));
+
+        actionTarget.setMintAddress(address(0));
+        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidAddress.selector));
+        fresh.init(address(actionTarget), address(broken), address(groupAction));
+        require(!fresh.initialized(), "zero mint leaves the flag clear");
+        actionTarget.setMintAddress(address(mint));
+
         fresh.init(address(actionTarget), address(broken), address(groupAction));
         require(fresh.initialized(), "retry after fixing the dependency succeeds");
     }

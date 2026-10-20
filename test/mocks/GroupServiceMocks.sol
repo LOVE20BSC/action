@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {VerifierApplication} from "../../src/interfaces/IGroupActionVerify.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// @notice Phase mock: GroupService only reads `currentPhase`.
 contract MockGroupServicePhase {
@@ -89,6 +90,19 @@ contract MockGroupServiceLaunch {
     }
 }
 
+/// @notice Mint mock: only the round-preparation flag the service executor reads.
+contract MockGroupServiceMint {
+    mapping(address => mapping(uint256 => bool)) internal _prepared;
+
+    function setRewardPrepared(address tokenAddress, uint256 round, bool prepared) external {
+        _prepared[tokenAddress][round] = prepared;
+    }
+
+    function isRewardPrepared(address tokenAddress, uint256 round) external view returns (bool) {
+        return _prepared[tokenAddress][round];
+    }
+}
+
 /// @notice ActionTarget mock. Replicates the behaviors GroupService leans on: the
 ///         join round is `currentPhase - 1` with a `JoinNotOpen` window
 ///         (`currentRound > createdRound`), round snapshots keep history —
@@ -97,6 +111,7 @@ contract MockGroupServiceActionTarget {
     error JoinNotOpen(address tokenAddress, uint256 actionId, uint256 currentRound, uint256 createdRound);
 
     address public phaseAddress;
+    address public mintAddress;
 
     // tokenAddress => actionId => creation vote round
     mapping(address => mapping(uint256 => uint256)) internal _createdRound;
@@ -126,6 +141,10 @@ contract MockGroupServiceActionTarget {
 
     function setPhaseAddress(address phaseAddress_) external {
         phaseAddress = phaseAddress_;
+    }
+
+    function setMintAddress(address mintAddress_) external {
+        mintAddress = mintAddress_;
     }
 
     function setBoundExecutor(address tokenAddress, uint256 actionId, address executor_) external {
@@ -268,8 +287,13 @@ contract MockGroupServiceGroupActionExecutor {
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _applicationId;
     // tokenAddress => actionId => round => group ids
     mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) internal _groupIds;
-    // tokenAddress => actionId => round => groupId => generated action reward
+    bool internal _rewardReadsBlocked;
+    bool internal _groupSliceReadsBlocked;
+    // tokenAddress => actionId => round => groupId => group score
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _groupReward;
+    // tokenAddress => actionId => round => the action's own reward; zero means "equal to the group
+    // scores it is split by", which keeps the default ledger self-consistent
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _actionReward;
     // tokenAddress => actionId => round => locked verifier memberId
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _lockedVerifierId;
     // tokenAddress => total staked
@@ -277,8 +301,19 @@ contract MockGroupServiceGroupActionExecutor {
     // tokenAddress => memberId => total staked
     mapping(address => mapping(uint256 => uint256)) internal _totalStakedByMemberId;
 
+    // tokenAddress => actionId => join token address (zero = action never created)
+    mapping(address => mapping(uint256 => address)) internal _joinTokenAddress;
+
     function setHasActiveGroups(address tokenAddress, uint256 memberId, bool active) external {
         _activeGroups[tokenAddress][memberId] = active;
+    }
+
+    function setJoinTokenAddress(address tokenAddress, uint256 actionId, address joinTokenAddress) external {
+        _joinTokenAddress[tokenAddress][actionId] = joinTokenAddress;
+    }
+
+    function JOIN_TOKEN_ADDRESS(address tokenAddress, uint256 actionId) external view returns (address) {
+        return _joinTokenAddress[tokenAddress][actionId];
     }
 
     function setVerifierApplication(address tokenAddress, uint256 actionId, uint256 memberId, uint256 applicationId)
@@ -297,6 +332,22 @@ contract MockGroupServiceGroupActionExecutor {
         external
     {
         _groupReward[tokenAddress][actionId][round][groupId] = reward;
+    }
+
+    function setActionReward(address tokenAddress, uint256 actionId, uint256 round, uint256 reward) external {
+        _actionReward[tokenAddress][actionId][round] = reward;
+    }
+
+    /// @dev Test device: makes every live reward read revert, so a caller that is supposed to answer
+    ///      from its own cache is proven not to walk the ledger again.
+    function setRewardReadsBlocked(bool blocked) external {
+        _rewardReadsBlocked = blocked;
+    }
+
+    /// @dev Test device: blocks only the per-group slice read, so a divisor that walks groups reverts
+    ///      while the action-level read keeps working.
+    function setGroupSliceReadsBlocked(bool blocked) external {
+        _groupSliceReadsBlocked = blocked;
     }
 
     function setLockedVerifierId(address tokenAddress, uint256 actionId, uint256 round, uint256 verifierId) external {
@@ -353,7 +404,47 @@ contract MockGroupServiceGroupActionExecutor {
         view
         returns (uint256)
     {
-        return _groupReward[tokenAddress][actionId][round][groupId];
+        require(!_rewardReadsBlocked && !_groupSliceReadsBlocked, "live group read");
+        return _sliceReward(tokenAddress, actionId, round, groupId, _liveActionReward(tokenAddress, actionId, round));
+    }
+
+    function generatedActionReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256) {
+        require(!_rewardReadsBlocked, "live reward read");
+        return _liveActionReward(tokenAddress, actionId, round);
+    }
+
+    function _liveActionReward(address tokenAddress, uint256 actionId, uint256 round) private view returns (uint256) {
+        uint256 pinned = _actionReward[tokenAddress][actionId][round];
+        if (pinned != 0) {
+            return pinned;
+        }
+        return _scoreTotal(tokenAddress, actionId, round);
+    }
+
+    function _scoreTotal(address tokenAddress, uint256 actionId, uint256 round) private view returns (uint256 total) {
+        uint256[] storage ids = _groupIds[tokenAddress][actionId][round];
+        for (uint256 i = 0; i < ids.length; i++) {
+            total += _groupReward[tokenAddress][actionId][round][ids[i]];
+        }
+    }
+
+    function _sliceReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 actionReward
+    ) private view returns (uint256) {
+        uint256 totalScore = _scoreTotal(tokenAddress, actionId, round);
+        uint256 score = _groupReward[tokenAddress][actionId][round][groupId];
+        if (totalScore == 0 || score == 0) {
+            return 0;
+        }
+        return Math.mulDiv(actionReward, score, totalScore);
     }
 
     function lockedVerifierId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {

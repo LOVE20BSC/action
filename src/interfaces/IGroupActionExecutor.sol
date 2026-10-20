@@ -50,4 +50,10 @@ interface IGroupActionExecutor is
         uint256 round,
         uint256 groupId
     ) external view returns (uint256);
+    
+    function generatedActionReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256);
 }

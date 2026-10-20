@@ -12,7 +12,7 @@ import {TargetMode} from "core/src/interfaces/ISubmit.sol";
 /// @notice Real accounting contracts and tokens; only peripheral reads are mocked.
 /// @dev Fixed Submit/Vote callbacks are impersonated to set up normal lifecycle state. The
 ///      regression case drives a real burn against the served community token to move its live
-///      reward book after the service round was frozen.
+///      reward book after the service round's divisor was first read.
 contract ServiceCoreRegressionTest is Test {
     ActionTarget target;
     GroupActionExecutor group;
@@ -116,20 +116,22 @@ contract ServiceCoreRegressionTest is Test {
         vm.stopPrank();
         _phase(5);
     }
-    /// @notice Regression for the live-numerator / frozen-divisor split: a real burn against the
-    ///         served community token moves its live reward book after the first settlement froze
-    ///         the round, and the second owner used to be paid off the moved book.
-    function testRegression_RealSourceBurnCannotOverpayFrozenServiceBudget() external {
+    /// @notice Regression for the live-numerator / stale-divisor split: a real burn against the served
+    ///         community token moves its live reward between the two owners' settlements, and the
+    ///         second owner used to be paid off the moved number while the divisor stayed behind.
+    /// @dev Both sides are read live now, so the move rescales them together and the two owners keep
+    ///      the same share of the same minted budget.
+    function testRegression_RealSourceBurnCannotOverpayServiceBudget() external {
         assertFalse(mint.isRewardPrepared(address(child), 2));
         vm.prank(ALICE);
         (uint256 first,) = service.mintMemberReward(address(parent), 1, 1, 2);
         assertEq(first, 45000);
 
-        // The served action's live ledger grows after the round was frozen.
+        // Burning the community token frees supply headroom, so the served action's live reward grows.
         child.burn(90000);
-        assertEq(service.totalGroupActionReward(address(child), 2), 90000);
+        assertGt(service.totalGroupActionReward(address(child), 2), 90000);
 
-        // The second owner reads the frozen book, not the live one.
+        // The second owner divides by the same moved number, so the share is unchanged.
         (uint256 second,,) = service.memberReward(address(parent), 1, 2, 2);
         assertEq(second, 45000);
 

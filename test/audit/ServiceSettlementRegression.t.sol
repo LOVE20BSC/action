@@ -6,12 +6,12 @@ import {GroupServiceTestBase} from "../GroupServiceTestBase.sol";
 
 /// @notice Regression suite for the three settlement defects found by the audit repros.
 /// @dev Mutable source mocks isolate accounting; not a full Core exploit. Each case used to
-///      demonstrate a live-book read that could overpay or brick the action, and now pins the
-///      frozen-book behaviour that prevents it.
+///      demonstrate a live-numerator / snapshot-divisor read that could overpay the action.
 contract ServiceSettlementRegressionTest is GroupServiceTestBase {
-    /// @dev Live owner weight against a frozen divisor: the second owner used to be able to spend
-    ///      past the service reward because their slice was re-read from the served ledger.
-    function testRegression_FrozenBookBlocksOwnerOverpay() external {
+    /// @dev Reading the owner weight from the served ledger while the divisor stayed behind let the
+    ///      second owner spend past the service reward. Both sides are read live now, and a reward
+    ///      move rescales them together.
+    function testRegression_RewardMoveCannotOverpayTheBudget() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, 0);
         _atPhase(JOIN_PHASE);
@@ -28,14 +28,16 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         (uint256 first,) = _settleService(GROUP_ID);
         require(first == 450e18, "first owner receives half");
 
-        // The served ledger doubles after the first settlement froze the round.
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, GROUP_ID, 100e18);
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID, 100e18);
+        // The served action's own reward doubles between the two settlements. Every action of the round
+        // divides the same pool, so the divisor and both owners' slices rescale together.
+        groupAction.setActionReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, 200e18);
 
         (uint256 second,) = _settleService(GROUP_OWNER_B_ID);
-        require(second == 450e18, "second owner reads the frozen book");
+        require(second == 450e18, "second owner keeps the same share");
         require(first + second == SERVICE_REWARD, "budget held");
-        require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18, "frozen divisor persists");
+        require(
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 200e18, "divisor follows the live reward"
+        );
     }
 
     /// @dev An accepted extreme `govRatioMultiplier` used to overflow the cross-multiplied cap
@@ -59,9 +61,10 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         require(burnAmount == 0, "nothing burned");
     }
 
-    /// @dev A zero-rated action used to stay out of the cache, so a later ledger move handed it a
-    ///      second helping of the same service reward.
-    function testRegression_ZeroRatedActionStaysZero() external {
+    /// @dev A zero-rated action stays out of the divisor and out of every weight, so it cannot collect
+    ///      the same service reward twice. The guard lives in `generatedActionReward`, which refuses an
+    ///      action with no final score at all.
+    function testRegression_ZeroRatedActionContributesNothing() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
         _atPhase(JOIN_PHASE);
@@ -76,15 +79,17 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         token.mint(address(executor), SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
+        require(
+            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18,
+            "zero-rated action stays out of the divisor"
+        );
+
         (uint256 first,) = _settleService(VERIFIER_ID);
         require(first == SERVICE_REWARD, "verifier takes the whole reward");
 
-        // The zero-rated action gains a reward after the freeze: it stays frozen at zero.
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_OWNER_B_ID, 100e18);
-
         (uint256 projected,,) =
             executor.memberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
-        require(projected == 0, "frozen zero stays zero");
+        require(projected == 0, "zero-rated action projects nothing");
 
         vm.prank(GROUP_OWNER_B);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));

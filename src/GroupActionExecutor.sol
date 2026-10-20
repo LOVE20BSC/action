@@ -101,7 +101,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         uint256 round,
         uint256 groupId
     ) external view returns (uint256) {
-        if (s.totalFinalScore[tokenAddress][actionId][round] == 0 || !GroupActionVerify.isRoundVerified(s, tokenAddress, actionId, round)) {
+        if (!_isRoundRewardable(tokenAddress, actionId, round)) {
             return 0;
         }
         uint256 groupFinalScore = s.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
@@ -110,6 +110,18 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         }
         (uint256 proposalReward, ) = IActionTarget(s.actionTarget).actionReward(tokenAddress, actionId, round);
         return Math.mulDiv(proposalReward, groupFinalScore, s.totalFinalScore[tokenAddress][actionId][round]);
+    }
+
+    function generatedActionReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) external view returns (uint256) {
+        if (!_isRoundRewardable(tokenAddress, actionId, round)) {
+            return 0;
+        }
+        (uint256 proposalReward, ) = IActionTarget(s.actionTarget).actionReward(tokenAddress, actionId, round);
+        return proposalReward;
     }
 
     function onProposalCreated(address tokenAddress, uint256 actionId, bytes[] calldata targetData) external override {
@@ -769,6 +781,15 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         (uint256 proposalReward, ) = IActionTarget(s.actionTarget).actionReward(tokenAddress, actionId, round);
         // forge-lint: disable-next-line(boolean-cst)
         return (Math.mulDiv(proposalReward, memberFinalScore, totalFinal), 0, false);
+    }
+
+    function _isRoundRewardable(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    ) private view returns (bool) {
+        return s.totalFinalScore[tokenAddress][actionId][round] != 0
+            && GroupActionVerify.isRoundVerified(s, tokenAddress, actionId, round);
     }
 
     function _memberFinalScore(
