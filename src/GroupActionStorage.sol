@@ -119,14 +119,18 @@ library GroupActionStorage {
         mapping(uint256 => Uint256Set.Storage) gMemberIdsByGroupId;
 
         // tokenAddress => actionId => round => memberId => origin score deduction from MAX_ORIGIN_SCORE
-        // (0 = full score or unverified). Verified-ness is positional: scored members are exactly the
-        // first `verifiedMemberCount` slots of the round's member set, which holds because the set is
-        // only written at the current join round (phase - 1) while verification only runs for round
-        // `phase - 2`, freezing the round's set view once verification starts.
+        // (0 = full score or unverified).
+        // Load-bearing: verified-ness is positional — scored members are exactly the first
+        // `verifiedMemberCount` slots of the round's member set. The set is written only at the current
+        // join round (phase - 1) while verification runs for `phase - 2`; a later write to that round
+        // would shift the prefix and silently misreport scores.
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeduction;
         // tokenAddress => actionId => round => groupId => verified member count
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
         // tokenAddress => actionId => round => number of groups whose cursor reached its member count
+        // Load-bearing: the count only reaches the group count because a completed group cannot submit
+        // again (`AlreadyVerified`) and `groupIdsByRound[round]` never holds a zero-member group;
+        // otherwise the round stays unverified forever with no revert.
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCount;
         // tokenAddress => actionId => round => every group in the round is fully verified
         mapping(address => mapping(uint256 => mapping(uint256 => bool))) roundVerified;

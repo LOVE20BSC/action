@@ -382,7 +382,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
 
         // Load-bearing: the cache key is the action token's round, not the service token's; a parent
         // service leaves the child's round open, and caching there pairs a frozen divisor with live weights.
-        if (IMint(s.mintAddress).isRewardPrepared(settlement.actionTokenAddress, round)) {
+        if (
+            s.cachedDenominator(settlement.actionTokenAddress, round) == 0
+                && IMint(s.mintAddress).isRewardPrepared(settlement.actionTokenAddress, round)
+        ) {
             s.cacheDenominator(settlement.actionTokenAddress, round, settlement.denominator);
         }
 

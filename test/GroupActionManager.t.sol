@@ -360,31 +360,25 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member stake ledger cleared");
     }
 
-    function testPreActivationCannotDrainAnotherGroupsStake() external {
+    function testPreActivationCannotEnterWithoutPayingTheStake() external {
         _atPhase(3);
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 4);
 
-        // The attacker pays the stake on a real action, which is what funds the shared
-        // (token, groupId) ledger a forged A2 refund would have drawn from.
         _activateGroup();
         require(
             executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "attacker paid on A1"
         );
 
-        // A2 does not exist yet: pre-activating it must revert, otherwise it enters the action
-        // for free and later refunds at the configured amount it never paid.
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 0));
         executor.activateGroup(address(token), ACTION_2, GROUP_ID, _defaultConfig());
 
-        // A2 is created and an honest group pays the stake.
         _createAction(ACTION_2);
         vm.prank(GROUP_OWNER);
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
         require(executor.staked(address(token), ACTION_2) == ACTIVATION_STAKE, "honest stake recorded");
 
-        // The attacker holds no position on A2, so there is nothing to deactivate or refund.
         _atPhase(4);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));

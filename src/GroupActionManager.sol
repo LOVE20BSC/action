@@ -82,9 +82,6 @@ library GroupActionManager {
     ) external {
         _requireGroupOwner(s, groupId);
 
-        // Activation is only meaningful for an action this executor already created: before the
-        // creation callback the activation stake is still zero and the gov-ratio floor is unset, so
-        // allowing it would let a group join later without ever paying the stake.
         if (s.createdRound[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.InvalidRound(0);
         }

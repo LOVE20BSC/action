@@ -187,17 +187,18 @@ contract GroupActionVerifyTest {
         require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "round stays verified");
     }
 
-    function test_RoundVerifiedCacheShortCircuitsTheGroupWalk() external {
+    function test_RoundVerifiedTracksTheGroupCounter() external {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100, 60, 30));
+        require(!GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "partial round");
+        require(s.verifiedGroupCount[TOKEN][ACTION_ID][ROUND] == 1, "one group counted");
+
         _submit(GROUP_B, 0, _scores(50));
         require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "verified");
-
-        // Rewind one group's cursor so the derived walk would answer false. Only the cached round flag
-        // can still answer true, which pins that later reads do not re-walk every group.
-        s.verifiedMemberCount[TOKEN][ACTION_ID][ROUND][GROUP_B] = 0;
         require(
-            GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "cache answers without the walk"
+            s.verifiedGroupCount[TOKEN][ACTION_ID][ROUND]
+                == s.groupIdsByRound[TOKEN][ACTION_ID].countByRound(ROUND),
+            "counter reaches the group count"
         );
     }
 
