@@ -167,6 +167,18 @@ contract GroupActionEventsTest is
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
     }
 
+    function testVerifierApplicationCancelEventCarriesTheCancelRound() external {
+        _submitApplication();
+        _atPhase(4);
+
+        vm.expectEmit(true, true, true, true);
+        emit VerifierStakeRefunded(address(token), ACTION_ID, VERIFIER_ID, 4, VERIFIER_STAKE);
+        vm.expectEmit(true, true, true, true);
+        emit VerifierApplicationCancelled(address(token), ACTION_ID, VERIFIER_ID, 4, 1);
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+    }
+
     function testVerifierStakeEventsFireOncePerPayment() external {
         vm.recordLogs();
         _submitApplication();

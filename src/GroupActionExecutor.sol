@@ -432,9 +432,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     function verifierApplication(
         address tokenAddress,
         uint256 actionId,
+        uint256 round,
         uint256 memberId
     ) external view returns (VerifierApplication memory application) {
-        return GroupActionVerify.verifierApplication(s, tokenAddress, actionId, memberId);
+        return GroupActionVerify.verifierApplication(s, tokenAddress, actionId, round, memberId);
     }
 
     function verifierApplications(
@@ -454,14 +455,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         uint256[] calldata verifierIds
     ) external view returns (uint256[] memory votes) {
         return GroupActionVerify.votesByVerifierIds(s, tokenAddress, actionId, round, verifierIds);
-    }
-
-    function votesByApplicationId(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 applicationId
-    ) external view returns (uint256) {
-        return GroupActionVerify.votesByApplicationId(s, tokenAddress, actionId, applicationId);
     }
 
     function topVerifiers(
@@ -681,7 +674,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         uint256 round
     ) public nonReentrant returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound_ = s.createdRound[tokenAddress][actionId];
-        if (createdRound_ == 0 || round < createdRound_) {
+        if (createdRound_ == 0) {
+            revert ActionNotCreated(tokenAddress, actionId);
+        }
+        if (round < createdRound_) {
             revert RoundNotStarted();
         }
         if (round > _mintRound()) {

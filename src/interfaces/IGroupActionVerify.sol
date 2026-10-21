@@ -145,6 +145,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
     function verifierApplication(
         address tokenAddress,
         uint256 actionId,
+        uint256 round,
         uint256 memberId
     ) external view returns (VerifierApplication memory application);
 
@@ -168,12 +169,6 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 round,
         uint256[] calldata verifierIds
     ) external view returns (uint256[] memory votes);
-
-    function votesByApplicationId(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 applicationId
-    ) external view returns (uint256);
 
     function topVerifiers(
         address tokenAddress,

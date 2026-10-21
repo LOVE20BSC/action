@@ -378,7 +378,10 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 round
     ) public nonReentrant returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound = _createdRound[tokenAddress][actionId];
-        if (createdRound == 0 || round < createdRound) {
+        if (createdRound == 0) {
+            revert ActionNotCreated(tokenAddress, actionId);
+        }
+        if (round < createdRound) {
             revert RoundNotStarted();
         }
         if (round > _mintRound()) {

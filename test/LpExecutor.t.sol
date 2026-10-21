@@ -836,8 +836,11 @@ contract LpExecutorTest is LpExecutorTestBase {
     }
 
     function testMintMemberRewardRejectsRoundsOutOfRange() external {
+        // An action that was never created is reported as such, not as an early round.
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), SECOND_ACTION_ID)
+        );
         lpExecutor.mintMemberReward(address(token), SECOND_ACTION_ID, 1, 2);
 
         _atPhase(3);

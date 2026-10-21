@@ -242,7 +242,7 @@ abstract contract GroupServiceTestBase {
     }
 
     function _qualifyCandidate(uint256 memberId) internal {
-        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, memberId, 1);
+        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, memberId, 1, 0);
     }
 
     function _setVotedGroupActions(uint256[] memory actionIds) internal {

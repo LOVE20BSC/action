@@ -146,10 +146,13 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationMemberId;
         // tokenAddress => actionId => applicationId => application description
         mapping(address => mapping(uint256 => mapping(uint256 => string))) applicationDescription;
-        // tokenAddress => actionId => applicationId => creation vote round
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationCreatedRound;
-        // tokenAddress => actionId => applicationId => accumulated votes
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) votesByApplicationId;
+        // tokenAddress => actionId => memberId => round => application the member stood with
+        // Load-bearing: every per-round lookup resolves through this history, because a round's rank
+        // holds that round's application id. Reading `currentApplicationId` instead answers a later
+        // round's application and silently rejects whoever replaced or cancelled after the vote round.
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) applicationIdHistory;
+        // tokenAddress => actionId => round => applicationId => votes cast in that round
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) votesByApplicationId;
         // tokenAddress => actionId => memberId => current application id (0 = none)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) currentApplicationId;
         // tokenAddress => actionId => active application ids

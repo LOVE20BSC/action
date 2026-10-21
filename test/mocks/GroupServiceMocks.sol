@@ -285,6 +285,8 @@ contract MockGroupServiceGroupActionExecutor {
     mapping(address => mapping(uint256 => bool)) internal _activeGroups;
     // tokenAddress => actionId => memberId => applicationId (0 = no application)
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _applicationId;
+    // first round in which the application stands
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _applicationSinceRound;
     // tokenAddress => actionId => round => group ids
     mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) internal _groupIds;
     bool internal _rewardReadsBlocked;
@@ -316,10 +318,16 @@ contract MockGroupServiceGroupActionExecutor {
         return _joinTokenAddress[tokenAddress][actionId];
     }
 
-    function setVerifierApplication(address tokenAddress, uint256 actionId, uint256 memberId, uint256 applicationId)
-        external
-    {
+    /// @dev Test device: `sinceRound = 0` marks an application that stands in every round.
+    function setVerifierApplication(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 applicationId,
+        uint256 sinceRound
+    ) external {
         _applicationId[tokenAddress][actionId][memberId] = applicationId;
+        _applicationSinceRound[tokenAddress][actionId][memberId] = sinceRound;
     }
 
     function setGroupIds(address tokenAddress, uint256 actionId, uint256 round, uint256[] calldata newGroupIds)
@@ -366,12 +374,15 @@ contract MockGroupServiceGroupActionExecutor {
         return _activeGroups[tokenAddress][memberId];
     }
 
-    function verifierApplication(address tokenAddress, uint256 actionId, uint256 memberId)
+    function verifierApplication(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId)
         external
         view
         returns (VerifierApplication memory application)
     {
         uint256 applicationId = _applicationId[tokenAddress][actionId][memberId];
+        if (round < _applicationSinceRound[tokenAddress][actionId][memberId]) {
+            applicationId = 0;
+        }
         application = VerifierApplication({
             applicationId: applicationId, memberId: applicationId == 0 ? 0 : memberId, description: ""
         });

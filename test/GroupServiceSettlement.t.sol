@@ -297,7 +297,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         executors[0] = address(groupAction);
         actionTarget.setVotedActions(actionTokenAddress, SERVICE_ROUND, _ids(GROUP_ACTION_ID), executors);
         groupAction.setHasActiveGroups(actionTokenAddress, GROUP_ID, true);
-        groupAction.setVerifierApplication(actionTokenAddress, GROUP_ACTION_ID, VERIFIER_ID, 1);
+        groupAction.setVerifierApplication(actionTokenAddress, GROUP_ACTION_ID, VERIFIER_ID, 1, 0);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         groupAction.setGroupIds(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID));
@@ -527,7 +527,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         // One element that was never created rolls the whole batch back.
         actionIds = _ids(SERVICE_ACTION_ID, SERVICE_ACTION_ID + 2);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.ActionNotCreated.selector, address(token), SERVICE_ACTION_ID + 2
+            )
+        );
         executor.mintMemberRewards(address(token), actionIds, GROUP_ID, rounds);
         require(actionTarget.mintRewardCalls() == 0, "no action settled from the failed batch");
 

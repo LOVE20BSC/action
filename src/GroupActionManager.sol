@@ -83,7 +83,7 @@ library GroupActionManager {
         _requireGroupOwner(s, groupId);
 
         if (s.createdRound[tokenAddress][actionId] == 0) {
-            revert IActionExecutorErrors.InvalidRound(0);
+            revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }
 
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];

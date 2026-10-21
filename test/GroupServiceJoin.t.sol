@@ -35,6 +35,32 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, VERIFIER_ID), "candidate joined");
     }
 
+    function testJoinReadsTheApplicationAtTheJoinedRound() external {
+        _atPhase(CREATION_PHASE);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+
+        address[] memory executors = new address[](1);
+        executors[0] = address(groupAction);
+        actionTarget.setVotedActions(address(token), JOIN_PHASE, _ids(GROUP_ACTION_ID), executors);
+        actionTarget.setVotedActions(address(token), JOIN_PHASE + 1, _ids(GROUP_ACTION_ID), executors);
+
+        // The application starts standing at round JOIN_PHASE + 1, i.e. the round joined at phase JOIN_PHASE + 2.
+        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, VERIFIER_ID, 1, JOIN_PHASE + 1);
+
+        // Phase JOIN_PHASE + 1 joins round JOIN_PHASE, one round before the application exists.
+        _atPhase(JOIN_PHASE + 1);
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NoActiveGroups.selector));
+        executor.join(address(token), SERVICE_ACTION_ID, VERIFIER_ID);
+
+        _atPhase(JOIN_PHASE + 2);
+        _joinService(VERIFIER_ID);
+        require(
+            actionTarget.isJoined(address(token), SERVICE_ACTION_ID, VERIFIER_ID),
+            "joined at the application's first round"
+        );
+    }
+
     function testJoinRequiresEitherBranch() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
@@ -47,7 +73,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         // An application in a different action, outside the community set, does not count.
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID_B, VERIFIER_ID, 1);
+        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID_B, VERIFIER_ID, 1, 0);
         vm.prank(VERIFIER);
         vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NoActiveGroups.selector));
         executor.join(address(token), SERVICE_ACTION_ID, VERIFIER_ID);

@@ -19,6 +19,7 @@ interface IActionExecutorErrors {
     error UnauthorizedCallback();
     error InvalidRound(uint256 round);
     error RoundNotStarted();
+    error ActionNotCreated(address tokenAddress, uint256 actionId);
     error NotMemberOwner(uint256 memberId);
     error ProposalNotVoted(address tokenAddress, uint256 proposalId);
     error RewardAlreadyMinted(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round);

@@ -338,7 +338,9 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         // Without a creation callback the activation stake and the gov floor are still zero, so a
         // pre-activation would silently enter the action without ever paying the stake.
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_2)
+        );
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
 
         require(!executor.isGroupActive(address(token), ACTION_2, GROUP_8), "no activation recorded");
@@ -371,7 +373,9 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         );
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_2)
+        );
         executor.activateGroup(address(token), ACTION_2, GROUP_ID, _defaultConfig());
 
         _createAction(ACTION_2);

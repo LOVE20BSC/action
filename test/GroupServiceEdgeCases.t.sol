@@ -142,7 +142,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         _setVotedGroupActionsOn(address(childToken), _ids(GROUP_ACTION_ID));
         groupAction.setHasActiveGroups(address(childToken), GROUP_ID, true);
-        groupAction.setVerifierApplication(address(childToken), GROUP_ACTION_ID, VERIFIER_ID, 1);
+        groupAction.setVerifierApplication(address(childToken), GROUP_ACTION_ID, VERIFIER_ID, 1, 0);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         groupAction.setGroupIds(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID));

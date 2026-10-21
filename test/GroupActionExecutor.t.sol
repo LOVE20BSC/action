@@ -276,6 +276,15 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
     }
 
+    function testMintRejectsAnUncreatedAction() external {
+        _atPhase(4);
+        vm.prank(MEMBER1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
+        );
+        executor.mintMemberReward(address(token), ACTION_ID + 1, MEMBER1_ID, 2);
+    }
+
     function testMintRoundGuards() external {
         _prepareRound();
         _atPhase(5);
@@ -287,6 +296,55 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 3));
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 3);
+    }
+
+    /// @dev The action is reusable: a later round re-submits it, the community votes again, members
+    ///      join, a verifier is locked from that round's own ranking, and the round settles on its
+    ///      own weights. No state from the creation round leaks into the reused one.
+    function testCrossRoundReuseRunsTheWholePipeline() external {
+        _submitApplication();
+        _atPhase(3);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
+        _activateGroup();
+
+        // Round 5: the proposal is submitted again and the ranking is built from round 5 votes only.
+        // The application submitted in the creation round still stands, so nobody has to re-apply.
+        _atPhase(5);
+        vote.setVotesNum(address(token), 5, 1000e18);
+        vote.setVotesNumByProposalId(address(token), 5, ACTION_ID, 1000e18);
+        require(
+            executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).applicationId
+                == executor.verifierApplication(address(token), ACTION_ID, CREATION_PHASE, VERIFIER_ID).applicationId,
+            "the creation-round application still stands"
+        );
+        _castVotesForAt(VERIFIER_ID, 100e18, 5);
+
+        (uint256[] memory rankedIds, uint256[] memory rankedVotes) =
+            executor.topVerifiers(address(token), ACTION_ID, 5);
+        require(rankedIds.length == 1 && rankedIds[0] == VERIFIER_ID, "round 5 ranking");
+        require(rankedVotes[0] == 100e18, "round 5 tally");
+        (uint256[] memory creationIds, ) = executor.topVerifiers(address(token), ACTION_ID, CREATION_PHASE);
+        require(creationIds.length == 0, "the creation round keeps its own ranking");
+
+        _atPhase(6);
+        _fundJoinTokenFor(MEMBER1, 100e18);
+        _join(MEMBER1_ID, 100e18, 0);
+        require(
+            executor.joinedAmountByMemberId(address(token), ACTION_ID, 5, MEMBER1_ID) == 100e18,
+            "round 5 participation"
+        );
+
+        _atPhase(7);
+        _submitScores(_scores(100));
+        require(executor.isRoundVerified(address(token), ACTION_ID, 5), "round 5 verified");
+        require(executor.lockedVerifierId(address(token), ACTION_ID, 5) == VERIFIER_ID, "round 5 verifier");
+
+        _atPhase(8);
+        _fundExecutor(PROPOSAL_REWARD);
+        actionTarget.setActionReward(address(token), ACTION_ID, 5, PROPOSAL_REWARD, false);
+        actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
+        (uint256 mintAmount, uint256 burnAmount) = _settle(MEMBER1_ID, 5);
+        require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "round 5 settles on its own weights");
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {
