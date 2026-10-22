@@ -47,17 +47,14 @@ interface IGroupActionJoinEvents {
 
 interface IGroupActionJoinErrors {
     error InvalidParticipationAmount();
-    error AlreadyInOtherGroup();
-    error NotJoinedAction();
+    error AlreadyInOtherGroup(uint256 memberId, uint256 existingGroupId, uint256 requestedGroupId);
+    error NotJoined(address tokenAddress, uint256 actionId, uint256 memberId);
     error ExceedsActionMaxJoinAmount();
     error ExceedsGroupMaxJoinAmount();
     error GroupCapacityExceeded();
     error GroupAccountsFull();
-    error CannotJoinInactiveGroup();
-    error InvalidGroupId();
     error QuotaArrayLengthMismatch();
-    error QuotaMemberIsProvider();
-    error QuotaMemberZero();
+    error QuotaMemberIsProvider(uint256 providerId);
     error QuotaAmountZero();
     error QuotaNotGranted(uint256 memberId);
     error InsufficientProviderQuota(uint256 providerId, uint256 required, uint256 available);

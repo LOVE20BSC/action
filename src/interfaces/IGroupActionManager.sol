@@ -39,10 +39,11 @@ interface IGroupActionManagerEvents {
 
 interface IGroupActionManagerErrors {
     error GroupAlreadyActivated();
-    error GroupNotActive();
+    error GroupNotActive(uint256 groupId);
+    error GroupNotExist(uint256 groupId);
     error InvalidMinMaxJoinAmount();
     error CannotDeactivateInActivatedRound();
-    error OnlyGroupOwner();
+    error NotGroupOwner(uint256 groupId);
     error InsufficientActivationMinGovRatio();
     error NoGovVotes();
 }

@@ -62,6 +62,17 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         _;
     }
 
+    modifier onlyGroupOwner(uint256 groupId) {
+        try IMemberNFT(s.memberNFTAddress).ownerOf(groupId) returns (address owner) {
+            if (owner != msg.sender) {
+                revert NotGroupOwner(groupId);
+            }
+        } catch {
+            revert GroupNotExist(groupId);
+        }
+        _;
+    }
+
     function init(
         address actionTargetAddress,
         address stakeAddress,
@@ -168,12 +179,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 round = s.currentJoinRound();
 
         if (IActionTarget(s.actionTarget).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
-            revert AlreadyJoined();
+            revert AlreadyJoined(serviceTokenAddress, serviceActionId, memberId);
         }
 
         address actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
         if (!_isQualified(actionTokenAddress, round, memberId)) {
-            revert NoActiveGroups();
+            revert NotQualified(actionTokenAddress, round, memberId);
         }
 
         IActionTarget(s.actionTarget).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
@@ -392,7 +403,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256[] calldata recipientIds,
         uint256[] calldata ratios,
         string[] calldata remarks
-    ) external onlyMemberOwner(groupId) {
+    ) external onlyGroupOwner(groupId) {
         GroupRecipients.setRecipients(
             s, currentVerifyRound(), sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks
         );
@@ -462,7 +473,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 memberId
     ) external nonReentrant onlyMemberOwner(memberId) {
         if (!IActionTarget(s.actionTarget).isJoined(tokenAddress, actionId, memberId)) {
-            revert NotJoined();
+            revert NotJoined(tokenAddress, actionId, memberId);
         }
 
         uint256 round = s.currentJoinRound();

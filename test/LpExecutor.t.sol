@@ -628,7 +628,9 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.exit(address(token), ACTION_ID, 1);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.NotJoined.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ILpExecutorErrors.NotJoined.selector, address(token), ACTION_ID, uint256(1))
+        );
         lpExecutor.exit(address(token), ACTION_ID, 1);
     }
 
@@ -649,7 +651,9 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(1, 10e18);
         _exit(1);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.NotJoined.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ILpExecutorErrors.NotJoined.selector, address(token), ACTION_ID, uint256(1))
+        );
         lpExecutor.exit(address(token), ACTION_ID, 1);
     }
 

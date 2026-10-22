@@ -5,6 +5,7 @@ import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {IGroupActionJoinEvents, IGroupActionJoinErrors} from "./interfaces/IGroupActionJoin.sol";
+import {IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
@@ -64,12 +65,13 @@ library GroupActionJoin {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
         if (groupId == 0) {
-            revert IGroupActionJoinErrors.InvalidGroupId();
+            revert IGroupActionManagerErrors.GroupNotExist(0);
         }
+        GroupActionManager.groupOwnerOrRevert(s, groupId);
 
         uint256 joinedGroupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
         if (joinedGroupId != 0 && joinedGroupId != groupId) {
-            revert IGroupActionJoinErrors.AlreadyInOtherGroup();
+            revert IGroupActionJoinErrors.AlreadyInOtherGroup(memberId, joinedGroupId, groupId);
         }
 
         _validateGroupConstraints(s, tokenAddress, actionId, groupId, memberId, amount, joinedGroupId == 0);
@@ -200,7 +202,7 @@ library GroupActionJoin {
         uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
         uint256 ownAmount = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue();
         if (ownAmount == 0 && s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0) {
-            revert IGroupActionJoinErrors.NotJoinedAction();
+            revert IGroupActionJoinErrors.NotJoined(tokenAddress, actionId, memberId);
         }
 
         if (ownAmount != 0) {
@@ -345,14 +347,15 @@ library GroupActionJoin {
         uint256[] calldata memberIds,
         uint256[] calldata amounts
     ) private {
-        if (groupId == 0) {
-            revert IGroupActionJoinErrors.InvalidGroupId();
-        }
-        if (!s.groupInfo[tokenAddress][actionId][groupId].active) {
-            revert IGroupActionJoinErrors.CannotJoinInactiveGroup();
-        }
         if (memberIds.length != amounts.length) {
             revert IGroupActionJoinErrors.QuotaArrayLengthMismatch();
+        }
+        if (groupId == 0) {
+            revert IGroupActionManagerErrors.GroupNotExist(0);
+        }
+        GroupActionManager.groupOwnerOrRevert(s, groupId);
+        if (!s.groupInfo[tokenAddress][actionId][groupId].active) {
+            revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
         if (memberIds.length == 0) {
             return;
@@ -361,11 +364,8 @@ library GroupActionJoin {
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < memberIds.length; i++) {
             uint256 memberId = memberIds[i];
-            if (memberId == 0) {
-                revert IGroupActionJoinErrors.QuotaMemberZero();
-            }
             if (memberId == providerId) {
-                revert IGroupActionJoinErrors.QuotaMemberIsProvider();
+                revert IGroupActionJoinErrors.QuotaMemberIsProvider(providerId);
             }
             if (amounts[i] == 0) {
                 revert IGroupActionJoinErrors.QuotaAmountZero();
@@ -400,8 +400,9 @@ library GroupActionJoin {
         uint256[] calldata memberIds
     ) external onlyMemberOwner(s, providerId) {
         if (groupId == 0) {
-            revert IGroupActionJoinErrors.InvalidGroupId();
+            revert IGroupActionManagerErrors.GroupNotExist(0);
         }
+        GroupActionManager.groupOwnerOrRevert(s, groupId);
         if (memberIds.length == 0) {
             return;
         }
@@ -616,7 +617,7 @@ library GroupActionJoin {
     ) internal view {
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (!group.active) {
-            revert IGroupActionJoinErrors.CannotJoinInactiveGroup();
+            revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
 
         uint256 newTotal = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue()

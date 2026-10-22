@@ -270,7 +270,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 joinRound = currentJoinRound();
         uint256 memberJoinedAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(joinRound);
         if (memberJoinedAmount == 0) {
-            revert NotJoined();
+            revert NotJoined(tokenAddress, actionId, memberId);
         }
 
         _clearJoinState(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);

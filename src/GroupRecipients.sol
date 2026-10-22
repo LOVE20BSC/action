@@ -261,7 +261,7 @@ library GroupRecipients {
         for (uint256 i = 0; i < length; i++) {
             uint256 recipientId = recipientIds[i];
             if (recipientId == groupId) {
-                revert IGroupRecipientsErrors.RecipientCannotBeSelf();
+                revert IGroupRecipientsErrors.RecipientIsGroupId(groupId, recipientId);
             }
             if (ratios[i] == 0) {
                 revert IGroupRecipientsErrors.ZeroRatio();

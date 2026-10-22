@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {VerifierApplication} from "../../src/interfaces/IGroupActionVerify.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 /// @notice Phase mock: GroupService only reads `currentPhase`.
 contract MockGroupServicePhase {
@@ -19,8 +20,6 @@ contract MockGroupServicePhase {
 
 /// @notice MemberNFT mock: reverts on nonexistent ids, like the real one.
 contract MockGroupServiceMemberNFT {
-    error NonexistentToken(uint256 memberId);
-
     mapping(uint256 => address) internal _owners;
 
     function setOwner(uint256 memberId, address owner) external {
@@ -30,7 +29,7 @@ contract MockGroupServiceMemberNFT {
     function ownerOf(uint256 memberId) external view returns (address) {
         address owner = _owners[memberId];
         if (owner == address(0)) {
-            revert NonexistentToken(memberId);
+            revert IERC721Errors.ERC721NonexistentToken(memberId);
         }
         return owner;
     }

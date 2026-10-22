@@ -50,7 +50,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         // Phase JOIN_PHASE + 1 joins round JOIN_PHASE, one round before the application exists.
         _atPhase(JOIN_PHASE + 1);
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NoActiveGroups.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE, VERIFIER_ID
+            )
+        );
         executor.join(address(token), SERVICE_ACTION_ID, VERIFIER_ID);
 
         _atPhase(JOIN_PHASE + 2);
@@ -68,20 +72,32 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         // No active groups and no application at all.
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NoActiveGroups.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE - 1, GROUP_ID
+            )
+        );
         executor.join(address(token), SERVICE_ACTION_ID, GROUP_ID);
 
         // An application in a different action, outside the community set, does not count.
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID_B, VERIFIER_ID, 1, 0);
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NoActiveGroups.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE - 1, VERIFIER_ID
+            )
+        );
         executor.join(address(token), SERVICE_ACTION_ID, VERIFIER_ID);
 
         // An active group in a different community does not count either.
         groupAction.setHasActiveGroups(address(childToken), GROUP_OWNER_B_ID, true);
         vm.prank(GROUP_OWNER_B);
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NoActiveGroups.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE - 1, GROUP_OWNER_B_ID
+            )
+        );
         executor.join(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
     }
 
@@ -104,7 +120,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _joinService(GROUP_ID);
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.AlreadyJoined.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.AlreadyJoined.selector, address(token), SERVICE_ACTION_ID, GROUP_ID
+            )
+        );
         executor.join(address(token), SERVICE_ACTION_ID, GROUP_ID);
     }
 
@@ -150,7 +170,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
     function testExitWithoutJoinReverts() external {
         _atPhase(JOIN_PHASE);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NotJoined.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.NotJoined.selector, address(token), SERVICE_ACTION_ID, GROUP_ID
+            )
+        );
         executor.exit(address(token), SERVICE_ACTION_ID, GROUP_ID);
     }
 

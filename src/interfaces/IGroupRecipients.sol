@@ -19,7 +19,7 @@ interface IGroupRecipientsErrors {
     error ZeroRatio();
     error ArrayLengthMismatch();
     error DuplicateMemberId(uint256 memberId);
-    error RecipientCannotBeSelf();
+    error RecipientIsGroupId(uint256 groupId, uint256 recipientId);
 }
 
 interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {

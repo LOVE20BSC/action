@@ -41,13 +41,15 @@ interface IGroupServiceExecutorEvents {
 }
 
 interface IGroupServiceExecutorErrors {
-    error NoActiveGroups();
+    error NotQualified(address actionTokenAddress, uint256 round, uint256 memberId);
     error InvalidAddress();
     error InvalidTargetDataLength();
     error InvalidParentToken();
     error InvalidRatio();
-    error NotJoined();
-    error AlreadyJoined();
+    error NotJoined(address tokenAddress, uint256 actionId, uint256 memberId);
+    error AlreadyJoined(address tokenAddress, uint256 actionId, uint256 memberId);
+    error GroupNotExist(uint256 groupId);
+    error NotGroupOwner(uint256 groupId);
 }
 
 interface IGroupServiceExecutor is

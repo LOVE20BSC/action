@@ -128,7 +128,7 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
         // tokenAddress => actionId => round => number of groups whose cursor reached its member count
         // Load-bearing: the count only reaches the group count because a completed group cannot submit
-        // again (`AlreadyVerified`) and `groupIdsByRound[round]` never holds a zero-member group;
+        // again (`GroupVerificationComplete`) and `groupIdsByRound[round]` never holds a zero-member group;
         // otherwise the round stays unverified forever with no revert.
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCount;
         // tokenAddress => actionId => round => every group in the round is fully verified

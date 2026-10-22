@@ -57,14 +57,15 @@ interface IGroupActionVerifyEvents {
 
 interface IGroupActionVerifyErrors {
     error OriginScoresEmpty();
-    error InvalidCandidate();
+    error CandidateNotRanked(uint256 memberId, uint256 round);
+    error CandidateNotOpen(uint256 memberId, uint256 round);
     error ScoreExceedsMax();
-    error AlreadyVerified();
+    error GroupVerificationComplete(uint256 groupId, uint256 round);
     error VerificationBatchTooLarge();
     error StartIndexMismatch(uint256 expected, uint256 actual);
     error ScoresExceedAccountCount();
     error VerifyVotesZero();
-    error ApplicationNotActive();
+    error NoActiveApplication(uint256 memberId);
     error VerifierAlreadyLocked(address tokenAddress, uint256 actionId, uint256 round);
 }
 

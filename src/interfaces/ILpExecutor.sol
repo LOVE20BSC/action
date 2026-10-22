@@ -11,7 +11,7 @@ interface ILpExecutorErrors {
     error InvalidMinGovRatio();
     error InsufficientGovRatio();
     error InvalidParticipationAmount();
-    error NotJoined();
+    error NotJoined(address tokenAddress, uint256 actionId, uint256 memberId);
 }
 
 interface ILpExecutorEvents {

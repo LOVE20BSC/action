@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {Pagination} from "libs/Pagination.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract MockPhase {
     uint256 internal _currentPhase;
@@ -164,7 +165,6 @@ contract MockToken {
 }
 
 contract MockMemberNFT {
-    error NonexistentToken(uint256 memberId);
 
     mapping(uint256 => address) internal _owners;
 
@@ -174,7 +174,7 @@ contract MockMemberNFT {
 
     function ownerOf(uint256 memberId) external view returns (address) {
         address owner = _owners[memberId];
-        if (owner == address(0)) revert NonexistentToken(memberId);
+        if (owner == address(0)) revert IERC721Errors.ERC721NonexistentToken(memberId);
         return owner;
     }
 }

@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IGroupActionJoinErrors} from "../src/interfaces/IGroupActionJoin.sol";
-import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
+import {GroupConfig, IGroupActionManagerErrors} from "../src/interfaces/IGroupActionManager.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
@@ -69,7 +69,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         _deactivateGroup(GROUP_ID);
         require(executor.staked(address(token), ACTION_ID) == 0, "stake returned on deactivation");
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.CannotJoinInactiveGroup.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector, GROUP_ID));
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, 1e18, 0, new string[](0));
 
         _atPhase(5);

@@ -3,6 +3,8 @@ pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupRecipientsErrors, IGroupRecipientsEvents} from "../src/interfaces/IGroupRecipients.sol";
+import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MockGroupServiceMemberNFT} from "./mocks/GroupServiceMocks.sol";
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 
@@ -46,7 +48,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _prepareRecipientsScenario();
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, GROUP_ID));
+        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NotGroupOwner.selector, GROUP_ID));
         executor.setRecipients(
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
         );
@@ -54,9 +56,19 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testSetRecipientsChecksOwnerBeforeRound() external {
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, GROUP_ID));
+        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.NotGroupOwner.selector, GROUP_ID));
         executor.setRecipients(
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
+        );
+    }
+
+    function testSetRecipientsRejectsMissingGroup() external {
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.GroupNotExist.selector, uint256(999999))
+        );
+        executor.setRecipients(
+            address(token), GROUP_ACTION_ID, 999999, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
         );
     }
 
@@ -111,7 +123,9 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         );
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.RecipientCannotBeSelf.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupRecipientsErrors.RecipientIsGroupId.selector, GROUP_ID, GROUP_ID)
+        );
         executor.setRecipients(
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(GROUP_ID), _ratios(PRECISION), new string[](1)
         );
@@ -119,7 +133,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                MockGroupServiceMemberNFT.NonexistentToken.selector, MEMBER1_ID + DEFAULT_MAX_RECIPIENTS + 5
+                IERC721Errors.ERC721NonexistentToken.selector, MEMBER1_ID + DEFAULT_MAX_RECIPIENTS + 5
             )
         );
         executor.setRecipients(

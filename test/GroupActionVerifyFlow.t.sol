@@ -63,6 +63,29 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(currentVotes[0] == 0 && currentVotes[1] == 0, "no votes on current applications");
     }
 
+    function testUnrankedCandidateRejected() external {
+        _submitApplication();
+        memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
+        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
+        vm.prank(VERIFIER2);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
+        _castVotesFor(VERIFIER_ID, 100e18);
+
+        _atPhase(3);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
+        _activateGroup();
+        _fundJoinTokenFor(MEMBER1, 1e18);
+        _join(MEMBER1_ID, 1e18, 0);
+
+        _atPhase(4);
+        vm.prank(VERIFIER2);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.CandidateNotRanked.selector, VERIFIER2_ID, uint256(2))
+        );
+        executor.submitOriginScores(address(token), ACTION_ID, VERIFIER2_ID, GROUP_ID, 0, _scores(100));
+    }
+
     function testOpenBlockGatingByRank() external {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
@@ -82,12 +105,16 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _atPhase(4);
         // splits = [5e17] => the second rank opens 500 blocks into the verify phase.
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.InvalidCandidate.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.CandidateNotOpen.selector, VERIFIER_ID, uint256(2))
+        );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _scores(100));
 
         vm.roll(4 * PHASE_BLOCKS + 499);
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.InvalidCandidate.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.CandidateNotOpen.selector, VERIFIER_ID, uint256(2))
+        );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _scores(100));
 
         vm.roll(4 * PHASE_BLOCKS + 500);
@@ -131,7 +158,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _scores(100));
 
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationNotActive.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, MEMBER2_ID)
+        );
         executor.submitOriginScores(address(token), ACTION_ID, MEMBER2_ID, GROUP_ID, 0, _scores(100));
 
         _submitScores(_scores(100));
@@ -154,7 +183,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         uint256[] memory again = new uint256[](1);
         again[0] = 50;
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.AlreadyVerified.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.GroupVerificationComplete.selector, GROUP_ID, uint256(2))
+        );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 2, again);
     }
 
@@ -231,7 +262,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.onProposalSubmitted(address(token), ACTION_ID, 0, votedData);
 
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationNotActive.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, VERIFIER_ID)
+        );
         executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, votedData);
 
         _submitApplication();
@@ -242,7 +275,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         zeroCandidate[0] = votedData[0];
         zeroCandidate[1] = abi.encode(uint256(0));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.InvalidCandidate.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, uint256(0)));
         executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, zeroCandidate);
 
         bytes[] memory three = new bytes[](3);
@@ -574,7 +607,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testVerifierStakeCancelWithoutApplicationReverts() external {
         uint256 before = token.balanceOf(VERIFIER);
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationNotActive.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, VERIFIER_ID)
+        );
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         require(token.balanceOf(VERIFIER) == before, "no refund without an application");
     }

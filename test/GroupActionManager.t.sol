@@ -86,8 +86,12 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         _openJoinPhase();
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.OnlyGroupOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NotGroupOwner.selector, GROUP_ID));
         executor.activateGroup(address(token), ACTION_ID, GROUP_ID, _defaultConfig());
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(999)));
+        executor.activateGroup(address(token), ACTION_ID, 999, _defaultConfig());
 
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
         vm.prank(GROUP_OWNER);
@@ -191,11 +195,11 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         memberNFT.setOwner(GROUP_99, GROUP_OWNER);
         _atPhase(4);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector, GROUP_99));
         executor.deactivateGroup(address(token), ACTION_ID, GROUP_99);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.OnlyGroupOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NotGroupOwner.selector, GROUP_ID));
         executor.deactivateGroup(address(token), ACTION_ID, GROUP_ID);
     }
 
@@ -235,11 +239,11 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         memberNFT.setOwner(GROUP_99, GROUP_OWNER);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector, GROUP_99));
         executor.updateGroupConfig(address(token), ACTION_ID, GROUP_99, updated);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.OnlyGroupOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NotGroupOwner.selector, GROUP_ID));
         executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
     }
 
@@ -385,7 +389,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         _atPhase(4);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector, GROUP_ID));
         executor.deactivateGroup(address(token), ACTION_2, GROUP_ID);
 
         require(executor.staked(address(token), ACTION_2) == ACTIVATION_STAKE, "honest stake intact");

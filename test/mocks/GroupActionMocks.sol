@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+
 contract MockGroupActionPhase {
     error PhaseInfoNotConfigured(uint256 phase);
 
@@ -34,8 +36,6 @@ contract MockGroupActionPhase {
 }
 
 contract MockGroupActionMemberNFT {
-    error NonexistentToken(uint256 memberId);
-
     mapping(uint256 => address) internal _owners;
 
     function setOwner(uint256 memberId, address owner) external {
@@ -45,7 +45,7 @@ contract MockGroupActionMemberNFT {
     function ownerOf(uint256 memberId) external view returns (address) {
         address owner = _owners[memberId];
         if (owner == address(0)) {
-            revert NonexistentToken(memberId);
+            revert IERC721Errors.ERC721NonexistentToken(memberId);
         }
         return owner;
     }

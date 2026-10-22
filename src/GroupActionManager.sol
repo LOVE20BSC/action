@@ -27,10 +27,18 @@ library GroupActionManager {
         GroupActionStorage.Layout storage s,
         uint256 groupId
     ) {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(groupId) != msg.sender) {
-            revert IGroupActionManagerErrors.OnlyGroupOwner();
+        if (groupOwnerOrRevert(s, groupId) != msg.sender) {
+            revert IGroupActionManagerErrors.NotGroupOwner(groupId);
         }
         _;
+    }
+
+    function groupOwnerOrRevert(GroupActionStorage.Layout storage s, uint256 groupId) internal view returns (address) {
+        try IMemberNFT(s.memberNFTAddress).ownerOf(groupId) returns (address owner) {
+            return owner;
+        } catch {
+            revert IGroupActionManagerErrors.GroupNotExist(groupId);
+        }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -141,7 +149,7 @@ library GroupActionManager {
     ) external onlyGroupOwner(s, groupId) {
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (!group.active) {
-            revert IGroupActionManagerErrors.GroupNotActive();
+            revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
 
         uint256 round = s.currentJoinRound();
@@ -188,7 +196,7 @@ library GroupActionManager {
     ) external onlyGroupOwner(s, groupId) {
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (!group.active) {
-            revert IGroupActionManagerErrors.GroupNotActive();
+            revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
 
         _validateGroupConfig(config);

@@ -3,7 +3,8 @@ pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupActionJoinErrors} from "../src/interfaces/IGroupActionJoin.sol";
-import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
+import {GroupConfig, IGroupActionManagerErrors} from "../src/interfaces/IGroupActionManager.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionJoinTest is GroupActionExecutorTestBase {
@@ -179,11 +180,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 0, 0, new string[](0));
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidGroupId.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(0)));
         executor.join(address(token), ACTION_ID, 0, MEMBER1_ID, 1e18, 0, new string[](0));
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.CannotJoinInactiveGroup.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(99)));
         executor.join(address(token), ACTION_ID, 99, MEMBER1_ID, 1e18, 0, new string[](0));
 
         _fundJoinTokenFor(MEMBER1, 10e18);
@@ -195,7 +196,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         memberNFT.setOwner(GROUP_B_ID, GROUP_OWNER);
         _activateGroupWith(GROUP_B_ID, _defaultConfig());
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.AlreadyInOtherGroup.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupActionJoinErrors.AlreadyInOtherGroup.selector, MEMBER1_ID, GROUP_ID, GROUP_B_ID
+            )
+        );
         executor.join(address(token), ACTION_ID, GROUP_B_ID, MEMBER1_ID, 1e18, 0, new string[](0));
     }
 
@@ -235,7 +240,9 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 2e18);
 
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.NotJoinedAction.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionJoinErrors.NotJoined.selector, address(token), ACTION_ID, MEMBER2_ID)
+        );
         executor.exit(address(token), ACTION_ID, MEMBER2_ID);
 
         _fundJoinTokenFor(PROVIDER, 1e18);
@@ -250,11 +257,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(PROVIDER, 100e18);
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidGroupId.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(0)));
         executor.providerQuotaAdd(address(token), ACTION_ID, 0, PROVIDER_ID, _ids(MEMBER2_ID), _ids(1e18));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidGroupId.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(0)));
         executor.providerQuotaRemove(address(token), ACTION_ID, 0, PROVIDER_ID, _ids(MEMBER2_ID));
 
         uint256[] memory memberIds = new uint256[](2);
@@ -265,11 +272,17 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds, _ids(1e18));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaMemberZero.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaArrayLengthMismatch.selector));
+        executor.providerQuotaAdd(address(token), ACTION_ID, 0, PROVIDER_ID, memberIds, _ids(1e18));
+
+        vm.prank(PROVIDER);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, uint256(0)));
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(0), _ids(1e18));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaMemberIsProvider.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionJoinErrors.QuotaMemberIsProvider.selector, PROVIDER_ID)
+        );
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(PROVIDER_ID), _ids(1e18));
 
         vm.prank(PROVIDER);

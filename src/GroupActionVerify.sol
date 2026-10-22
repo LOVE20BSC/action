@@ -69,7 +69,7 @@ library GroupActionVerify {
         uint256 memberCount = s.memberIdsByGroupId[tokenAddress][actionId][groupId].countByRound(round);
         uint256 verifiedCount = s.verifiedMemberCount[tokenAddress][actionId][round][groupId];
         if (memberCount != 0 && verifiedCount == memberCount) {
-            revert IGroupActionVerifyErrors.AlreadyVerified();
+            revert IGroupActionVerifyErrors.GroupVerificationComplete(groupId, round);
         }
         if (startIndex != verifiedCount) {
             revert IGroupActionVerifyErrors.StartIndexMismatch(verifiedCount, startIndex);
@@ -225,7 +225,7 @@ library GroupActionVerify {
         uint256 round = IPhase(s.phaseAddress).currentPhase();
         uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
         if (applicationId == 0) {
-            revert IGroupActionVerifyErrors.ApplicationNotActive();
+            revert IGroupActionVerifyErrors.NoActiveApplication(memberId);
         }
 
         s.activeApplicationIds[tokenAddress][actionId].remove(applicationId);
@@ -400,12 +400,9 @@ library GroupActionVerify {
         }
 
         uint256 candidateMemberId = abi.decode(targetData[1], (uint256));
-        if (candidateMemberId == 0) {
-            revert IGroupActionVerifyErrors.InvalidCandidate();
-        }
         uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][candidateMemberId];
         if (applicationId == 0) {
-            revert IGroupActionVerifyErrors.ApplicationNotActive();
+            revert IGroupActionVerifyErrors.NoActiveApplication(candidateMemberId);
         }
 
         if (votes == 0) {
@@ -533,7 +530,7 @@ library GroupActionVerify {
     ) internal view {
         uint256 applicationId = s.applicationIdHistory[tokenAddress][actionId][verifierId].value(round);
         if (applicationId == 0) {
-            revert IGroupActionVerifyErrors.ApplicationNotActive();
+            revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         }
         uint256[] storage rankedApplicationIds = s.rankedApplicationIds[tokenAddress][actionId][round];
         uint256 rank = 0;
@@ -543,20 +540,17 @@ library GroupActionVerify {
             }
         }
         if (rank == rankedApplicationIds.length) {
-            revert IGroupActionVerifyErrors.InvalidCandidate();
+            revert IGroupActionVerifyErrors.CandidateNotRanked(verifierId, round);
         }
         if (rank == 0) {
             return;
         }
         uint256 splitIndex = rank - 1;
-        if (splitIndex >= s.splits.length) {
-            revert IGroupActionVerifyErrors.InvalidCandidate();
-        }
         (uint256 startBlock, uint256 phaseBlocks) = IPhase(s.phaseAddress).phaseInfo(round + 2);
         uint256 openOffset =
             Math.mulDiv(phaseBlocks, s.splits[splitIndex], GroupActionStorage.PRECISION, Math.Rounding.Ceil);
         if (block.number < startBlock + openOffset) {
-            revert IGroupActionVerifyErrors.InvalidCandidate();
+            revert IGroupActionVerifyErrors.CandidateNotOpen(verifierId, round);
         }
     }
 
