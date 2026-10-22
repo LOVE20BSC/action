@@ -63,13 +63,13 @@ def main():
             stub.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + " "
                             + shlex.quote(str(Path(__file__).resolve())) + " --fake " + tool + ' "$@"\n')
             stub.chmod(0o755)
-        names = ["ACTIONTARGET", "LPEXECUTOR", "GROUPACTIONEXECUTOR", "GROUPSERVICEEXECUTOR"]
+        names = ["ACTION_TARGET", "LP_EXECUTOR", "GROUP_ACTION_EXECUTOR", "GROUP_SERVICE_EXECUTOR"]
         env = {name + "_ADDRESS": f"0x{index + 10:040x}" for index, name in enumerate(names)}
         contracts = list(env)
         env.update({"CHAIN_ID": "97", "RPC_URL": "http://invalid.local", "ETHERSCAN_API_KEY": "test-key",
                     "MINT_ADDRESS": "0x" + "ab" * 20, "STAKE_ADDRESS": "0x" + "cd" * 20,
                     "VOTE_ADDRESS": "0x" + "12" * 20, "SUBMIT_ADDRESS": "0x" + "34" * 20,
-                    "MEMBERNFT_ADDRESS": "0x" + "56" * 20, "PHASE_ADDRESS": "0x" + "78" * 20,
+                    "MEMBER_NFT_ADDRESS": "0x" + "56" * 20, "PHASE_ADDRESS": "0x" + "78" * 20,
                     "GROUP_ACTION_SPLITS": "100000000000000000,400000000000000000,700000000000000000"})
         calls = {}
 
@@ -77,13 +77,13 @@ def main():
             for signature, value in fields.items():
                 calls[env[contract + "_ADDRESS"].lower() + "/" + signature] = env.get(value, value)
 
-        getters("ACTIONTARGET", {"initialized()(bool)": "true", "mintAddress()(address)": "MINT_ADDRESS",
+        getters("ACTION_TARGET", {"initialized()(bool)": "true", "mintAddress()(address)": "MINT_ADDRESS",
                 "voteAddress()(address)": "VOTE_ADDRESS", "submitAddress()(address)": "SUBMIT_ADDRESS",
-                "memberNFTAddress()(address)": "MEMBERNFT_ADDRESS", "phaseAddress()(address)": "PHASE_ADDRESS"})
-        for name in ("LPEXECUTOR", "GROUPACTIONEXECUTOR", "GROUPSERVICEEXECUTOR"):
-            getters(name, {"initialized()(bool)": "true", "actionTarget()(address)": "ACTIONTARGET_ADDRESS"})
+                "memberNFTAddress()(address)": "MEMBER_NFT_ADDRESS", "phaseAddress()(address)": "PHASE_ADDRESS"})
+        for name in ("LP_EXECUTOR", "GROUP_ACTION_EXECUTOR", "GROUP_SERVICE_EXECUTOR"):
+            getters(name, {"initialized()(bool)": "true", "actionTarget()(address)": "ACTION_TARGET_ADDRESS"})
         # cast 的数组返回逐元素带科学计数法标注；21_check.sh 的 strip_sci_notation 会归一化。
-        getters("GROUPACTIONEXECUTOR", {"SPLITS()(uint256[])":
+        getters("GROUP_ACTION_EXECUTOR", {"SPLITS()(uint256[])":
                 "[100000000000000000 [1e17], 400000000000000000 [4e17], 700000000000000000 [7e17]]"})
         data_path, log_path = root / "rpc.json", root / "calls.log"
         data_path.write_text(json.dumps({"env": env, "contracts": contracts, "calls": calls}))
@@ -119,15 +119,15 @@ def main():
 
         run("21_check.sh", args=("test",))
         # 地址文件键集合不符（漏改键名）必须显式失败。
-        saved.write_text("\n".join(name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in names[:-1]) + "\nGROUPSERVICE_ADDR=" + env["GROUPSERVICEEXECUTOR_ADDRESS"] + "\n")
+        saved.write_text("\n".join(name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in names[:-1]) + "\nGROUPSERVICE_ADDR=" + env["GROUP_SERVICE_EXECUTOR_ADDRESS"] + "\n")
         result, _ = run("21_check.sh", False, ("test",))
         assert "key set mismatch" in result.stdout + result.stderr, result.stdout + result.stderr
         saved.write_text("\n".join(name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in names) + "\n")
-        for contract, signature in [("ACTIONTARGET", "mintAddress()(address)"), ("ACTIONTARGET", "voteAddress()(address)"),
-                ("ACTIONTARGET", "submitAddress()(address)"), ("ACTIONTARGET", "memberNFTAddress()(address)"),
-                ("ACTIONTARGET", "phaseAddress()(address)"), ("LPEXECUTOR", "actionTarget()(address)"),
-                ("GROUPSERVICEEXECUTOR", "initialized()(bool)"),
-                ("GROUPACTIONEXECUTOR", "SPLITS()(uint256[])")]:
+        for contract, signature in [("ACTION_TARGET", "mintAddress()(address)"), ("ACTION_TARGET", "voteAddress()(address)"),
+                ("ACTION_TARGET", "submitAddress()(address)"), ("ACTION_TARGET", "memberNFTAddress()(address)"),
+                ("ACTION_TARGET", "phaseAddress()(address)"), ("LP_EXECUTOR", "actionTarget()(address)"),
+                ("GROUP_SERVICE_EXECUTOR", "initialized()(bool)"),
+                ("GROUP_ACTION_EXECUTOR", "SPLITS()(uint256[])")]:
             wrong_value = "0x" + "98" * 20 if signature.endswith("(address)") else "false" if signature.endswith("(bool)") else "[999]"
             run("21_check.sh", False, ("test",), BAD_CALL=env[contract + "_ADDRESS"].lower() + "/" + signature, BAD_VALUE=wrong_value)
         run("21_check.sh", False, ("test",), RPC_CODE_ERROR="1")
@@ -139,8 +139,8 @@ def main():
         run("21_check.sh", args=("test",))
         core_path.write_text(core_text)
         saved.write_text("# previous deployment\n")
-        for extra in ({"RPC_CHAIN": "56"}, {"DEPLOY_FAIL": "1"}, {"OMIT_ADDRESS": "ACTIONTARGET_ADDRESS"},
-                      {"BAD_CALL": env["ACTIONTARGET_ADDRESS"] + "/mintAddress()(address)"}):
+        for extra in ({"RPC_CHAIN": "56"}, {"DEPLOY_FAIL": "1"}, {"OMIT_ADDRESS": "ACTION_TARGET_ADDRESS"},
+                      {"BAD_CALL": env["ACTION_TARGET_ADDRESS"] + "/mintAddress()(address)"}):
             run("one_click_deploy.sh", False, ("test",), **extra)
             assert saved.read_text() == "# previous deployment\n"
         _, log = run("one_click_deploy.sh", args=("test",))
@@ -157,7 +157,7 @@ def main():
         assert "env:MINT_ADDRESS=" + env["MINT_ADDRESS"] in command, command
         assert "env:STAKE_ADDRESS=" + env["STAKE_ADDRESS"] in command, command
         assert len([call for call in log if call[:2] == ["forge", "verify-contract"]]) == 4
-        assert "ACTIONTARGET_ADDRESS=" in saved.read_text()
+        assert "ACTION_TARGET_ADDRESS=" in saved.read_text()
         # .account 配了非空 KEYSTORE_PASSWORD 就直接用它解锁，不弹窗。
         write_account("KEYSTORE_PASSWORD=" + SECRET_PASSWORD + "\n")
         _, log = run("one_click_deploy.sh", args=("test",))
@@ -180,8 +180,8 @@ def main():
         run("11_deploy.sh", False, ("test",), RPC_CODE_ERROR="1")
         run("11_deploy.sh", args=("test",))
         saved_before = saved.read_text()
-        result, _ = run("11_deploy.sh", False, ("test",), OMIT_ADDRESS="GROUPSERVICEEXECUTOR_ADDRESS")
-        assert "GROUPSERVICEEXECUTOR_ADDRESS" in result.stdout + result.stderr, result.stdout + result.stderr
+        result, _ = run("11_deploy.sh", False, ("test",), OMIT_ADDRESS="GROUP_SERVICE_EXECUTOR_ADDRESS")
+        assert "GROUP_SERVICE_EXECUTOR_ADDRESS" in result.stdout + result.stderr, result.stdout + result.stderr
         assert saved.read_text() == saved_before, saved.read_text()
         result, _ = run("31_verify.sh", False, ("test",), VERIFY_FAIL="src/ActionTarget.sol:ActionTarget")
         assert "all 4 contracts" not in result.stdout

@@ -36,8 +36,8 @@ case "$CHAIN_ID" in
 esac
 : "${ETHERSCAN_API_KEY:?Set an Etherscan API key; source verification has not run.}"
 
-for field in ACTIONTARGET_ADDRESS LPEXECUTOR_ADDRESS \
-    GROUPACTIONEXECUTOR_ADDRESS GROUPSERVICEEXECUTOR_ADDRESS; do
+for field in ACTION_TARGET_ADDRESS LP_EXECUTOR_ADDRESS \
+    GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS; do
     if [[ ! ${!field:-} =~ ^0x[0-9a-fA-F]{40}$ ]] || [[ ${!field:-} = 0x0000000000000000000000000000000000000000 ]]; then
         echo "Error: Missing or invalid $field in $NETWORK_DIR/addresses.action.params"
         exit 1
@@ -53,8 +53,8 @@ verify_contract() {
     forge verify-contract "$address" "src/$name.sol:$name" "${COMMON_ARGS[@]}" "$@"
 }
 
-verify_contract "$ACTIONTARGET_ADDRESS" ActionTarget
-verify_contract "$LPEXECUTOR_ADDRESS" LpExecutor
-verify_contract "$GROUPACTIONEXECUTOR_ADDRESS" GroupActionExecutor
-verify_contract "$GROUPSERVICEEXECUTOR_ADDRESS" GroupServiceExecutor
+verify_contract "$ACTION_TARGET_ADDRESS" ActionTarget
+verify_contract "$LP_EXECUTOR_ADDRESS" LpExecutor
+verify_contract "$GROUP_ACTION_EXECUTOR_ADDRESS" GroupActionExecutor
+verify_contract "$GROUP_SERVICE_EXECUTOR_ADDRESS" GroupServiceExecutor
 echo "✓ Source verification succeeded for all 4 contracts"

@@ -71,9 +71,9 @@ contract DeployAction is Script {
 
     function _logDeploymentSummary(DeploymentAddresses memory addrs) private pure {
         console2.log("\n=== Deployment Summary ===");
-        console2.log("ACTIONTARGET_ADDRESS=", addrs.actionTarget);
-        console2.log("LPEXECUTOR_ADDRESS=", addrs.lpExecutor);
-        console2.log("GROUPACTIONEXECUTOR_ADDRESS=", addrs.groupActionExecutor);
-        console2.log("GROUPSERVICEEXECUTOR_ADDRESS=", addrs.groupServiceExecutor);
+        console2.log("ACTION_TARGET_ADDRESS=", addrs.actionTarget);
+        console2.log("LP_EXECUTOR_ADDRESS=", addrs.lpExecutor);
+        console2.log("GROUP_ACTION_EXECUTOR_ADDRESS=", addrs.groupActionExecutor);
+        console2.log("GROUP_SERVICE_EXECUTOR_ADDRESS=", addrs.groupServiceExecutor);
     }
 }

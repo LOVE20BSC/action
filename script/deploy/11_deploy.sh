@@ -81,8 +81,8 @@ require_core_dependencies() {
 # 4 个行动合约地址：从部署日志提取后逐项校验，缺项即失败，不写半截地址文件。
 require_action_addresses() {
     local field
-    for field in ACTIONTARGET_ADDRESS LPEXECUTOR_ADDRESS \
-        GROUPACTIONEXECUTOR_ADDRESS GROUPSERVICEEXECUTOR_ADDRESS; do
+    for field in ACTION_TARGET_ADDRESS LP_EXECUTOR_ADDRESS \
+        GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS; do
         if [[ ! ${!field:-} =~ ^0x[0-9a-fA-F]{40}$ ]] || [[ ${!field:-} = 0x0000000000000000000000000000000000000000 ]]; then
             echo "Error: Missing or invalid $field extracted from deployment log"
             exit 1
@@ -112,19 +112,19 @@ fi
 
 # 从部署输出中提取地址（DeployAction.s.sol 的 _logDeploymentSummary 输出）。
 # grep 无匹配会让管道在 set -e 下静默中止，故逐个容错取值，缺项交由 require_action_addresses 报错。
-ACTIONTARGET_ADDRESS=$(grep "ACTIONTARGET_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
-LPEXECUTOR_ADDRESS=$(grep "LPEXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
-GROUPACTIONEXECUTOR_ADDRESS=$(grep "GROUPACTIONEXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
-GROUPSERVICEEXECUTOR_ADDRESS=$(grep "GROUPSERVICEEXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
+ACTION_TARGET_ADDRESS=$(grep "ACTION_TARGET_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
+LP_EXECUTOR_ADDRESS=$(grep "LP_EXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
+GROUP_ACTION_EXECUTOR_ADDRESS=$(grep "GROUP_ACTION_EXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
+GROUP_SERVICE_EXECUTOR_ADDRESS=$(grep "GROUP_SERVICE_EXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
 
 require_action_addresses
 
 # 写入地址文件
 cat > "$NETWORK_DIR/addresses.action.params" <<EOFADDR
-ACTIONTARGET_ADDRESS=$ACTIONTARGET_ADDRESS
-LPEXECUTOR_ADDRESS=$LPEXECUTOR_ADDRESS
-GROUPACTIONEXECUTOR_ADDRESS=$GROUPACTIONEXECUTOR_ADDRESS
-GROUPSERVICEEXECUTOR_ADDRESS=$GROUPSERVICEEXECUTOR_ADDRESS
+ACTION_TARGET_ADDRESS=$ACTION_TARGET_ADDRESS
+LP_EXECUTOR_ADDRESS=$LP_EXECUTOR_ADDRESS
+GROUP_ACTION_EXECUTOR_ADDRESS=$GROUP_ACTION_EXECUTOR_ADDRESS
+GROUP_SERVICE_EXECUTOR_ADDRESS=$GROUP_SERVICE_EXECUTOR_ADDRESS
 EOFADDR
 
 echo "✓ Deployment completed and addresses saved"

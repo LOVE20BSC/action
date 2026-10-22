@@ -31,7 +31,7 @@ set +a
 # 地址文件的键集合必须与期望合约集合一致：键名漏改会让后续变量静默为空，
 # 逐项 cast 调用要到很后面才以难以定位的形式失败，故在此显式断言。
 address_file="$NETWORK_DIR/addresses.action.params"
-expected_keys="ACTIONTARGET_ADDRESS GROUPACTIONEXECUTOR_ADDRESS GROUPSERVICEEXECUTOR_ADDRESS LPEXECUTOR_ADDRESS"
+expected_keys="ACTION_TARGET_ADDRESS GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS LP_EXECUTOR_ADDRESS"
 actual_keys=$(grep -oE '^[A-Z0-9_]+=' "$address_file" | sed 's/=$//' | sort | tr '\n' ' ' || true)
 if [ "$actual_keys" != "$(printf '%s\n' $expected_keys | sort | tr '\n' ' ')" ]; then
     echo "Error: $address_file key set mismatch"
@@ -56,8 +56,8 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 
 # 检查所有合约地址是否已设置
-if [ -z "${ACTIONTARGET_ADDRESS:-}" ] || [ -z "${LPEXECUTOR_ADDRESS:-}" ] || \
-   [ -z "${GROUPACTIONEXECUTOR_ADDRESS:-}" ] || [ -z "${GROUPSERVICEEXECUTOR_ADDRESS:-}" ]; then
+if [ -z "${ACTION_TARGET_ADDRESS:-}" ] || [ -z "${LP_EXECUTOR_ADDRESS:-}" ] || \
+   [ -z "${GROUP_ACTION_EXECUTOR_ADDRESS:-}" ] || [ -z "${GROUP_SERVICE_EXECUTOR_ADDRESS:-}" ]; then
     echo -e "${RED}✗ Error: Not all contract addresses are set${NC}"
     exit 1
 fi
@@ -130,65 +130,65 @@ ACTUAL_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL")
 verify_value "CHAIN_ID" "$CHAIN_ID" "$ACTUAL_CHAIN_ID" || exit 1
 
 # 1. 验证 ActionTarget
-print_contract_header "1" "ActionTarget" "$ACTIONTARGET_ADDRESS"
-verify_deployed "ActionTarget" "$ACTIONTARGET_ADDRESS" || ((FAILED+=1))
+print_contract_header "1" "ActionTarget" "$ACTION_TARGET_ADDRESS"
+verify_deployed "ActionTarget" "$ACTION_TARGET_ADDRESS" || ((FAILED+=1))
 
-ACTUAL_INIT=$(cast call "$ACTIONTARGET_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_INIT=$(cast call "$ACTION_TARGET_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_MINT=$(cast call "$ACTIONTARGET_ADDRESS" "mintAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_MINT=$(cast call "$ACTION_TARGET_ADDRESS" "mintAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "mintAddress" "$MINT_ADDRESS" "$ACTUAL_MINT" || ((FAILED+=1))
 
-ACTUAL_VOTE=$(cast call "$ACTIONTARGET_ADDRESS" "voteAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_VOTE=$(cast call "$ACTION_TARGET_ADDRESS" "voteAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "voteAddress" "$VOTE_ADDRESS" "$ACTUAL_VOTE" || ((FAILED+=1))
 
-ACTUAL_SUBMIT=$(cast call "$ACTIONTARGET_ADDRESS" "submitAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_SUBMIT=$(cast call "$ACTION_TARGET_ADDRESS" "submitAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "submitAddress" "$SUBMIT_ADDRESS" "$ACTUAL_SUBMIT" || ((FAILED+=1))
 
-ACTUAL_MEMBER=$(cast call "$ACTIONTARGET_ADDRESS" "memberNFTAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "memberNFTAddress" "$MEMBERNFT_ADDRESS" "$ACTUAL_MEMBER" || ((FAILED+=1))
+ACTUAL_MEMBER=$(cast call "$ACTION_TARGET_ADDRESS" "memberNFTAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "memberNFTAddress" "$MEMBER_NFT_ADDRESS" "$ACTUAL_MEMBER" || ((FAILED+=1))
 
-ACTUAL_PHASE=$(cast call "$ACTIONTARGET_ADDRESS" "phaseAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_PHASE=$(cast call "$ACTION_TARGET_ADDRESS" "phaseAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "phaseAddress" "$PHASE_ADDRESS" "$ACTUAL_PHASE" || ((FAILED+=1))
 
 # 2. 验证 LpExecutor
-print_contract_header "2" "LpExecutor" "$LPEXECUTOR_ADDRESS"
-verify_deployed "LpExecutor" "$LPEXECUTOR_ADDRESS" || ((FAILED+=1))
+print_contract_header "2" "LpExecutor" "$LP_EXECUTOR_ADDRESS"
+verify_deployed "LpExecutor" "$LP_EXECUTOR_ADDRESS" || ((FAILED+=1))
 
-ACTUAL_INIT=$(cast call "$LPEXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_INIT=$(cast call "$LP_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_TARGET=$(cast call "$LPEXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "actionTarget" "$ACTIONTARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+ACTUAL_TARGET=$(cast call "$LP_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
 # 3. 验证 GroupActionExecutor
-print_contract_header "3" "GroupActionExecutor" "$GROUPACTIONEXECUTOR_ADDRESS"
-verify_deployed "GroupActionExecutor" "$GROUPACTIONEXECUTOR_ADDRESS" || ((FAILED+=1))
+print_contract_header "3" "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS"
+verify_deployed "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" || ((FAILED+=1))
 
-ACTUAL_INIT=$(cast call "$GROUPACTIONEXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_INIT=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_TARGET=$(cast call "$GROUPACTIONEXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "actionTarget" "$ACTIONTARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+ACTUAL_TARGET=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
 # splits 以逗号分隔配置，cast 返回 "[a [1e17], b [4e17]]"：逐个元素去掉科学计数法标注与空格后比对
 # （标注形如 [1e17]，不会误伤数组外层括号）
 strip_sci_notation() {
     echo "$1" | sed -E 's/\[[0-9]+e[0-9]+\]//g' | tr -d ' '
 }
-ACTUAL_SPLITS=$(cast call "$GROUPACTIONEXECUTOR_ADDRESS" "SPLITS()(uint256[])" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_SPLITS=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "SPLITS()(uint256[])" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 EXPECTED_SPLITS="[${GROUP_ACTION_SPLITS:-}]"
 verify_value "SPLITS" "$(strip_sci_notation "$EXPECTED_SPLITS")" "$(strip_sci_notation "$ACTUAL_SPLITS")" || ((FAILED+=1))
 
 # 4. 验证 GroupServiceExecutor
-print_contract_header "4" "GroupServiceExecutor" "$GROUPSERVICEEXECUTOR_ADDRESS"
-verify_deployed "GroupServiceExecutor" "$GROUPSERVICEEXECUTOR_ADDRESS" || ((FAILED+=1))
+print_contract_header "4" "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS"
+verify_deployed "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS" || ((FAILED+=1))
 
-ACTUAL_INIT=$(cast call "$GROUPSERVICEEXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_INIT=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_TARGET=$(cast call "$GROUPSERVICEEXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "actionTarget" "$ACTIONTARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+ACTUAL_TARGET=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
 echo ""
 echo -e "${CYAN}════════════════════════════════════════${NC}"
