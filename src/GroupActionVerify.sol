@@ -532,6 +532,9 @@ library GroupActionVerify {
         uint256 verifierId
     ) internal view {
         uint256 applicationId = s.applicationIdHistory[tokenAddress][actionId][verifierId].value(round);
+        if (applicationId == 0) {
+            revert IGroupActionVerifyErrors.ApplicationNotActive();
+        }
         uint256[] storage rankedApplicationIds = s.rankedApplicationIds[tokenAddress][actionId][round];
         uint256 rank = 0;
         for (; rank < rankedApplicationIds.length; rank++) {
@@ -539,7 +542,7 @@ library GroupActionVerify {
                 break;
             }
         }
-        if (rank == rankedApplicationIds.length || applicationId == 0) {
+        if (rank == rankedApplicationIds.length) {
             revert IGroupActionVerifyErrors.InvalidCandidate();
         }
         if (rank == 0) {

@@ -249,6 +249,14 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _openJoinPhase();
         _fundJoinTokenFor(PROVIDER, 100e18);
 
+        vm.prank(PROVIDER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidGroupId.selector));
+        executor.providerQuotaAdd(address(token), ACTION_ID, 0, PROVIDER_ID, _ids(MEMBER2_ID), _ids(1e18));
+
+        vm.prank(PROVIDER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidGroupId.selector));
+        executor.providerQuotaRemove(address(token), ACTION_ID, 0, PROVIDER_ID, _ids(MEMBER2_ID));
+
         uint256[] memory memberIds = new uint256[](2);
         memberIds[0] = MEMBER2_ID;
         memberIds[1] = PROVIDER_ID;

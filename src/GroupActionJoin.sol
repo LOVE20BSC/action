@@ -399,6 +399,9 @@ library GroupActionJoin {
         uint256 providerId,
         uint256[] calldata memberIds
     ) external onlyMemberOwner(s, providerId) {
+        if (groupId == 0) {
+            revert IGroupActionJoinErrors.InvalidGroupId();
+        }
         if (memberIds.length == 0) {
             return;
         }

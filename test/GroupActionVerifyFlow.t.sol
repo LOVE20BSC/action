@@ -131,7 +131,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _scores(100));
 
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.InvalidCandidate.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationNotActive.selector));
         executor.submitOriginScores(address(token), ACTION_ID, MEMBER2_ID, GROUP_ID, 0, _scores(100));
 
         _submitScores(_scores(100));
