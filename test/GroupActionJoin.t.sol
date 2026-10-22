@@ -7,6 +7,27 @@ import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionJoinTest is GroupActionExecutorTestBase {
+    function testJoinChecksOwnerBeforeAmount() external {
+        _openJoinPhase();
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 0, 0, new string[](0));
+    }
+
+    function testWithdrawChecksOwnerBeforeAmount() external {
+        _openJoinPhase();
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
+        executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 0);
+    }
+
+    function testExitChecksOwnerBeforeJoined() external {
+        _openJoinPhase();
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
+        executor.exit(address(token), ACTION_ID, MEMBER1_ID);
+    }
+
     function testJoinOwnAndProviderAppend() external {
         _openJoinPhase();
         _fundJoinTokenFor(MEMBER1, 150e18);

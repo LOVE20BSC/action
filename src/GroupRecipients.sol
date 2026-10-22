@@ -38,7 +38,19 @@ library GroupRecipients {
         uint256[] calldata ratios,
         string[] calldata remarks
     ) external {
-        s.requireMemberOwner(groupId);
+        _setRecipients(s, round, sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks);
+    }
+
+    function _setRecipients(
+        GroupServiceStorage.Layout storage s,
+        uint256 round,
+        address sourceTokenAddress,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256[] calldata recipientIds,
+        uint256[] calldata ratios,
+        string[] calldata remarks
+    ) private {
 
         // Load-bearing: settlement only reads configs for actions this executor created, so any other
         // key is silently ignored and the owner keeps the whole slice.

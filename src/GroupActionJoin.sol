@@ -26,6 +26,16 @@ library GroupActionJoin {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    modifier onlyMemberOwner(
+        GroupActionStorage.Layout storage s,
+        uint256 memberId
+    ) {
+        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
+            revert IActionExecutorErrors.NotMemberOwner(memberId);
+        }
+        _;
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control)
     function join(
         GroupActionStorage.Layout storage s,
@@ -36,11 +46,23 @@ library GroupActionJoin {
         uint256 amount,
         uint256 providerId,
         string[] calldata verificationInfos
-    ) external {
+    ) external onlyMemberOwner(s, memberId) {
+        _join(s, tokenAddress, actionId, groupId, memberId, amount, providerId, verificationInfos);
+    }
+
+    function _join(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 memberId,
+        uint256 amount,
+        uint256 providerId,
+        string[] calldata verificationInfos
+    ) private {
         if (amount == 0) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
-        s.requireMemberOwner(memberId);
         if (groupId == 0) {
             revert IGroupActionJoinErrors.InvalidGroupId();
         }
@@ -94,11 +116,10 @@ library GroupActionJoin {
         uint256 actionId,
         uint256 memberId,
         uint256 amount
-    ) external {
+    ) external onlyMemberOwner(s, memberId) {
         if (amount == 0) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
-        s.requireMemberOwner(memberId);
 
         uint256 round = s.currentJoinRound();
         uint256 ownAmount = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue();
@@ -134,11 +155,10 @@ library GroupActionJoin {
         uint256 memberId,
         uint256 providerId,
         uint256 amount
-    ) external {
+    ) external onlyMemberOwner(s, providerId) {
         if (amount == 0) {
             revert IGroupActionJoinErrors.InvalidParticipationAmount();
         }
-        s.requireMemberOwner(providerId);
 
         uint256 round = s.currentJoinRound();
         uint256 invested = s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
@@ -175,14 +195,11 @@ library GroupActionJoin {
         address tokenAddress,
         uint256 actionId,
         uint256 memberId
-    ) external {
-        s.requireMemberOwner(memberId);
-
+    ) external onlyMemberOwner(s, memberId) {
         uint256 round = s.currentJoinRound();
         uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
         uint256 ownAmount = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue();
-        uint256 providerTotal = s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue();
-        if (ownAmount == 0 && providerTotal == 0) {
+        if (ownAmount == 0 && s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0) {
             revert IGroupActionJoinErrors.NotJoinedAction();
         }
 
@@ -200,36 +217,47 @@ library GroupActionJoin {
             });
         }
 
-        uint256 providerCount = s.providerIdsByMemberId[tokenAddress][actionId][memberId].count();
-        if (providerCount != 0) {
-            (uint256[] memory providerIds, ) =
-                s.providerIdsByMemberId[tokenAddress][actionId][memberId].values(0, providerCount, false);
-            for (uint256 i = 0; i < providerIds.length; i++) {
-                uint256 invested =
-                    s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerIds[i]].latestValue();
-                if (invested == 0) {
-                    continue;
-                }
-                _decreaseProviderAmount(
-                    s, tokenAddress, actionId, round, groupId, memberId, providerIds[i], invested
-                );
-                s.quotaAmount[tokenAddress][actionId][groupId][providerIds[i]][memberId] += invested;
-                s.quotaMemberIds[tokenAddress][actionId][groupId][providerIds[i]].add(memberId);
-                s.quotaBlockNumber[tokenAddress][actionId][groupId][providerIds[i]][memberId] = block.number;
-
-                emit IGroupActionJoinEvents.Withdrawn({
-                    tokenAddress: tokenAddress,
-                    actionId: actionId,
-                    memberId: memberId,
-                    round: round,
-                    amount: invested,
-                    providerId: providerIds[i],
-                    groupId: groupId
-                });
-            }
-        }
+        _refundProviders(s, tokenAddress, actionId, round, groupId, memberId);
 
         _finalizeExit(s, tokenAddress, actionId, round, groupId, memberId);
+    }
+
+    function _refundProviders(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 memberId
+    ) private {
+        uint256 providerCount = s.providerIdsByMemberId[tokenAddress][actionId][memberId].count();
+        if (providerCount == 0) {
+            return;
+        }
+
+        (uint256[] memory providerIds, ) =
+            s.providerIdsByMemberId[tokenAddress][actionId][memberId].values(0, providerCount, false);
+        for (uint256 i = 0; i < providerIds.length; i++) {
+            uint256 invested =
+                s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerIds[i]].latestValue();
+            if (invested == 0) {
+                continue;
+            }
+            _decreaseProviderAmount(s, tokenAddress, actionId, round, groupId, memberId, providerIds[i], invested);
+            s.quotaAmount[tokenAddress][actionId][groupId][providerIds[i]][memberId] += invested;
+            s.quotaMemberIds[tokenAddress][actionId][groupId][providerIds[i]].add(memberId);
+            s.quotaBlockNumber[tokenAddress][actionId][groupId][providerIds[i]][memberId] = block.number;
+
+            emit IGroupActionJoinEvents.Withdrawn({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                memberId: memberId,
+                round: round,
+                amount: invested,
+                providerId: providerIds[i],
+                groupId: groupId
+            });
+        }
     }
 
     function joinInfo(
@@ -303,8 +331,20 @@ library GroupActionJoin {
         uint256 providerId,
         uint256[] calldata memberIds,
         uint256[] calldata amounts
-    ) external {
-        s.requireMemberOwner(providerId);
+    ) external onlyMemberOwner(s, providerId) {
+        _providerQuotaAdd(s, tokenAddress, actionId, groupId, providerId, memberIds, amounts);
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _providerQuotaAdd(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId,
+        uint256[] calldata memberIds,
+        uint256[] calldata amounts
+    ) private {
         if (groupId == 0) {
             revert IGroupActionJoinErrors.InvalidGroupId();
         }
@@ -358,8 +398,7 @@ library GroupActionJoin {
         uint256 groupId,
         uint256 providerId,
         uint256[] calldata memberIds
-    ) external {
-        s.requireMemberOwner(providerId);
+    ) external onlyMemberOwner(s, providerId) {
         if (memberIds.length == 0) {
             return;
         }

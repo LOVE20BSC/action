@@ -6,7 +6,6 @@ import {RoundHistoryUint256Array} from "libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
-import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 
 library GroupServiceStorage {
@@ -99,12 +98,5 @@ library GroupServiceStorage {
         return IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
             actionTokenAddress, actionId, round, groupId
         );
-    }
-
-    // forge-lint: disable-next-item(require-revert-in-loop)
-    function requireMemberOwner(Layout storage s, uint256 memberId) internal view {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
-            revert IActionExecutorErrors.NotMemberOwner(memberId);
-        }
     }
 }

@@ -161,6 +161,10 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
         executor.mintMemberRewards(address(token), mismatched, MEMBER1_ID, rounds);
 
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
+        executor.mintMemberRewards(address(token), mismatched, MEMBER1_ID, rounds);
+
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -282,6 +286,13 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
         );
+        executor.mintMemberReward(address(token), ACTION_ID + 1, MEMBER1_ID, 2);
+    }
+
+    function testMintChecksOwnerBeforeActionExistence() external {
+        _atPhase(4);
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
         executor.mintMemberReward(address(token), ACTION_ID + 1, MEMBER1_ID, 2);
     }
 

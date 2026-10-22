@@ -52,6 +52,22 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         );
     }
 
+    function testSetRecipientsChecksOwnerBeforeRound() external {
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, GROUP_ID));
+        executor.setRecipients(
+            address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
+        );
+    }
+
+    function testSetRecipientsOwnerStillChecksRound() external {
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        executor.setRecipients(
+            address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
+        );
+    }
+
     function testSetRecipientsValidationChain() external {
         _prepareRecipientsScenario();
 

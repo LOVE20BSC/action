@@ -83,6 +83,27 @@ contract ActionTarget is IActionTarget {
         _;
     }
 
+    modifier onlySubmit() {
+        if (msg.sender != submitAddress) {
+            revert UnauthorizedCallback();
+        }
+        _;
+    }
+
+    modifier onlyVote() {
+        if (msg.sender != voteAddress) {
+            revert UnauthorizedCallback();
+        }
+        _;
+    }
+
+    modifier onlyMemberOwner(uint256 memberId) {
+        if (IMemberNFT(memberNFTAddress).ownerOf(memberId) != msg.sender) {
+            revert NotMemberOwner(memberId);
+        }
+        _;
+    }
+
     function _isBoundExecutor(
         address tokenAddress,
         uint256 actionId
@@ -160,10 +181,7 @@ contract ActionTarget is IActionTarget {
         address tokenAddress,
         uint256 actionId,
         uint256 memberId
-    ) external {
-        if (IMemberNFT(memberNFTAddress).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
+    ) external onlyMemberOwner(memberId) {
         if (!_memberIdsByActionId[tokenAddress][actionId].contains(memberId)) {
             return;
         }
@@ -415,11 +433,7 @@ contract ActionTarget is IActionTarget {
         address tokenAddress,
         uint256 proposalId,
         bytes[] calldata targetData
-    ) external {
-        if (msg.sender != submitAddress) {
-            revert UnauthorizedCallback();
-        }
-
+    ) external onlySubmit {
         if (targetData.length == 0) {
             revert InvalidExecutor();
         }
@@ -468,11 +482,7 @@ contract ActionTarget is IActionTarget {
         uint256 proposalId,
         uint256 submitterId,
         bytes[] calldata targetData
-    ) external {
-        if (msg.sender != submitAddress) {
-            revert UnauthorizedCallback();
-        }
-
+    ) external onlySubmit {
         address bound = _executorByActionId[tokenAddress][proposalId];
         if (bound == address(0)) {
             revert UnboundProposal(tokenAddress, proposalId);
@@ -496,11 +506,7 @@ contract ActionTarget is IActionTarget {
         uint256 voterId,
         uint256 votes,
         bytes[] calldata targetData
-    ) external {
-        if (msg.sender != voteAddress) {
-            revert UnauthorizedCallback();
-        }
-
+    ) external onlyVote {
         address bound = _executorByActionId[tokenAddress][proposalId];
         if (bound == address(0)) {
             revert UnboundProposal(tokenAddress, proposalId);

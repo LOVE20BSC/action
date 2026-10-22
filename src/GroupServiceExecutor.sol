@@ -12,6 +12,7 @@ import {ILaunch} from "core/src/interfaces/ILaunch.sol";
 import {ILOVE20Token} from "core/src/interfaces/ILOVE20Token.sol";
 import {IPhase} from "core/src/interfaces/IPhase.sol";
 import {IStake} from "core/src/interfaces/IStake.sol";
+import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -44,6 +45,21 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         address actionTokenAddress;
         uint256 round;
         uint256[] actionIds;
+    }
+
+    modifier onlyActionTarget() {
+        if (msg.sender != s.actionTarget) {
+            revert UnauthorizedCallback();
+        }
+        _;
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    modifier onlyMemberOwner(uint256 memberId) {
+        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
+            revert NotMemberOwner(memberId);
+        }
+        _;
     }
 
     function init(
@@ -148,9 +164,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         address serviceTokenAddress,
         uint256 serviceActionId,
         uint256 memberId
-    ) external nonReentrant {
-        s.requireMemberOwner(memberId);
-
+    ) external nonReentrant onlyMemberOwner(memberId) {
         uint256 round = s.currentJoinRound();
 
         if (IActionTarget(s.actionTarget).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
@@ -342,110 +356,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         return (settlement.verifierReward + settlement.ownerReward, settlement.ownerBurned, false);
     }
 
-    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
+    // forge-lint: disable-next-item(missing-events-access-control)
     function mintMemberReward(
         address tokenAddress,
         uint256 actionId,
         uint256 memberId,
         uint256 round
-    ) public nonReentrant returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 createdRound = s.createdRound[tokenAddress][actionId];
-        if (createdRound == 0) {
-            revert ActionNotCreated(tokenAddress, actionId);
-        }
-        if (round < createdRound) {
-            revert RoundNotStarted();
-        }
-        if (round > _mintRound()) {
-            revert InvalidRound(round);
-        }
-        s.requireMemberOwner(memberId);
-
-        if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
-            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
-        }
-
-        Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
-        mintAmount = settlement.verifierReward + settlement.ownerReward;
-        burnAmount = settlement.ownerBurned;
-        if (mintAmount == 0 && burnAmount == 0) {
-            revert NoRewardAvailable();
-        }
-
-        if (!settlement.actionMinted) {
-            // forge-lint: disable-next-line(reentrancy-no-eth)
-            settlement.serviceReward = IActionTarget(s.actionTarget).mintActionReward(tokenAddress, actionId, round);
-            _applyFormulas(settlement, memberId);
-            mintAmount = settlement.verifierReward + settlement.ownerReward;
-            burnAmount = settlement.ownerBurned;
-            if (mintAmount == 0 && burnAmount == 0) {
-                revert NoRewardAvailable();
-            }
-        }
-
-        // Load-bearing: the cache key is the action token's round, not the service token's; a parent
-        // service leaves the child's round open, and caching there pairs a frozen divisor with live weights.
-        if (
-            s.cachedDenominator(settlement.actionTokenAddress, round) == 0
-                && IMint(s.mintAddress).isRewardPrepared(settlement.actionTokenAddress, round)
-        ) {
-            s.cacheDenominator(settlement.actionTokenAddress, round, settlement.denominator);
-        }
-
-        s.memberMinted[tokenAddress][actionId][round][memberId] = true;
-        s.verifierRewardByMember[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
-        s.ownerBurnedByMember[tokenAddress][actionId][round][memberId] = burnAmount;
-
-        if (burnAmount != 0) {
-            // forge-lint: disable-next-line(reentrancy-no-eth)
-            ILOVE20Token(tokenAddress).burn(burnAmount);
-        }
-
-        uint256 distributed = 0;
-        if (settlement.ownerReward != 0) {
-            // forge-lint: disable-next-item(reentrancy-no-eth)
-            distributed = GroupRecipients.distribute(
-                s,
-                settlement.actionTokenAddress,
-                tokenAddress,
-                actionId,
-                round,
-                memberId,
-                settlement.ownerReward,
-                settlement.ownerWeight
-            );
-        }
-        uint256 remaining = settlement.ownerReward - distributed;
-        s.ownerDistributedByMember[tokenAddress][actionId][round][memberId] = distributed;
-        s.ownerRemainingByMember[tokenAddress][actionId][round][memberId] = remaining;
-
-        if (remaining != 0) {
-            IERC20(tokenAddress).safeTransfer(msg.sender, remaining);
-        }
-        if (settlement.verifierReward != 0) {
-            IERC20(tokenAddress).safeTransfer(msg.sender, settlement.verifierReward);
-        }
-
-        emit MemberRewardMinted({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            memberId: memberId,
-            round: round,
-            mintAmount: mintAmount,
-            burnAmount: burnAmount
-        });
-        emit ServiceRewardDistributed({
-            serviceTokenAddress: tokenAddress,
-            round: round,
-            serviceActionId: actionId,
-            actionTokenAddress: settlement.actionTokenAddress,
-            memberId: memberId,
-            verifierReward: settlement.verifierReward,
-            ownerReward: settlement.ownerReward,
-            ownerBurned: burnAmount,
-            ownerDistributed: distributed,
-            ownerRemaining: remaining
-        });
+    ) public nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
+        return _mintMemberReward(tokenAddress, actionId, memberId, round);
     }
 
     function mintMemberRewards(
@@ -453,7 +371,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256[] calldata actionIds,
         uint256 memberId,
         uint256[] calldata rounds
-    ) external returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
+    ) external nonReentrant onlyMemberOwner(memberId) returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
         uint256 length = actionIds.length;
         if (length != rounds.length) {
             revert BatchLengthMismatch(length, rounds.length);
@@ -462,7 +380,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
+            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
         }
     }
 
@@ -474,7 +392,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256[] calldata recipientIds,
         uint256[] calldata ratios,
         string[] calldata remarks
-    ) external {
+    ) external onlyMemberOwner(groupId) {
         GroupRecipients.setRecipients(
             s, currentVerifyRound(), sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks
         );
@@ -542,8 +460,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         address tokenAddress,
         uint256 actionId,
         uint256 memberId
-    ) external nonReentrant {
-        s.requireMemberOwner(memberId);
+    ) external nonReentrant onlyMemberOwner(memberId) {
         if (!IActionTarget(s.actionTarget).isJoined(tokenAddress, actionId, memberId)) {
             revert NotJoined();
         }
@@ -564,10 +481,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         address tokenAddress,
         uint256 proposalId,
         bytes[] calldata targetData
-    ) external override {
-        if (msg.sender != s.actionTarget) {
-            revert UnauthorizedCallback();
-        }
+    ) external override onlyActionTarget {
         if (
             targetData.length != 4 || targetData[0].length != 32 || targetData[1].length != 32
                 || targetData[2].length != 32 || targetData[3].length != 32
@@ -603,11 +517,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256,
         uint256,
         bytes[] calldata
-    ) external virtual override {
-        if (msg.sender != s.actionTarget) {
-            revert UnauthorizedCallback();
-        }
-    }
+    ) external
+        virtual
+        override
+        onlyActionTarget
+    {}
 
     function onProposalVoted(
         address,
@@ -616,10 +530,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256,
         uint256,
         bytes[] calldata targetData
-    ) external virtual override {
-        if (msg.sender != s.actionTarget) {
-            revert UnauthorizedCallback();
-        }
+    ) external virtual override onlyActionTarget {
         if (targetData.length > 1) {
             revert InvalidTargetDataLength();
         }
@@ -865,5 +776,109 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     function _mintRound() internal view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         return phase < 4 ? 0 : phase - 3;
+    }
+    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
+    function _mintMemberReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round
+    ) private returns (uint256 mintAmount, uint256 burnAmount) {
+        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        if (createdRound == 0) {
+            revert ActionNotCreated(tokenAddress, actionId);
+        }
+        if (round < createdRound) {
+            revert RoundNotStarted();
+        }
+        if (round > _mintRound()) {
+            revert InvalidRound(round);
+        }
+
+        if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
+            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
+        }
+
+        Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
+        mintAmount = settlement.verifierReward + settlement.ownerReward;
+        burnAmount = settlement.ownerBurned;
+        if (mintAmount == 0 && burnAmount == 0) {
+            revert NoRewardAvailable();
+        }
+
+        if (!settlement.actionMinted) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            settlement.serviceReward = IActionTarget(s.actionTarget).mintActionReward(tokenAddress, actionId, round);
+            _applyFormulas(settlement, memberId);
+            mintAmount = settlement.verifierReward + settlement.ownerReward;
+            burnAmount = settlement.ownerBurned;
+            if (mintAmount == 0 && burnAmount == 0) {
+                revert NoRewardAvailable();
+            }
+        }
+
+        // Load-bearing: the cache key is the action token's round, not the service token's; a parent
+        // service leaves the child's round open, and caching there pairs a frozen divisor with live weights.
+        if (
+            s.cachedDenominator(settlement.actionTokenAddress, round) == 0
+                && IMint(s.mintAddress).isRewardPrepared(settlement.actionTokenAddress, round)
+        ) {
+            s.cacheDenominator(settlement.actionTokenAddress, round, settlement.denominator);
+        }
+
+        s.memberMinted[tokenAddress][actionId][round][memberId] = true;
+        s.verifierRewardByMember[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
+        s.ownerBurnedByMember[tokenAddress][actionId][round][memberId] = burnAmount;
+
+        if (burnAmount != 0) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            ILOVE20Token(tokenAddress).burn(burnAmount);
+        }
+
+        uint256 distributed = 0;
+        if (settlement.ownerReward != 0) {
+            // forge-lint: disable-next-item(reentrancy-no-eth)
+            distributed = GroupRecipients.distribute(
+                s,
+                settlement.actionTokenAddress,
+                tokenAddress,
+                actionId,
+                round,
+                memberId,
+                settlement.ownerReward,
+                settlement.ownerWeight
+            );
+        }
+        uint256 remaining = settlement.ownerReward - distributed;
+        s.ownerDistributedByMember[tokenAddress][actionId][round][memberId] = distributed;
+        s.ownerRemainingByMember[tokenAddress][actionId][round][memberId] = remaining;
+
+        if (remaining != 0) {
+            IERC20(tokenAddress).safeTransfer(msg.sender, remaining);
+        }
+        if (settlement.verifierReward != 0) {
+            IERC20(tokenAddress).safeTransfer(msg.sender, settlement.verifierReward);
+        }
+
+        emit MemberRewardMinted({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: round,
+            mintAmount: mintAmount,
+            burnAmount: burnAmount
+        });
+        emit ServiceRewardDistributed({
+            serviceTokenAddress: tokenAddress,
+            round: round,
+            serviceActionId: actionId,
+            actionTokenAddress: settlement.actionTokenAddress,
+            memberId: memberId,
+            verifierReward: settlement.verifierReward,
+            ownerReward: settlement.ownerReward,
+            ownerBurned: burnAmount,
+            ownerDistributed: distributed,
+            ownerRemaining: remaining
+        });
     }
 }

@@ -28,6 +28,16 @@ library GroupActionVerify {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    modifier onlyMemberOwner(
+        GroupActionStorage.Layout storage s,
+        uint256 memberId
+    ) {
+        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
+            revert IActionExecutorErrors.NotMemberOwner(memberId);
+        }
+        _;
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function submitOriginScores(
         GroupActionStorage.Layout storage s,
@@ -37,8 +47,7 @@ library GroupActionVerify {
         uint256 groupId,
         uint256 startIndex,
         uint256[] calldata originScores
-    ) external {
-        s.requireMemberOwner(verifierId);
+    ) external onlyMemberOwner(s, verifierId) {
         if (originScores.length == 0) {
             revert IGroupActionVerifyErrors.OriginScoresEmpty();
         }
@@ -168,8 +177,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 memberId,
         string calldata description
-    ) external returns (uint256 applicationId) {
-        s.requireMemberOwner(memberId);
+    ) external onlyMemberOwner(s, memberId) returns (uint256 applicationId) {
         if (IStake(s.stakeAddress).validGovVotes(tokenAddress, memberId) == 0) {
             revert IGroupActionVerifyErrors.VerifyVotesZero();
         }
@@ -213,8 +221,7 @@ library GroupActionVerify {
         address tokenAddress,
         uint256 actionId,
         uint256 memberId
-    ) external {
-        s.requireMemberOwner(memberId);
+    ) external onlyMemberOwner(s, memberId) {
         uint256 round = IPhase(s.phaseAddress).currentPhase();
         uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
         if (applicationId == 0) {

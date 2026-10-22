@@ -362,8 +362,12 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "nothing recorded");
     }
 
-    function testJoinRejectsZeroAmountBeforeOwnerCheck() external {
+    function testJoinChecksOwnerBeforeAmount() external {
         vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
+        lpExecutor.join(address(token), ACTION_ID, 1, 0);
+
+        vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidParticipationAmount.selector));
         lpExecutor.join(address(token), ACTION_ID, 1, 0);
     }
@@ -553,7 +557,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testWithdrawRejectsZeroAndOverdraft() external {
         _join(1, 10e18);
 
-        vm.prank(MEMBER2);
+        vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidParticipationAmount.selector));
         lpExecutor.withdraw(address(token), ACTION_ID, 1, 0);
 
@@ -865,13 +869,17 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
     }
 
-    function testMintMemberRewardChecksRoundBeforeOwner() external {
+    function testMintMemberRewardChecksOwnerBeforeRound() external {
         _atPhase(4);
         vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 9);
+
+        vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 9));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 9);
 
-        vm.prank(MEMBER2);
+        vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 0);
     }
@@ -1006,6 +1014,10 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
+        lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
         lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
     }
 

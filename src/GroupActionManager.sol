@@ -23,6 +23,16 @@ library GroupActionManager {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    modifier onlyGroupOwner(
+        GroupActionStorage.Layout storage s,
+        uint256 groupId
+    ) {
+        if (IMemberNFT(s.memberNFTAddress).ownerOf(groupId) != msg.sender) {
+            revert IGroupActionManagerErrors.OnlyGroupOwner();
+        }
+        _;
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control)
     function onProposalCreated(
         GroupActionStorage.Layout storage s,
@@ -79,9 +89,7 @@ library GroupActionManager {
         uint256 actionId,
         uint256 groupId,
         GroupConfig calldata config
-    ) external {
-        _requireGroupOwner(s, groupId);
-
+    ) external onlyGroupOwner(s, groupId) {
         if (s.createdRound[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }
@@ -130,9 +138,7 @@ library GroupActionManager {
         address tokenAddress,
         uint256 actionId,
         uint256 groupId
-    ) external {
-        _requireGroupOwner(s, groupId);
-
+    ) external onlyGroupOwner(s, groupId) {
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (!group.active) {
             revert IGroupActionManagerErrors.GroupNotActive();
@@ -179,9 +185,7 @@ library GroupActionManager {
         uint256 actionId,
         uint256 groupId,
         GroupConfig calldata config
-    ) external {
-        _requireGroupOwner(s, groupId);
-
+    ) external onlyGroupOwner(s, groupId) {
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (!group.active) {
             revert IGroupActionManagerErrors.GroupNotActive();
@@ -323,12 +327,6 @@ library GroupActionManager {
         uint256 memberId
     ) external view returns (bool) {
         return s.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
-    }
-
-    function _requireGroupOwner(GroupActionStorage.Layout storage s, uint256 groupId) internal view {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(groupId) != msg.sender) {
-            revert IGroupActionManagerErrors.OnlyGroupOwner();
-        }
     }
 
     function _maxJoinAmount(

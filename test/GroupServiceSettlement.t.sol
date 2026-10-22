@@ -524,6 +524,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
         executor.mintMemberRewards(address(token), actionIds, GROUP_ID, _ids(SERVICE_ROUND));
 
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, GROUP_ID));
+        executor.mintMemberRewards(address(token), actionIds, GROUP_ID, _ids(SERVICE_ROUND));
+
         // One element that was never created rolls the whole batch back.
         actionIds = _ids(SERVICE_ACTION_ID, SERVICE_ACTION_ID + 2);
         vm.prank(GROUP_OWNER);
@@ -534,6 +538,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         );
         executor.mintMemberRewards(address(token), actionIds, GROUP_ID, rounds);
         require(actionTarget.mintRewardCalls() == 0, "no action settled from the failed batch");
+
+        // Owner check precedes action existence on the single-settlement entry.
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID + 2, MEMBER1_ID, SERVICE_ROUND);
 
         vm.prank(GROUP_OWNER);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =

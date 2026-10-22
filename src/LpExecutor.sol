@@ -72,6 +72,21 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     /// @dev tokenAddress => actionId => round => memberId => burned reward
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _burnedReward;
 
+    modifier onlyActionTarget() {
+        if (msg.sender != actionTarget) {
+            revert UnauthorizedCallback();
+        }
+        _;
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    modifier onlyMemberOwner(uint256 memberId) {
+        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
+            revert NotMemberOwner(memberId);
+        }
+        _;
+    }
+
     function GOV_RATIO_MULTIPLIER(
         address tokenAddress,
         uint256 actionId
@@ -115,10 +130,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         address tokenAddress,
         uint256 actionId,
         bytes[] calldata targetData
-    ) external {
-        if (msg.sender != actionTarget) {
-            revert UnauthorizedCallback();
-        }
+    ) external onlyActionTarget {
         if (
             targetData.length != 4 || targetData[0].length != 32 || targetData[1].length != 32
                 || targetData[2].length != 32 || targetData[3].length != 32
@@ -150,20 +162,15 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         external
         virtual
         override
-    {
-        if (msg.sender != actionTarget) {
-            revert UnauthorizedCallback();
-        }
-    }
+        onlyActionTarget
+    {}
 
     function onProposalVoted(address, uint256, uint256, uint256, uint256, bytes[] calldata targetData)
         external
         virtual
         override
+        onlyActionTarget
     {
-        if (msg.sender != actionTarget) {
-            revert UnauthorizedCallback();
-        }
         if (targetData.length > 1) {
             revert InvalidTargetDataLength();
         }
@@ -175,11 +182,10 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 actionId,
         uint256 memberId,
         uint256 amount
-    ) external nonReentrant {
+    ) external nonReentrant onlyMemberOwner(memberId) {
         if (amount == 0) {
             revert InvalidParticipationAmount();
         }
-        _requireMemberOwner(memberId);
 
         uint256 joinRound = currentJoinRound();
 
@@ -221,11 +227,10 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 actionId,
         uint256 memberId,
         uint256 amount
-    ) external nonReentrant {
+    ) external nonReentrant onlyMemberOwner(memberId) {
         if (amount == 0) {
             revert InvalidParticipationAmount();
         }
-        _requireMemberOwner(memberId);
 
         uint256 joinRound = currentJoinRound();
         uint256 memberJoinedAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(joinRound);
@@ -257,9 +262,11 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
-    function exit(address tokenAddress, uint256 actionId, uint256 memberId) external nonReentrant {
-        _requireMemberOwner(memberId);
-
+    function exit(address tokenAddress, uint256 actionId, uint256 memberId)
+        external
+        nonReentrant
+        onlyMemberOwner(memberId)
+    {
         uint256 joinRound = currentJoinRound();
         uint256 memberJoinedAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(joinRound);
         if (memberJoinedAmount == 0) {
@@ -271,13 +278,6 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         IERC20(_joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, memberJoinedAmount);
 
         emit Exited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
-    }
-
-    // forge-lint: disable-next-item(require-revert-in-loop)
-    function _requireMemberOwner(uint256 memberId) internal view {
-        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
-        }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -370,65 +370,14 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         }
     }
 
-    // forge-lint: disable-next-item(require-revert-in-loop, missing-events-access-control)
+    // forge-lint: disable-next-item(missing-events-access-control)
     function mintMemberReward(
         address tokenAddress,
         uint256 actionId,
         uint256 memberId,
         uint256 round
-    ) public nonReentrant returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 createdRound = _createdRound[tokenAddress][actionId];
-        if (createdRound == 0) {
-            revert ActionNotCreated(tokenAddress, actionId);
-        }
-        if (round < createdRound) {
-            revert RoundNotStarted();
-        }
-        if (round > _mintRound()) {
-            revert InvalidRound(round);
-        }
-        _requireMemberOwner(memberId);
-
-        if (_memberMinted[tokenAddress][actionId][round][memberId]) {
-            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
-        }
-
-        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
-        if (totalEffectiveAmount != 0) {
-            (uint256 proposalReward, bool actionMinted) =
-                IActionTarget(actionTarget).actionReward(tokenAddress, actionId, round);
-            if (!actionMinted && proposalReward != 0) {
-                // forge-lint: disable-next-line(reentrancy-no-eth)
-                proposalReward = IActionTarget(actionTarget).mintActionReward(tokenAddress, actionId, round);
-            }
-            (mintAmount, burnAmount) =
-                _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
-        }
-
-        if (mintAmount == 0 && burnAmount == 0) {
-            revert NoRewardAvailable();
-        }
-
-        _memberMinted[tokenAddress][actionId][round][memberId] = true;
-        _mintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
-        _burnedReward[tokenAddress][actionId][round][memberId] = burnAmount;
-        _govRatioAtMint[tokenAddress][actionId][round][memberId] = _calculateGovRatio(tokenAddress, memberId);
-
-        if (burnAmount != 0) {
-            ILOVE20Token(tokenAddress).burn(burnAmount);
-        }
-        if (mintAmount != 0) {
-            IERC20(tokenAddress).safeTransfer(msg.sender, mintAmount);
-        }
-
-        emit MemberRewardMinted({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            memberId: memberId,
-            round: round,
-            mintAmount: mintAmount,
-            burnAmount: burnAmount
-        });
+    ) public nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
+        return _mintMemberReward(tokenAddress, actionId, memberId, round);
     }
 
     function mintMemberRewards(
@@ -436,7 +385,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256[] calldata actionIds,
         uint256 memberId,
         uint256[] calldata rounds
-    ) external returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
+    ) external nonReentrant onlyMemberOwner(memberId) returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
         uint256 length = actionIds.length;
         if (length != rounds.length) {
             revert BatchLengthMismatch(length, rounds.length);
@@ -445,7 +394,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
+            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
         }
     }
 
@@ -576,5 +525,64 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         } catch {
             return false;
         }
+    }
+    // forge-lint: disable-next-item(require-revert-in-loop, missing-events-access-control)
+    function _mintMemberReward(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round
+    ) private returns (uint256 mintAmount, uint256 burnAmount) {
+        uint256 createdRound = _createdRound[tokenAddress][actionId];
+        if (createdRound == 0) {
+            revert ActionNotCreated(tokenAddress, actionId);
+        }
+        if (round < createdRound) {
+            revert RoundNotStarted();
+        }
+        if (round > _mintRound()) {
+            revert InvalidRound(round);
+        }
+
+        if (_memberMinted[tokenAddress][actionId][round][memberId]) {
+            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
+        }
+
+        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
+        if (totalEffectiveAmount != 0) {
+            (uint256 proposalReward, bool actionMinted) =
+                IActionTarget(actionTarget).actionReward(tokenAddress, actionId, round);
+            if (!actionMinted && proposalReward != 0) {
+                // forge-lint: disable-next-line(reentrancy-no-eth)
+                proposalReward = IActionTarget(actionTarget).mintActionReward(tokenAddress, actionId, round);
+            }
+            (mintAmount, burnAmount) =
+                _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
+        }
+
+        if (mintAmount == 0 && burnAmount == 0) {
+            revert NoRewardAvailable();
+        }
+
+        _memberMinted[tokenAddress][actionId][round][memberId] = true;
+        _mintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
+        _burnedReward[tokenAddress][actionId][round][memberId] = burnAmount;
+        _govRatioAtMint[tokenAddress][actionId][round][memberId] = _calculateGovRatio(tokenAddress, memberId);
+
+        if (burnAmount != 0) {
+            ILOVE20Token(tokenAddress).burn(burnAmount);
+        }
+        if (mintAmount != 0) {
+            IERC20(tokenAddress).safeTransfer(msg.sender, mintAmount);
+        }
+
+        emit MemberRewardMinted({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: round,
+            mintAmount: mintAmount,
+            burnAmount: burnAmount
+        });
     }
 }
