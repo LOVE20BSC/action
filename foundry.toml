@@ -9,6 +9,7 @@ optimizer_runs = 200
 bytecode_hash = "none"
 cbor_metadata = false
 deny = "warnings"
+auto_detect_remappings = false
 
 [fuzz]
 runs = 256

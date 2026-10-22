@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
-import {Test} from "forge-std/Test.sol";
+import {Test} from "@forge-std/Test.sol";
 import {ActionTarget} from "../../src/ActionTarget.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
-import {Mint} from "core/src/Mint.sol";
-import {LOVE20Token} from "core/src/LOVE20Token.sol";
-import {TargetMode} from "core/src/interfaces/ISubmit.sol";
+import {Mint} from "@core/Mint.sol";
+import {LOVE20Token} from "@core/LOVE20Token.sol";
+import {TargetMode} from "@core/interfaces/ISubmit.sol";
 
 /// @notice Real accounting contracts and tokens; only peripheral reads are mocked.
 /// @dev Fixed Submit/Vote callbacks are impersonated to set up normal lifecycle state. The

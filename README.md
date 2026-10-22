@@ -8,14 +8,12 @@ Action 负责 `ActionTarget`、LP、GroupAction 和 GroupService 四类行动执
 
 | 子模块 | 用途 |
 | --- | --- |
-| `lib/core` | Core 接口声明的唯一来源与测试夹具用的 Core 实现 |
-| `lib/libs` | 共享库（分页、集合原语、按轮历史） |
-| `lib/openzeppelin-contracts` | 标准 ERC 与数学库 |
+| `lib/core` | Core 接口声明的唯一来源与测试夹具用的 Core 实现；本仓的 `libs` 与 OpenZeppelin 从该子模块的嵌套依赖解析 |
 | `lib/forge-std` | 测试与脚本 |
 
-Core 的接口以 `core` 代码库为准：生产代码直接从 `lib/core/src/interfaces/` 导入，标准能力（如 ERC721 的 `ownerOf`）由 core 侧接口继承提供，因此本仓不另存 Core 接口副本。`lib/core` 须与 `core` 的 `main` 同步——core 源码用相对路径引用自己的 `lib/libs`，升版本仓时必须同时让其嵌套子模块与其 `foundry.lock` 一致。
+Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（指向 `lib/core/src/`）导入，例如 `@core/interfaces/...`；标准能力（如 ERC721 的 `ownerOf`）由 core 侧接口继承提供，因此本仓不另存 Core 接口副本。`lib/core` 须与 `core` 的 `main` 同步；本仓不直接声明 `libs` 与 OpenZeppelin，二者经 `lib/core` 的嵌套依赖解析，路径见 `remappings.txt`；升级 `lib/core` 时必须同步其嵌套子模块与 `core` 的 `foundry.lock`，并重跑本仓完整构建与测试。
 
-依赖版本固定在同一提交的 `.gitmodules` + `foundry.lock`，不在文档中另行登记。
+依赖版本固定在同一提交的 `.gitmodules` + `foundry.lock`（仅直接子模块；`libs`/OpenZeppelin 由 `lib/core` 的 commit 固定），跨仓解析路径固定在 `remappings.txt`；规则见 [合约开发规范](https://github.com/LOVE20BSC/matt-gov/blob/main/docs/dev-standards.md) §3.2。
 
 ## 当前状态
 

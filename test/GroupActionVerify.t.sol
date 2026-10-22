@@ -4,8 +4,8 @@ pragma solidity =0.8.37;
 import {GroupActionStorage} from "../src/GroupActionStorage.sol";
 import {GroupActionVerify} from "../src/GroupActionVerify.sol";
 import {IGroupActionVerifyErrors} from "../src/interfaces/IGroupActionVerify.sol";
-import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
-import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
+import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
+import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {MockGroupActionMemberNFT, MockGroupActionPhase} from "./mocks/GroupActionMocks.sol";
 
 interface GroupActionVerifyVm {

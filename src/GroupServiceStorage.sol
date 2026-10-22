@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {RoundHistoryStringArray} from "libs/RoundHistoryStringArray.sol";
-import {RoundHistoryUint256Array} from "libs/RoundHistoryUint256Array.sol";
-import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
+import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
+import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
+import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
-import {IPhase} from "core/src/interfaces/IPhase.sol";
+import {IPhase} from "@core/interfaces/IPhase.sol";
 
 library GroupServiceStorage {
     uint256 constant PRECISION = 1e18;

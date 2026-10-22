@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {Script} from "forge-std/Script.sol";
-import {console2} from "forge-std/console2.sol";
+import {Script} from "@forge-std/Script.sol";
+import {console2} from "@forge-std/console2.sol";
 import {ActionTarget} from "../../src/ActionTarget.sol";
 import {LpExecutor} from "../../src/LpExecutor.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";

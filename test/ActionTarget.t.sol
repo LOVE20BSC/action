@@ -3,7 +3,7 @@ pragma solidity =0.8.37;
 
 import {ActionTarget} from "../src/ActionTarget.sol";
 import {IActionTargetErrors} from "../src/interfaces/IActionTarget.sol";
-import {IMintErrors} from "core/src/interfaces/IMint.sol";
+import {IMintErrors} from "@core/interfaces/IMint.sol";
 import {MockExecutor, MockMint} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 

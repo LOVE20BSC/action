@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {IProposalTarget} from "core/src/interfaces/IProposalTarget.sol";
+import {IProposalTarget} from "@core/interfaces/IProposalTarget.sol";
 
 interface IActionExecutorEvents {
     event MemberRewardMinted(

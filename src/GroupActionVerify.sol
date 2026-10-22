@@ -8,16 +8,16 @@ import {
     IGroupActionVerifyEvents,
     IGroupActionVerifyErrors
 } from "./interfaces/IGroupActionVerify.sol";
-import {IStake} from "core/src/interfaces/IStake.sol";
-import {IPhase} from "core/src/interfaces/IPhase.sol";
-import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {IStake} from "@core/interfaces/IStake.sol";
+import {IPhase} from "@core/interfaces/IPhase.sol";
+import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
-import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
-import {RoundHistoryString} from "libs/RoundHistoryString.sol";
-import {Uint256Set} from "libs/Uint256Set.sol";
+import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
+import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
+import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
+import {Uint256Set} from "@libs/Uint256Set.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
 library GroupActionVerify {

@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
-import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
+import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {GroupActionJoin} from "./GroupActionJoin.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
@@ -11,9 +11,9 @@ import {IActionExecutor} from "./interfaces/IActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
 import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
-import {IStake} from "core/src/interfaces/IStake.sol";
-import {IPhase} from "core/src/interfaces/IPhase.sol";
-import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {IStake} from "@core/interfaces/IStake.sol";
+import {IPhase} from "@core/interfaces/IPhase.sol";
+import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";

@@ -8,16 +8,16 @@ import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
 import {ILpExecutorErrors} from "../../src/interfaces/ILpExecutor.sol";
 import {MockERC20} from "../mocks/LpExecutorMocks.sol";
 import {MockUniswapV2Factory, MockUniswapV2Pair, MockUniswapV2Router} from "../mocks/UniswapV2Mocks.sol";
-import {Phase} from "core/src/Phase.sol";
-import {MemberNFT} from "core/src/MemberNFT.sol";
-import {Mint} from "core/src/Mint.sol";
-import {Vote} from "core/src/Vote.sol";
-import {Submit, ProposalBody} from "core/src/Submit.sol";
-import {Stake} from "core/src/Stake.sol";
-import {Launch} from "core/src/Launch.sol";
-import {LOVE20Token} from "core/src/LOVE20Token.sol";
-import {LaunchInitParams} from "core/src/interfaces/ILaunch.sol";
-import {TargetMode} from "core/src/interfaces/ISubmit.sol";
+import {Phase} from "@core/Phase.sol";
+import {MemberNFT} from "@core/MemberNFT.sol";
+import {Mint} from "@core/Mint.sol";
+import {Vote} from "@core/Vote.sol";
+import {Submit, ProposalBody} from "@core/Submit.sol";
+import {Stake} from "@core/Stake.sol";
+import {Launch} from "@core/Launch.sol";
+import {LOVE20Token} from "@core/LOVE20Token.sol";
+import {LaunchInitParams} from "@core/interfaces/ILaunch.sol";
+import {TargetMode} from "@core/interfaces/ISubmit.sol";
 
 interface LpExecutorIntegrationVm {
     function prank(address sender) external;

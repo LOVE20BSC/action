@@ -3,13 +3,13 @@ pragma solidity =0.8.37;
 
 import {IActionExecutor} from "./interfaces/IActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
-import {Pagination} from "libs/Pagination.sol";
-import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
-import {Uint256Set} from "libs/Uint256Set.sol";
-import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
-import {IMint} from "core/src/interfaces/IMint.sol";
-import {IPhase} from "core/src/interfaces/IPhase.sol";
-import {IVote} from "core/src/interfaces/IVote.sol";
+import {Pagination} from "@libs/Pagination.sol";
+import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
+import {Uint256Set} from "@libs/Uint256Set.sol";
+import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
+import {IMint} from "@core/interfaces/IMint.sol";
+import {IPhase} from "@core/interfaces/IPhase.sol";
+import {IVote} from "@core/interfaces/IVote.sol";
 
 contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;

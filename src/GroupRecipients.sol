@@ -8,10 +8,10 @@ import {IGroupServiceExecutorEvents} from "./interfaces/IGroupServiceExecutor.so
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
-import {RoundHistoryStringArray} from "libs/RoundHistoryStringArray.sol";
-import {RoundHistoryUint256Array} from "libs/RoundHistoryUint256Array.sol";
-import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
+import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
+import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
+import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
+import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 
 library GroupRecipients {
     using GroupServiceStorage for GroupServiceStorage.Layout;

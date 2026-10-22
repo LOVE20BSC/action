@@ -7,16 +7,16 @@ import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol"
 import {IGroupActionJoinEvents, IGroupActionJoinErrors} from "./interfaces/IGroupActionJoin.sol";
 import {IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
-import {IPhase} from "core/src/interfaces/IPhase.sol";
-import {IMemberNFT} from "core/src/interfaces/IMemberNFT.sol";
+import {IPhase} from "@core/interfaces/IPhase.sol";
+import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
-import {AddressSet} from "libs/AddressSet.sol";
-import {RoundHistoryUint256} from "libs/RoundHistoryUint256.sol";
-import {RoundHistoryUint256Set} from "libs/RoundHistoryUint256Set.sol";
-import {Uint256Set} from "libs/Uint256Set.sol";
-import {RoundHistoryString} from "libs/RoundHistoryString.sol";
+import {AddressSet} from "@libs/AddressSet.sol";
+import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
+import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
+import {Uint256Set} from "@libs/Uint256Set.sol";
+import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 
 library GroupActionJoin {
     using AddressSet for AddressSet.Storage;
