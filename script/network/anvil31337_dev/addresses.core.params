@@ -1,5 +1,3 @@
-# Core 已部署地址，来源：core/script/network/anvil31337_dev/addresses.core.params
-# （core 一键部署 anvil31337_dev 后复制，供 action init 从 Mint / Stake 派生依赖）
 LOVE20_TOKEN_ADDRESS=0x3B02fF1e626Ed7a8fd6eC5299e2C54e1421B626B
 MEMBER_NFT_ADDRESS=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 PHASE_ADDRESS=0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9

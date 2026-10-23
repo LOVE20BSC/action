@@ -36,25 +36,64 @@ case "$CHAIN_ID" in
 esac
 : "${ETHERSCAN_API_KEY:?Set an Etherscan API key; source verification has not run.}"
 
-for field in ACTION_TARGET_ADDRESS LP_EXECUTOR_ADDRESS \
-    GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS; do
+CONTRACT_ADDRESS_FIELDS="ACTION_TARGET_ADDRESS LP_EXECUTOR_ADDRESS GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS"
+GROUP_ACTION_LIBRARY_SPECS=(
+    "GroupActionJoin src/GroupActionJoin.sol GROUP_ACTION_JOIN_LIBRARY_ADDRESS"
+    "GroupActionManager src/GroupActionManager.sol GROUP_ACTION_MANAGER_LIBRARY_ADDRESS"
+    "GroupActionVerify src/GroupActionVerify.sol GROUP_ACTION_VERIFY_LIBRARY_ADDRESS"
+)
+GROUP_SERVICE_LIBRARY_SPECS=(
+    "GroupRecipients src/GroupRecipients.sol GROUP_RECIPIENTS_LIBRARY_ADDRESS"
+)
+
+# 库地址内嵌在 Executor 运行时字节码中：不传 --libraries 时 standard-json 的
+# settings.libraries 为空，字节码无法匹配。多个库必须重复传该参数：本版 Foundry
+# 不接受逗号拼接的单个值（会报 too many arguments passed）。
+GROUP_ACTION_LIBRARY_FIELDS=""
+GROUP_ACTION_LIBRARY_ARGS=()
+GROUP_SERVICE_LIBRARY_FIELDS=""
+GROUP_SERVICE_LIBRARY_ARGS=()
+ALL_LIBRARY_FQNS=()
+ALL_LIBRARY_FIELDS=()
+for spec in "${GROUP_ACTION_LIBRARY_SPECS[@]}"; do
+    read -r lib_name lib_path lib_field <<< "$spec"
+    GROUP_ACTION_LIBRARY_FIELDS+=" $lib_field"
+    GROUP_ACTION_LIBRARY_ARGS+=(--libraries "$lib_path:$lib_name:${!lib_field:-}")
+    ALL_LIBRARY_FQNS+=("$lib_path:$lib_name")
+    ALL_LIBRARY_FIELDS+=("$lib_field")
+done
+for spec in "${GROUP_SERVICE_LIBRARY_SPECS[@]}"; do
+    read -r lib_name lib_path lib_field <<< "$spec"
+    GROUP_SERVICE_LIBRARY_FIELDS+=" $lib_field"
+    GROUP_SERVICE_LIBRARY_ARGS+=(--libraries "$lib_path:$lib_name:${!lib_field:-}")
+    ALL_LIBRARY_FQNS+=("$lib_path:$lib_name")
+    ALL_LIBRARY_FIELDS+=("$lib_field")
+done
+GROUP_ACTION_LIBRARY_FIELDS=${GROUP_ACTION_LIBRARY_FIELDS# }
+GROUP_SERVICE_LIBRARY_FIELDS=${GROUP_SERVICE_LIBRARY_FIELDS# }
+
+for field in $CONTRACT_ADDRESS_FIELDS $GROUP_ACTION_LIBRARY_FIELDS $GROUP_SERVICE_LIBRARY_FIELDS; do
     if [[ ! ${!field:-} =~ ^0x[0-9a-fA-F]{40}$ ]] || [[ ${!field:-} = 0x0000000000000000000000000000000000000000 ]]; then
         echo "Error: Missing or invalid $field in $NETWORK_DIR/addresses.action.params"
         exit 1
     fi
 done
 
-# 四个合约均无构造函数参数（依赖经 init 绑定），直接提交验证。
+# 均无构造函数参数（依赖经 init 绑定），直接提交验证。
 COMMON_ARGS=(--chain "$CHAIN_ID" --verifier etherscan --verifier-url "https://api.etherscan.io/v2/api" --watch)
 verify_contract() {
-    local address=$1 name=$2
+    local address=$1 fqn=$2
     shift 2
-    echo "Verifying $name..."
-    forge verify-contract "$address" "src/$name.sol:$name" "${COMMON_ARGS[@]}" "$@"
+    echo "Verifying $fqn..."
+    forge verify-contract "$address" "$fqn" "${COMMON_ARGS[@]}" "$@"
 }
 
-verify_contract "$ACTION_TARGET_ADDRESS" ActionTarget
-verify_contract "$LP_EXECUTOR_ADDRESS" LpExecutor
-verify_contract "$GROUP_ACTION_EXECUTOR_ADDRESS" GroupActionExecutor
-verify_contract "$GROUP_SERVICE_EXECUTOR_ADDRESS" GroupServiceExecutor
-echo "✓ Source verification succeeded for all 4 contracts"
+verify_contract "$ACTION_TARGET_ADDRESS" "src/ActionTarget.sol:ActionTarget"
+verify_contract "$LP_EXECUTOR_ADDRESS" "src/LpExecutor.sol:LpExecutor"
+verify_contract "$GROUP_ACTION_EXECUTOR_ADDRESS" "src/GroupActionExecutor.sol:GroupActionExecutor" "${GROUP_ACTION_LIBRARY_ARGS[@]}"
+verify_contract "$GROUP_SERVICE_EXECUTOR_ADDRESS" "src/GroupServiceExecutor.sol:GroupServiceExecutor" "${GROUP_SERVICE_LIBRARY_ARGS[@]}"
+for i in "${!ALL_LIBRARY_FQNS[@]}"; do
+    field=${ALL_LIBRARY_FIELDS[$i]}
+    verify_contract "${!field}" "${ALL_LIBRARY_FQNS[$i]}"
+done
+echo "✓ Source verification succeeded for all contracts and linked libraries"

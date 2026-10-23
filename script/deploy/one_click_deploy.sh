@@ -48,27 +48,39 @@ fi
 # 部署与校验是分开的步骤，校验失败不应覆盖上次已保存的地址：先备份，校验通过后丢弃，失败则回滚。
 ADDRESS_FILE="$NETWORK_DIR/addresses.action.params"
 BACKUP_FILE="$(mktemp)"
+RESTORE_TMP="$ADDRESS_FILE.restore.$$"
+trap 'rm -f "$BACKUP_FILE" "$RESTORE_TMP"' EXIT
 had_address_file=0
 if [ -f "$ADDRESS_FILE" ]; then
     cp "$ADDRESS_FILE" "$BACKUP_FILE"
     had_address_file=1
 fi
 
-# 步骤一：合约部署与初始化（自载入部署输入）。失败时地址文件尚未写入，无需回滚。
+# 步骤一：合约部署与初始化（自载入部署输入）。地址文件只在全部校验通过后才写，
+# 但已广播的合约无法回滚——广播后失败按 11_deploy.sh 留下的日志与 broadcast 产物恢复记录。
 bash "$SCRIPT_DIR/11_deploy.sh" "$network"
 
 # 步骤二：校验部署与初始化是否正确（自载入校验文件，失败回滚已保存地址）。
 if ! bash "$SCRIPT_DIR/21_check.sh" "$network"; then
+    echo "Error: post-deployment check failed."
+    if [ -f "$ADDRESS_FILE" ]; then
+        echo "New deployment addresses (may already be on chain):"
+        sed 's/^/  /' "$ADDRESS_FILE"
+    fi
+    echo "  Broadcast artifact: $PROJECT_ROOT/broadcast/DeployAction.s.sol/<chain-id>/run-latest.json"
     if [ "$had_address_file" = 1 ]; then
-        cp "$BACKUP_FILE" "$ADDRESS_FILE"
+        if ! cp "$BACKUP_FILE" "$RESTORE_TMP"; then
+            echo "Error: failed to stage the previous addresses; $ADDRESS_FILE still holds the new deployment." >&2
+            exit 1
+        fi
+        mv "$RESTORE_TMP" "$ADDRESS_FILE"
+        echo "The previously saved addresses were restored."
     else
         rm -f "$ADDRESS_FILE"
+        echo "No previous address file existed; the new address file was removed."
     fi
-    rm -f "$BACKUP_FILE"
-    echo "Error: post-deployment check failed; the previously saved addresses were restored."
     exit 1
 fi
-rm -f "$BACKUP_FILE"
 
 # 步骤三：合约开源验证（自载入地址文件）。链不支持开源验证时自行跳过。
 bash "$SCRIPT_DIR/31_verify.sh" "$network"
