@@ -95,7 +95,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupAlreadyActivated.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupAlreadyActivated.selector, GROUP_ID));
         executor.activateGroup(address(token), ACTION_ID, GROUP_ID, _defaultConfig());
 
         GroupConfig memory zeroMin = GroupConfig({
@@ -106,7 +106,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             maxAccounts: 0
         });
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InvalidMinMaxJoinAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InvalidMinJoinAmount.selector, 0));
         executor.activateGroup(address(token), ACTION_ID, GROUP_8, zeroMin);
 
         GroupConfig memory inverted = GroupConfig({
@@ -117,7 +117,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             maxAccounts: 0
         });
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InvalidMinMaxJoinAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InvalidMaxJoinAmount.selector, 10e18, 5e18));
         executor.activateGroup(address(token), ACTION_ID, GROUP_8, inverted);
 
         bytes memory longDescription = new bytes(1025);
@@ -132,7 +132,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             maxAccounts: 0
         });
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector, 1025, 1024));
         executor.activateGroup(address(token), ACTION_ID, GROUP_8, tooLong);
     }
 
@@ -143,13 +143,13 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         stake.setGlobalGovVotes(address(token), 0);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NoGovVotes.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NoGovVotes.selector, address(token)));
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
 
         stake.setGlobalGovVotes(address(token), 1000e18);
         stake.setValidGovVotes(address(token), GROUP_8, 50e18);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InsufficientActivationMinGovRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InsufficientActivationMinGovRatio.selector, GROUP_8, 1e17, 5e16));
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
 
         stake.setValidGovVotes(address(token), GROUP_8, 100e18);
@@ -189,7 +189,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         _openJoinPhase();
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.CannotDeactivateInActivatedRound.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector, GROUP_ID, 2));
         executor.deactivateGroup(address(token), ACTION_ID, GROUP_ID);
 
         memberNFT.setOwner(GROUP_99, GROUP_OWNER);
@@ -271,7 +271,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
     function testOnProposalCreatedReverts() external {
         bytes[] memory data = _targetData();
 
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
         executor.onProposalCreated(address(token), ACTION_2, data);
 
         bytes[] memory four = new bytes[](4);
@@ -279,7 +279,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             four[i] = data[i];
         }
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TargetDataLengthMismatch.selector, 6, 4));
         executor.onProposalCreated(address(token), ACTION_2, four);
 
         bytes[] memory five = new bytes[](5);
@@ -287,37 +287,42 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             five[i] = data[i];
         }
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TargetDataLengthMismatch.selector, 6, 5));
         executor.onProposalCreated(address(token), ACTION_2, five);
+
+        bytes[] memory eight = new bytes[](8);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TargetDataLengthMismatch.selector, 7, 8));
+        executor.onProposalCreated(address(token), ACTION_2, eight);
 
         bytes[] memory badItem = _clone(data);
         badItem[2] = new bytes(31);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 2, 31));
         executor.onProposalCreated(address(token), ACTION_2, badItem);
 
         bytes[] memory badVerifierStake = _clone(data);
         badVerifierStake[5] = new bytes(31);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 5, 31));
         executor.onProposalCreated(address(token), ACTION_2, badVerifierStake);
 
         bytes[] memory zeroToken = _clone(data);
         zeroToken[1] = abi.encode(address(0));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.ZeroJoinTokenAddress.selector));
         executor.onProposalCreated(address(token), ACTION_2, zeroToken);
 
         bytes[] memory badRatio = _clone(data);
         badRatio[3] = abi.encode(PRECISION + 1);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidMaxJoinAmountRatio.selector, PRECISION + 1));
         executor.onProposalCreated(address(token), ACTION_2, badRatio);
 
         bytes[] memory badGov = _clone(data);
         badGov[4] = abi.encode(PRECISION + 1);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidActivationMinGovRatio.selector, PRECISION + 1));
         executor.onProposalCreated(address(token), ACTION_2, badGov);
 
         string[] memory keys = new string[](1);
@@ -331,7 +336,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         }
         seven[6] = abi.encode(keys, descriptions);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector, 1, 2));
         executor.onProposalCreated(address(token), ACTION_2, seven);
     }
 

@@ -62,7 +62,7 @@ library GroupServiceStorage {
     function currentJoinRound(Layout storage s) internal view returns (uint256) {
         uint256 round = joinRound(s);
         if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted();
+            revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
         return round;
     }

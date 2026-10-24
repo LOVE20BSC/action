@@ -59,7 +59,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         LpExecutor freshFactory = new LpExecutor();
         freshFactory.init(address(actionTarget), address(stake));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector, address(joinToken), address(emptyFactory)));
         freshFactory.onProposalCreated(address(token), ACTION_ID, _targetData());
         stake.setPairFactoryAddress(address(factory));
     }
@@ -80,11 +80,11 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testInitRejectsZeroDependencies() external {
         LpExecutor fresh = new LpExecutor();
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(0), address(stake));
         require(fresh.initialized() == false, "not latched");
 
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(actionTarget), address(0));
         require(fresh.initialized() == false, "not latched");
 
@@ -96,17 +96,17 @@ contract LpExecutorTest is LpExecutorTestBase {
         LpExecutor fresh = new LpExecutor();
 
         stake.setMemberNFTAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(actionTarget), address(stake));
         stake.setMemberNFTAddress(address(memberNFT));
 
         stake.setPhaseAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(actionTarget), address(stake));
         stake.setPhaseAddress(address(phase));
 
         stake.setPairFactoryAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(actionTarget), address(stake));
         stake.setPairFactoryAddress(address(factory));
 
@@ -129,7 +129,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testCreateRejectsNonActionTargetCaller() external {
         vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, _targetData());
     }
 
@@ -141,7 +141,9 @@ contract LpExecutorTest is LpExecutorTestBase {
                 targetData[i] = abi.encode(uint256(i));
             }
             vm.prank(address(actionTarget));
-            vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidTargetDataLength.selector));
+            vm.expectRevert(
+                abi.encodeWithSelector(ILpExecutorErrors.TargetDataLengthMismatch.selector, 4, counts[c])
+            );
             lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
         }
         require(
@@ -157,7 +159,9 @@ contract LpExecutorTest is LpExecutorTestBase {
                 bytes[] memory targetData = _cloneTargetData();
                 targetData[position] = new bytes(lengths[i]);
                 vm.prank(address(actionTarget));
-                vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidTargetDataLength.selector));
+                vm.expectRevert(
+                    abi.encodeWithSelector(ILpExecutorErrors.InvalidTargetDataShape.selector, position, lengths[i])
+                );
                 lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
             }
         }
@@ -167,7 +171,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         bytes[] memory targetData = _cloneTargetData();
         targetData[1] = abi.encode(address(0));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.ZeroJoinTokenAddress.selector));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
     }
 
@@ -184,7 +188,11 @@ contract LpExecutorTest is LpExecutorTestBase {
             bytes[] memory targetData = _cloneTargetData();
             targetData[1] = abi.encode(candidates[i]);
             vm.prank(address(actionTarget));
-            vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    ILpExecutorErrors.InvalidJoinTokenFactory.selector, candidates[i], address(factory)
+                )
+            );
             lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
         }
     }
@@ -192,16 +200,21 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testCreateRejectsFactoryWithoutCodeOrRevertingFactory() external {
         stake.setPairFactoryAddress(address(0xdead));
         LpExecutor fresh = new LpExecutor();
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0xdead))
+        );
         fresh.init(address(actionTarget), address(stake));
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector));
-        fresh.onProposalCreated(address(token), ACTION_ID, _targetData());
 
-        stake.setPairFactoryAddress(address(new MockRevertingPairFactory()));
+        address revertingFactory = address(new MockRevertingPairFactory());
+        stake.setPairFactoryAddress(revertingFactory);
         LpExecutor freshReverting = new LpExecutor();
         freshReverting.init(address(actionTarget), address(stake));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ILpExecutorErrors.InvalidJoinTokenFactory.selector, address(joinToken), revertingFactory
+            )
+        );
         freshReverting.onProposalCreated(address(token), ACTION_ID, _targetData());
 
         stake.setPairFactoryAddress(address(factory));
@@ -216,7 +229,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         bytes[] memory targetData = _cloneTargetData();
         targetData[3] = abi.encode(PRECISION + 1);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector, PRECISION + 1));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
     }
 
@@ -234,7 +247,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         bytes[] memory targetData = _cloneTargetData();
         targetData[3] = abi.encode(PRECISION + 1);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector, PRECISION + 1));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
 
         require(
@@ -258,7 +271,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.onProposalSubmitted(address(token), ACTION_ID, 1, _targetData());
 
         vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
         lpExecutor.onProposalSubmitted(address(token), ACTION_ID, 1, _targetData());
     }
 
@@ -275,11 +288,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         twoItems[0] = abi.encode(address(lpExecutor));
         twoItems[1] = abi.encode(uint256(1));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidTargetDataLength.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.TargetDataLengthMismatch.selector, 1, 2));
         lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, twoItems);
 
         vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
         lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, new bytes[](0));
     }
 
@@ -368,7 +381,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.join(address(token), ACTION_ID, 1, 0);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.ZeroParticipationAmount.selector));
         lpExecutor.join(address(token), ACTION_ID, 1, 0);
     }
 
@@ -378,7 +391,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         stake.setValidGovVotes(address(token), 2, 99e18);
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, 1e17, 99e15));
         lpExecutor.join(address(token), ACTION_ID, 2, 1e18);
         require(actionTarget.isJoined(address(token), ACTION_ID, 2) == false, "not registered");
     }
@@ -402,7 +415,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testJoinZeroGlobalVotesRequiresZeroMinRatio() external {
         stake.setGlobalGovVotes(address(token), 0);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, 1e17, 0));
         lpExecutor.join(address(token), ACTION_ID, 1, 1e18);
 
         _createActionWithConfig(SECOND_ACTION_ID, GOV_RATIO_MULTIPLIER, 0);
@@ -446,7 +459,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testJoinRoundFollowsPhaseMapping() external {
         _atPhase(1);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.join(address(token), ACTION_ID, 1, 1e18);
 
         _atPhase(5);
@@ -558,11 +571,13 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(1, 10e18);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.ZeroParticipationAmount.selector));
         lpExecutor.withdraw(address(token), ACTION_ID, 1, 0);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ILpExecutorErrors.WithdrawAmountExceeded.selector, 10e18 + 1, 10e18)
+        );
         lpExecutor.withdraw(address(token), ACTION_ID, 1, 10e18 + 1);
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 10e18, "balance retained");
     }
@@ -585,7 +600,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(1, 10e18);
         _withdraw(1, 10e18);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.WithdrawAmountExceeded.selector, 1, 0));
         lpExecutor.withdraw(address(token), ACTION_ID, 1, 1);
     }
 
@@ -809,7 +824,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, PROPOSAL_REWARD, false);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+            )
+        );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
         require(actionTarget.mintRewardCalls() == 0, "no pull without effective participation");
         (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
@@ -824,7 +843,11 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         uint256 memberBefore = token.balanceOf(MEMBER2);
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 2, 2
+            )
+        );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 2);
         require(token.balanceOf(MEMBER2) == memberBefore, "no transfer");
         (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 2);
@@ -838,7 +861,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, 0, false);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+            )
+        );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
         require(actionTarget.mintRewardCalls() == 0, "no pull with zero reward");
     }
@@ -853,16 +880,16 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         _atPhase(3);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, 1, 2));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 1);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 3));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 3, 1));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 3);
 
         _atPhase(2);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 2));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 2, 0));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
     }
 
@@ -880,11 +907,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 9);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 9));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 9, 2));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 9);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, 0, 2));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 0);
     }
 
@@ -1065,21 +1092,21 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testCurrentRoundsFollowPhaseMapping() external {
         _atPhase(0);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentVoteRound();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentJoinRound();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentMintRound();
 
         _atPhase(1);
         require(lpExecutor.currentVoteRound() == 1, "vote round is the phase");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentJoinRound();
 
         _atPhase(2);
         require(lpExecutor.currentJoinRound() == 1, "join round is phase minus one");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentMintRound();
 
         _atPhase(3);
@@ -1190,7 +1217,11 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testUnallocatedRoundBlocksSettlement() external {
         _atPhase(4);
         // Nobody joined the creation round, so its reserved share has no distribution path.
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+            )
+        );
         _mintMemberReward(1, 2);
     }
 }

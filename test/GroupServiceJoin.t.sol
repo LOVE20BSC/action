@@ -251,7 +251,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _qualifyGroupOwner(GROUP_ID);
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         executor.join(address(token), SERVICE_ACTION_ID, GROUP_ID);
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "no snapshot written");
     }

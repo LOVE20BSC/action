@@ -70,7 +70,7 @@ contract LpExecutorRealIntegrationTest {
         phase = new Phase(PHASE_ORIGIN, BLOCKS_PER_PHASE, 3600, 10, 50);
         factory = new MockUniswapV2Factory();
         router = new MockUniswapV2Router();
-        rootToken = new LOVE20Token("RootCommunity", "ROOT", 1000000, 100000000, owner, owner, address(1));
+        rootToken = new LOVE20Token("RootCommunity", "ROOT", 1000000, 100000000, owner, owner, address(this));
         memberNFT = new MemberNFT(1e18, 4, 2, 20);
         mint = new Mint();
         vote = new Vote();
@@ -295,7 +295,11 @@ contract LpExecutorRealIntegrationTest {
         require(expectedShare > 0 && !minted, "share reserved but unminted");
 
         vm.prank(member1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), proposalId, 1, round
+            )
+        );
         lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
 
         (expectedShare, minted) = mint.proposalRewardByProposalId(address(token), round, proposalId);
@@ -372,25 +376,28 @@ contract LpExecutorRealIntegrationTest {
     }
 
     function testRealIntegration_AdmissionRejects() external {
+        address unregisteredPair = address(new MockUniswapV2Pair(address(token), address(otherToken)));
         _createProposalExpecting(
             member1,
             1,
-            _targetDataWithItem(1, abi.encode(address(new MockUniswapV2Pair(address(token), address(otherToken))))),
-            abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector)
+            _targetDataWithItem(1, abi.encode(unregisteredPair)),
+            abi.encodeWithSelector(
+                ILpExecutorErrors.InvalidJoinTokenFactory.selector, unregisteredPair, address(factory)
+            )
         );
 
         _createProposalExpecting(
             member1,
             1,
             _targetDataWithItem(1, abi.encode(address(0))),
-            abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenAddress.selector)
+            abi.encodeWithSelector(ILpExecutorErrors.ZeroJoinTokenAddress.selector)
         );
 
         _createProposalExpecting(
             member1,
             1,
             _targetDataWithItem(3, abi.encode(PRECISION + 1)),
-            abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector)
+            abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector, PRECISION + 1)
         );
 
         uint256 round = phase.currentPhase();
@@ -411,8 +418,11 @@ contract LpExecutorRealIntegrationTest {
         _voteOne(member1, 1, proposalId, MEMBER1_VOTES);
         _advanceToPhaseStart(round + 1);
         _fundMemberLp(member2, LP_JOIN_AMOUNT);
+        uint256 member2GovRatio = stake.validGovVotes(address(token), 2) * PRECISION / stake.globalGovVotes(address(token));
         vm.prank(member2);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, PRECISION, member2GovRatio)
+        );
         lpExecutor.join(address(token), proposalId, 2, LP_JOIN_AMOUNT);
     }
 

@@ -428,7 +428,15 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         // No voted group actions: the denominator is 0 and the mint reverts.
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
 
         // The zero divisor is not cached: the failed settlement leaves no state, so the read recomputes.
@@ -462,7 +470,15 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         );
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                MEMBER1_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, MEMBER1_ID, SERVICE_ROUND);
 
         // A member who never joined the service at all earns nothing either.
@@ -471,7 +487,15 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(mintAmount == 0 && burnAmount == 0 && !minted, "outsider sees zeros");
 
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                MEMBER2_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, MEMBER2_ID, SERVICE_ROUND);
     }
 
@@ -488,12 +512,12 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         _atPhase(VERIFY_PHASE);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, SERVICE_ROUND));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, SERVICE_ROUND, 1));
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
 
         _atPhase(MINT_PHASE);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, SERVICE_ROUND - 1, 2));
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND - 1);
 
         (uint256 mintAmount,) = _settleService(GROUP_ID);

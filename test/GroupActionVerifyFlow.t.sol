@@ -132,13 +132,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, new uint256[](0));
 
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.VerificationBatchTooLarge.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.VerificationBatchTooLarge.selector, 101, 100));
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, new uint256[](101));
 
         uint256[] memory overMax = new uint256[](1);
         overMax[0] = 101;
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreExceedsMax.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreLimitExceeded.selector, 0, 101, 100));
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, overMax);
 
         vm.prank(VERIFIER);
@@ -150,7 +150,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         tooMany[1] = 90;
         tooMany[2] = 80;
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoresExceedAccountCount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreCountExceeded.selector, 0, 3, 2));
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, tooMany);
 
         vm.prank(MEMBER2);
@@ -184,7 +184,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         again[0] = 50;
         vm.prank(VERIFIER);
         vm.expectRevert(
-            abi.encodeWithSelector(IGroupActionVerifyErrors.GroupVerificationComplete.selector, GROUP_ID, uint256(2))
+            abi.encodeWithSelector(IGroupActionVerifyErrors.GroupVerificationAlreadyComplete.selector, GROUP_ID, uint256(2))
         );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 2, again);
     }
@@ -218,7 +218,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         string[] memory shortInfos = new string[](1);
         shortInfos[0] = "alice";
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector, 2, 1));
         executor.join(address(token), ACTION_2, GROUP_ID, MEMBER1_ID, 1e18, 0, shortInfos);
 
         string[] memory infos = new string[](2);
@@ -256,9 +256,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         votedData[0] = abi.encode(address(executor));
         votedData[1] = abi.encode(VERIFIER_ID);
 
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
         executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, votedData);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
         executor.onProposalSubmitted(address(token), ACTION_ID, 0, votedData);
 
         vm.prank(address(actionTarget));
@@ -283,7 +283,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         three[1] = votedData[1];
         three[2] = votedData[1];
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataLength.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TargetDataLengthMismatch.selector, 2, 3));
         executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, three);
 
         vm.prank(address(actionTarget));
@@ -510,7 +510,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
 
         vm.prank(VERIFIER2);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == 0, "nothing recorded");
         require(
@@ -520,7 +520,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         token.mint(VERIFIER2, VERIFIER_STAKE);
         vm.prank(VERIFIER2);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         require(
             executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER2_ID).applicationId == 0,
@@ -556,7 +556,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         stake.setValidGovVotes(address(token), VERIFIER_ID, 0);
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.VerifyVotesZero.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ZeroVerifyVotes.selector, address(token), VERIFIER_ID));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
         stake.setValidGovVotes(address(token), VERIFIER_ID, 100e18);
 
@@ -565,7 +565,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
             longDescription[i] = 0x61;
         }
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector, 1025, 1024));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, string(longDescription));
 
         // An action that was never created cannot host an application, and the rejection charges nothing.
@@ -590,7 +590,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         }
         uint256 before = token.balanceOf(VERIFIER);
         vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector, 1025, 1024));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, string(longDescription));
         require(token.balanceOf(VERIFIER) == before, "no charge above the limit");
 

@@ -74,9 +74,11 @@ contract ActionTargetStubTest is ActionTargetTestBase {
         require(stubTarget.executor(address(token), 99) == address(0), "no binding created");
     }
 
-    function testStubHandshakeRevertNormalizesToInvalidExecutor() external {
+    function testStubHandshakeRevertReportsHandshakeFailure() external {
         BrokenHandshakeExecutor broken = new BrokenHandshakeExecutor();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.ExecutorHandshakeFailed.selector, address(broken))
+        );
         stub.callCreated(address(token), 11, _targetData(address(broken)));
         require(stubTarget.executor(address(token), 11) == address(0), "no binding created");
     }

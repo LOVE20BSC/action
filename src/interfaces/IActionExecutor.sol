@@ -16,15 +16,16 @@ interface IActionExecutorEvents {
 
 interface IActionExecutorErrors {
     error AlreadyInitialized();
-    error UnauthorizedCallback();
-    error InvalidRound(uint256 round);
-    error RoundNotStarted();
+    error DependencyNotContract(address dependency);
+    error NotActionTarget(address caller);
     error ActionNotCreated(address tokenAddress, uint256 actionId);
     error NotMemberOwner(uint256 memberId);
-    error ProposalNotVoted(address tokenAddress, uint256 proposalId);
     error RewardAlreadyMinted(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round);
-    error NoRewardAvailable();
+    error MemberActionRewardUnavailable(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round);
     error BatchLengthMismatch(uint256 actionIdsLength, uint256 roundsLength);
+    error RoundNotStarted(uint256 requiredRound, uint256 currentRound);
+    error RoundBeforeActionCreated(uint256 round, uint256 createdRound);
+    error RoundAfterMintWindow(uint256 round, uint256 mintRound);
 }
 
 interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExecutorErrors {

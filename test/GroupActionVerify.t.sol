@@ -55,7 +55,7 @@ contract GroupActionVerifyTest {
 
     function test_RevertIfOriginScoreAboveMax() external {
         _bindVerifier();
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreExceedsMax.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreLimitExceeded.selector, 1, 101, 100));
         _submit(GROUP_A, 0, _scores(99, 101));
     }
 
@@ -63,7 +63,7 @@ contract GroupActionVerifyTest {
         _bindVerifier();
         uint256[] memory scores = new uint256[](1);
         scores[0] = type(uint256).max;
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreExceedsMax.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreLimitExceeded.selector, 0, type(uint256).max, 100));
         _submit(GROUP_A, 0, scores);
     }
 

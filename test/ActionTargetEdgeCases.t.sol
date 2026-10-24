@@ -17,7 +17,9 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
             bytes[] memory targetData = new bytes[](1);
             targetData[0] = new bytes(lengths[i]);
             vm.prank(submitAddress);
-            vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+            vm.expectRevert(
+                abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, lengths[i])
+            );
             actionTarget.onProposalCreated(address(token), 11, targetData);
         }
         require(actionTarget.executor(address(token), 11) == address(0), "never bound");
@@ -111,7 +113,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
 
     function testInitFailureDoesNotLatchState() external {
         ActionTarget fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(0));
         require(fresh.initialized() == false, "not latched");
 

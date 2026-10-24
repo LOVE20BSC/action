@@ -28,7 +28,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
 
     modifier onlyActionTarget() {
         if (msg.sender != s.actionTarget) {
-            revert UnauthorizedCallback();
+            revert NotActionTarget(msg.sender);
         }
         _;
     }
@@ -71,16 +71,25 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         }
         s.initialized = true;
 
-        if (actionTargetAddress == address(0) || stakeAddress == address(0)) {
-            revert InvalidAddress();
+        if (actionTargetAddress.code.length == 0) {
+            revert DependencyNotContract(actionTargetAddress);
+        }
+        if (stakeAddress.code.length == 0) {
+            revert DependencyNotContract(stakeAddress);
         }
 
         IStake stake = IStake(stakeAddress);
         address memberNFTAddress = stake.memberNFTAddress();
         address phaseAddress = stake.phaseAddress();
         address voteAddress = stake.voteAddress();
-        if (memberNFTAddress == address(0) || phaseAddress == address(0) || voteAddress == address(0)) {
-            revert InvalidAddress();
+        if (memberNFTAddress.code.length == 0) {
+            revert DependencyNotContract(memberNFTAddress);
+        }
+        if (phaseAddress.code.length == 0) {
+            revert DependencyNotContract(phaseAddress);
+        }
+        if (voteAddress.code.length == 0) {
+            revert DependencyNotContract(voteAddress);
         }
 
         if (splits.length != 0) {
@@ -88,7 +97,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
             // forge-lint: disable-next-item(require-revert-in-loop)
             for (uint256 i = 0; i < splits.length; i++) {
                 if (splits[i] == 0 || splits[i] >= GroupActionStorage.PRECISION || splits[i] <= previous) {
-                    revert InvalidSplits();
+                    revert InvalidSplits(i, splits[i]);
                 }
                 previous = splits[i];
             }
@@ -105,7 +114,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     function currentVerifyRound() external view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         if (phase < 3) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return phase - 2;
     }
@@ -636,7 +645,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     function currentVoteRound() external view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         if (phase < 1) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, phase);
         }
         return phase;
     }
@@ -644,7 +653,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     function currentJoinRound() public view returns (uint256) {
         uint256 round = s.joinRound();
         if (round == 0) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return round;
     }
@@ -652,7 +661,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
     function currentMintRound() external view returns (uint256) {
         uint256 round = _mintRound();
         if (round == 0) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return round;
     }
@@ -780,10 +789,11 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
             revert ActionNotCreated(tokenAddress, actionId);
         }
         if (round < createdRound_) {
-            revert RoundNotStarted();
+            revert RoundBeforeActionCreated(round, createdRound_);
         }
-        if (round > _mintRound()) {
-            revert InvalidRound(round);
+        uint256 mintRound = _mintRound();
+        if (round > mintRound) {
+            revert RoundAfterMintWindow(round, mintRound);
         }
 
         if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
@@ -805,7 +815,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         }
 
         if (mintAmount == 0 && burnAmount == 0) {
-            revert NoRewardAvailable();
+            revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
         }
 
         s.memberMinted[tokenAddress][actionId][round][memberId] = true;

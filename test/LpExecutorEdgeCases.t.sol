@@ -10,21 +10,21 @@ import {LpExecutorTestBase} from "./LpExecutorTestBase.sol";
 contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
     function testCurrentRoundsAtPhaseBoundaries() external {
         _atPhase(0);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentVoteRound();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentJoinRound();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentMintRound();
 
         _atPhase(1);
         require(lpExecutor.currentVoteRound() == 1, "vote round 1");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentJoinRound();
 
         _atPhase(2);
         require(lpExecutor.currentJoinRound() == 1, "join round 1");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.currentMintRound();
 
         _atPhase(3);
@@ -201,7 +201,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, PRECISION, 1e17));
         lpExecutor.join(address(token), SECOND_ACTION_ID, 1, 1e18);
 
         _join(ACTION_ID, 1, 1e18);

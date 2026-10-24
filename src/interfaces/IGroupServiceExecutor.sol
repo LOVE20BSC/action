@@ -42,10 +42,13 @@ interface IGroupServiceExecutorEvents {
 
 interface IGroupServiceExecutorErrors {
     error NotQualified(address actionTokenAddress, uint256 round, uint256 memberId);
-    error InvalidAddress();
-    error InvalidTargetDataLength();
-    error InvalidParentToken();
-    error InvalidRatio();
+    error ZeroActionTokenAddress();
+    error InvalidRatioForPublicVerifier(uint256 value);
+    error ActionTokenParentMismatch(
+        address actionTokenAddress, address serviceTokenAddress, address actualParentTokenAddress
+    );
+    error TargetDataLengthMismatch(uint256 expected, uint256 actual);
+    error InvalidTargetDataShape(uint256 index, uint256 length);
     error NotJoined(address tokenAddress, uint256 actionId, uint256 memberId);
     error AlreadyJoined(address tokenAddress, uint256 actionId, uint256 memberId);
     error GroupNotExist(uint256 groupId);

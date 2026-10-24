@@ -36,7 +36,15 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         );
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
 
         (uint256 verifierMint, uint256 verifierBurn) = _settleService(VERIFIER_ID);
@@ -86,7 +94,15 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         );
 
         vm.prank(GROUP_OWNER_B);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_OWNER_B_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
     }
 
@@ -122,7 +138,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
 
         // The verify round only opens at phase 3; earlier phases have none.
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, new uint256[](0), new uint256[](0));
 
         // At the join phase the verify round exists and the call goes through.
@@ -186,7 +202,15 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
         require(actionTarget.mintRewardCalls() == 0, "no mint attempted without a reward");
 
@@ -248,7 +272,15 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
 
         // The revert rolled the whole call back: nothing is recorded and the
@@ -298,7 +330,15 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         require(verifierBurn == 0, "verifiers never burn");
 
         vm.prank(GROUP_OWNER_B);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_OWNER_B_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
     }
 

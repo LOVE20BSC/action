@@ -62,7 +62,7 @@ library GroupActionJoin {
         string[] calldata verificationInfos
     ) private {
         if (amount == 0) {
-            revert IGroupActionJoinErrors.InvalidParticipationAmount();
+            revert IGroupActionJoinErrors.ZeroParticipationAmount();
         }
         if (groupId == 0) {
             revert IGroupActionManagerErrors.GroupNotExist(0);
@@ -120,13 +120,13 @@ library GroupActionJoin {
         uint256 amount
     ) external onlyMemberOwner(s, memberId) {
         if (amount == 0) {
-            revert IGroupActionJoinErrors.InvalidParticipationAmount();
+            revert IGroupActionJoinErrors.ZeroParticipationAmount();
         }
 
         uint256 round = s.currentJoinRound();
         uint256 ownAmount = s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue();
         if (amount > ownAmount) {
-            revert IGroupActionJoinErrors.InvalidParticipationAmount();
+            revert IGroupActionJoinErrors.WithdrawAmountExceeded(amount, ownAmount);
         }
         uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
 
@@ -159,13 +159,13 @@ library GroupActionJoin {
         uint256 amount
     ) external onlyMemberOwner(s, providerId) {
         if (amount == 0) {
-            revert IGroupActionJoinErrors.InvalidParticipationAmount();
+            revert IGroupActionJoinErrors.ZeroParticipationAmount();
         }
 
         uint256 round = s.currentJoinRound();
         uint256 invested = s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
         if (amount > invested) {
-            revert IGroupActionJoinErrors.InvalidParticipationAmount();
+            revert IGroupActionJoinErrors.ProviderWithdrawAmountExceeded(amount, invested);
         }
         uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
 
@@ -348,7 +348,7 @@ library GroupActionJoin {
         uint256[] calldata amounts
     ) private {
         if (memberIds.length != amounts.length) {
-            revert IGroupActionJoinErrors.QuotaArrayLengthMismatch();
+            revert IGroupActionJoinErrors.QuotaArrayLengthMismatch(memberIds.length, amounts.length);
         }
         if (groupId == 0) {
             revert IGroupActionManagerErrors.GroupNotExist(0);
@@ -368,7 +368,7 @@ library GroupActionJoin {
                 revert IGroupActionJoinErrors.QuotaMemberIsProvider(providerId);
             }
             if (amounts[i] == 0) {
-                revert IGroupActionJoinErrors.QuotaAmountZero();
+                revert IGroupActionJoinErrors.ZeroQuotaAmount(memberId);
             }
             IMemberNFT(s.memberNFTAddress).ownerOf(memberId);
 
@@ -412,7 +412,7 @@ library GroupActionJoin {
             uint256 memberId = memberIds[i];
             uint256 quota = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId];
             if (quota == 0) {
-                revert IGroupActionJoinErrors.QuotaNotGranted(memberId);
+                revert IGroupActionJoinErrors.QuotaNotGranted(groupId, providerId, memberId);
             }
 
             s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = 0;
@@ -624,28 +624,30 @@ library GroupActionJoin {
             + s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue() + amount;
 
         if (group.config.maxJoinAmount != 0 && newTotal > group.config.maxJoinAmount) {
-            revert IGroupActionJoinErrors.ExceedsGroupMaxJoinAmount();
+            revert IGroupActionJoinErrors.GroupMaxJoinAmountExceeded(memberId, newTotal, group.config.maxJoinAmount);
         }
 
         if (isFirstJoin) {
-            if (group.config.maxAccounts != 0 && s.memberIdsByGroupId[tokenAddress][actionId][groupId].count() >= group.config.maxAccounts) {
-                revert IGroupActionJoinErrors.GroupAccountsFull();
+            uint256 memberCount = s.memberIdsByGroupId[tokenAddress][actionId][groupId].count();
+            if (group.config.maxAccounts != 0 && memberCount >= group.config.maxAccounts) {
+                revert IGroupActionJoinErrors.GroupAccountsFull(groupId, memberCount, group.config.maxAccounts);
             }
             if (amount < group.config.minJoinAmount) {
-                revert IGroupActionJoinErrors.InvalidParticipationAmount();
+                revert IGroupActionJoinErrors.BelowMinJoinAmount(amount, group.config.minJoinAmount);
             }
         }
 
         if (group.config.maxCapacity != 0) {
             uint256 groupTotal = s.totalJoinedAmountByGroupId[tokenAddress][actionId][groupId].latestValue();
-            if (groupTotal + amount > group.config.maxCapacity) {
-                revert IGroupActionJoinErrors.GroupCapacityExceeded();
+            uint256 newGroupTotal = groupTotal + amount;
+            if (newGroupTotal > group.config.maxCapacity) {
+                revert IGroupActionJoinErrors.GroupCapacityExceeded(groupId, newGroupTotal, group.config.maxCapacity);
             }
         }
 
         uint256 actionMaxJoinAmount = GroupActionManager._maxJoinAmount(s, tokenAddress, actionId);
         if (newTotal > actionMaxJoinAmount) {
-            revert IGroupActionJoinErrors.ExceedsActionMaxJoinAmount();
+            revert IGroupActionJoinErrors.ActionMaxJoinAmountExceeded(memberId, newTotal, actionMaxJoinAmount);
         }
     }
 
@@ -689,7 +691,7 @@ library GroupActionJoin {
             return;
         }
         if (verificationInfos.length != keys.length) {
-            revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch();
+            revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, verificationInfos.length);
         }
         for (uint256 i = 0; i < verificationInfos.length; i++) {
             s.verificationValueHistory[tokenAddress][actionId][memberId][i].record(round, verificationInfos[i]);

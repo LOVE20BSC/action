@@ -79,7 +79,11 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
         _setActionReward(2, PROPOSAL_REWARD, false);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+            )
+        );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
     }
 

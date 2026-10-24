@@ -59,12 +59,12 @@ interface IGroupActionVerifyErrors {
     error OriginScoresEmpty();
     error CandidateNotRanked(uint256 memberId, uint256 round);
     error CandidateNotOpen(uint256 memberId, uint256 round);
-    error ScoreExceedsMax();
-    error GroupVerificationComplete(uint256 groupId, uint256 round);
-    error VerificationBatchTooLarge();
+    error ScoreLimitExceeded(uint256 index, uint256 score, uint256 max);
+    error GroupVerificationAlreadyComplete(uint256 groupId, uint256 round);
+    error VerificationBatchTooLarge(uint256 count, uint256 max);
     error StartIndexMismatch(uint256 expected, uint256 actual);
-    error ScoresExceedAccountCount();
-    error VerifyVotesZero();
+    error ScoreCountExceeded(uint256 startIndex, uint256 count, uint256 memberCount);
+    error ZeroVerifyVotes(address tokenAddress, uint256 memberId);
     error NoActiveApplication(uint256 memberId);
     error VerifierAlreadyLocked(address tokenAddress, uint256 actionId, uint256 round);
 }

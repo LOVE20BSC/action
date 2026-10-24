@@ -23,7 +23,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         );
 
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.GroupCapacityExceeded.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.GroupCapacityExceeded.selector, GROUP_B_ID, 100e18 + 1, 100e18));
         executor.join(address(token), ACTION_ID, GROUP_B_ID, MEMBER2_ID, 1, 0, new string[](0));
     }
 
@@ -57,7 +57,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         require(executor.maxJoinAmount(address(token), ACTION_ID) == 10e18, "cap derived");
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ExceedsActionMaxJoinAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ActionMaxJoinAmountExceeded.selector, MEMBER1_ID, 10e18 + 1, 10e18));
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 1, 0, new string[](0));
     }
 

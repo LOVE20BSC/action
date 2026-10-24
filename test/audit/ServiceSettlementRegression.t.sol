@@ -92,7 +92,15 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         require(projected == 0, "zero-rated action projects nothing");
 
         vm.prank(GROUP_OWNER_B);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                SERVICE_ACTION_ID,
+                GROUP_OWNER_B_ID,
+                SERVICE_ROUND
+            )
+        );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
     }
 }

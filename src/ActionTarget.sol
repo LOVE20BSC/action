@@ -53,8 +53,8 @@ contract ActionTarget is IActionTarget {
         }
         initialized = true;
 
-        if (mintAddress_ == address(0)) {
-            revert InvalidAddress();
+        if (mintAddress_.code.length == 0) {
+            revert DependencyNotContract(mintAddress_);
         }
 
         IMint mint = IMint(mintAddress_);
@@ -62,11 +62,17 @@ contract ActionTarget is IActionTarget {
         address submitAddress_ = mint.submitAddress();
         address memberNFTAddress_ = mint.memberNFTAddress();
         address phaseAddress_ = mint.phaseAddress();
-        if (
-            voteAddress_ == address(0) || submitAddress_ == address(0) || memberNFTAddress_ == address(0)
-                || phaseAddress_ == address(0)
-        ) {
-            revert InvalidAddress();
+        if (voteAddress_.code.length == 0) {
+            revert DependencyNotContract(voteAddress_);
+        }
+        if (submitAddress_.code.length == 0) {
+            revert DependencyNotContract(submitAddress_);
+        }
+        if (memberNFTAddress_.code.length == 0) {
+            revert DependencyNotContract(memberNFTAddress_);
+        }
+        if (phaseAddress_.code.length == 0) {
+            revert DependencyNotContract(phaseAddress_);
         }
 
         memberNFTAddress = memberNFTAddress_;
@@ -85,14 +91,14 @@ contract ActionTarget is IActionTarget {
 
     modifier onlySubmit() {
         if (msg.sender != submitAddress) {
-            revert UnauthorizedCallback();
+            revert NotSubmit(msg.sender);
         }
         _;
     }
 
     modifier onlyVote() {
         if (msg.sender != voteAddress) {
-            revert UnauthorizedCallback();
+            revert NotVote(msg.sender);
         }
         _;
     }
@@ -435,21 +441,21 @@ contract ActionTarget is IActionTarget {
         bytes[] calldata targetData
     ) external onlySubmit {
         if (targetData.length == 0) {
-            revert InvalidExecutor();
+            revert TargetDataLengthMismatch(1, 0);
         }
         if (targetData[0].length != 32) {
-            revert InvalidExecutor();
+            revert InvalidTargetDataShape(0, targetData[0].length);
         }
         address executor_ = abi.decode(targetData[0], (address));
         if (executor_ == address(0) || executor_.code.length == 0) {
-            revert InvalidExecutor();
+            revert ExecutorNotContract(executor_);
         }
         try IActionExecutor(executor_).actionTarget() returns (address acknowledged) {
             if (acknowledged != address(this)) {
-                revert InvalidExecutor();
+                revert ExecutorTargetMismatch(address(this), acknowledged);
             }
         } catch {
-            revert InvalidExecutor();
+            revert ExecutorHandshakeFailed(executor_);
         }
         if (_executorByActionId[tokenAddress][proposalId] != address(0)) {
             revert AlreadyCreated(tokenAddress, proposalId);
@@ -487,8 +493,15 @@ contract ActionTarget is IActionTarget {
         if (bound == address(0)) {
             revert UnboundProposal(tokenAddress, proposalId);
         }
-        if (targetData.length == 0 || targetData[0].length != 32 || abi.decode(targetData[0], (address)) != bound) {
-            revert InvalidExecutor();
+        if (targetData.length == 0) {
+            revert TargetDataLengthMismatch(1, 0);
+        }
+        if (targetData[0].length != 32) {
+            revert InvalidTargetDataShape(0, targetData[0].length);
+        }
+        address targetDataExecutor = abi.decode(targetData[0], (address));
+        if (targetDataExecutor != bound) {
+            revert TargetDataExecutorMismatch(bound, targetDataExecutor);
         }
 
         IActionExecutor(bound).onProposalSubmitted(
@@ -512,8 +525,12 @@ contract ActionTarget is IActionTarget {
             revert UnboundProposal(tokenAddress, proposalId);
         }
         if (targetData.length != 0) {
-            if (targetData[0].length != 32 || abi.decode(targetData[0], (address)) != bound) {
-                revert InvalidExecutor();
+            if (targetData[0].length != 32) {
+                revert InvalidTargetDataShape(0, targetData[0].length);
+            }
+            address targetDataExecutor = abi.decode(targetData[0], (address));
+            if (targetDataExecutor != bound) {
+                revert TargetDataExecutorMismatch(bound, targetDataExecutor);
             }
         }
 

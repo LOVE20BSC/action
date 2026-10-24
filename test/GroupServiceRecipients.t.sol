@@ -74,7 +74,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testSetRecipientsOwnerStillChecksRound() external {
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         executor.setRecipients(
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
         );
@@ -84,13 +84,13 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _prepareRecipientsScenario();
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.ArrayLengthMismatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.RecipientArrayLengthMismatch.selector, 1, 2, 1));
         executor.setRecipients(
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION, PRECISION), new string[](1)
         );
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.ArrayLengthMismatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.RecipientArrayLengthMismatch.selector, 1, 1, 0));
         executor.setRecipients(
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](0)
         );
@@ -104,11 +104,11 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
             unitRemarks[i] = "";
         }
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.TooManyRecipients.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.TooManyRecipients.selector, DEFAULT_MAX_RECIPIENTS + 1, DEFAULT_MAX_RECIPIENTS));
         executor.setRecipients(address(token), GROUP_ACTION_ID, GROUP_ID, tooMany, unitRatios, unitRemarks);
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.ZeroRatio.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.ZeroRecipientRatio.selector, MEMBER1_ID));
         executor.setRecipients(address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(0), new string[](1));
 
         vm.prank(GROUP_OWNER);

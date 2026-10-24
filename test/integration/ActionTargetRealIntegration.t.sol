@@ -63,7 +63,7 @@ contract ActionTargetRealIntegrationTest {
         phase = new Phase(PHASE_ORIGIN, BLOCKS_PER_PHASE, 3600, 10, 50);
         factory = new MockUniswapV2Factory();
         router = new MockUniswapV2Router();
-        rootToken = new LOVE20Token("RootCommunity", "ROOT", 1000000, 100000000, owner, owner, address(1));
+        rootToken = new LOVE20Token("RootCommunity", "ROOT", 1000000, 100000000, owner, owner, address(this));
         memberNFT = new MemberNFT(1e18, 4, 2, 20);
         mint = new Mint();
         vote = new Vote();
@@ -221,7 +221,11 @@ contract ActionTargetRealIntegrationTest {
         mismatchedData[0] = new bytes[](1);
         mismatchedData[0][0] = abi.encode(address(0xdead));
         vm.prank(member1);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionTargetErrors.TargetDataExecutorMismatch.selector, address(executor), address(0xdead)
+            )
+        );
         vote.vote(address(token), 1, proposalIds, amounts, mismatchedData);
         require(executor.votedCalls() == 1, "failed callback rolled the vote back");
     }
@@ -263,7 +267,9 @@ contract ActionTargetRealIntegrationTest {
         require(recorded == amount && mintedFlag, "action reward query");
 
         vm.prank(address(executor));
-        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, proposalId)
+        );
         actionTarget.mintActionReward(address(token), proposalId, round);
     }
 
@@ -271,7 +277,9 @@ contract ActionTargetRealIntegrationTest {
         bytes[] memory badData = new bytes[](1);
         badData[0] = abi.encode(address(0xdead));
         vm.prank(member1);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.ExecutorNotContract.selector, address(0xdead))
+        );
         submit.submitNewProposal(
             address(token),
             1,
@@ -341,7 +349,9 @@ contract ActionTargetRealIntegrationTest {
         // protocol path burns an unallocatable reward (ADR-004). The burn below only probes the
         // token ledger.
         vm.prank(address(executor));
-        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, proposalId)
+        );
         actionTarget.mintActionReward(address(token), proposalId, round);
 
         vm.prank(address(executor));

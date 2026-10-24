@@ -59,7 +59,7 @@ contract ServiceCoreRegressionTest is Test {
         target = new ActionTarget();
         target.init(address(mint));
         _mock(SUBMIT, abi.encodeWithSignature("proposalTarget(address,uint256)"), abi.encode(address(target), TargetMode.Callback));
-        parent = new LOVE20Token("Parent", "P", 100000, 1000000, address(this), address(mint), address(1));
+        parent = new LOVE20Token("Parent", "P", 100000, 1000000, address(this), address(mint), address(this));
         child = new LOVE20Token("Child", "C", 100000, 1000000, address(this), address(mint), address(parent));
         _mock(LAUNCH, abi.encodeWithSignature("parentTokenOf(address)"), abi.encode(address(parent)));
         group = new GroupActionExecutor();

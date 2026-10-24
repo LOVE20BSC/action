@@ -128,7 +128,7 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
         // tokenAddress => actionId => round => number of groups whose cursor reached its member count
         // Load-bearing: the count only reaches the group count because a completed group cannot submit
-        // again (`GroupVerificationComplete`) and `groupIdsByRound[round]` never holds a zero-member group;
+        // again (`GroupVerificationAlreadyComplete`) and `groupIdsByRound[round]` never holds a zero-member group;
         // otherwise the round stays unverified forever with no revert.
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCount;
         // tokenAddress => actionId => round => every group in the round is fully verified
@@ -178,7 +178,7 @@ library GroupActionStorage {
     function currentJoinRound(Layout storage s) internal view returns (uint256) {
         uint256 round = joinRound(s);
         if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted();
+            revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
         return round;
     }

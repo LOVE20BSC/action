@@ -153,7 +153,9 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         require(amountB == MINT_AMOUNT && mintedB, "round B minted");
 
         vm.prank(address(executor));
-        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), roundA, 11)
+        );
         actionTarget.mintActionReward(address(token), 11, roundA);
     }
 

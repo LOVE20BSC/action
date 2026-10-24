@@ -47,7 +47,7 @@ contract ActionTargetTest is ActionTargetTestBase {
 
     function testInitRejectsZeroMint() external {
         ActionTarget fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(0));
         require(fresh.initialized() == false, "not latched");
     }
@@ -56,22 +56,22 @@ contract ActionTargetTest is ActionTargetTestBase {
         ActionTarget fresh = new ActionTarget();
 
         mint.setVoteAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(mint));
         mint.setVoteAddress(voteAddress);
 
         mint.setSubmitAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(mint));
         mint.setSubmitAddress(submitAddress);
 
         mint.setMemberNFTAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(mint));
         mint.setMemberNFTAddress(address(memberNFT));
 
         mint.setPhaseAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(mint));
         mint.setPhaseAddress(address(phase));
 
@@ -105,39 +105,49 @@ contract ActionTargetTest is ActionTargetTestBase {
 
     function testCreateRejectsNonSubmitCaller() external {
         vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotSubmit.selector, OUTSIDER));
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(executor)));
     }
 
-    function testCreateRejectsInvalidExecutor() external {
+    function testCreateRejectsInvalidExecutorData() external {
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.TargetDataLengthMismatch.selector, 1, 0)
+        );
         actionTarget.onProposalCreated(address(token), 11, new bytes[](0));
 
         bytes[] memory malformed = new bytes[](1);
         malformed[0] = new bytes(31);
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, 31)
+        );
         actionTarget.onProposalCreated(address(token), 11, malformed);
 
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.ExecutorNotContract.selector, address(0)));
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(0)));
 
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.ExecutorNotContract.selector, address(0xdead)));
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(0xdead)));
     }
 
     function testCreateRejectsExecutorWithoutSelfAcknowledgment() external {
         MockExecutor mismatched = new MockExecutor(OUTSIDER);
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionTargetErrors.ExecutorTargetMismatch.selector, address(actionTarget), OUTSIDER
+            )
+        );
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(mismatched)));
 
         executor.setRevertActionTarget(true);
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.ExecutorHandshakeFailed.selector, address(executor))
+        );
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(executor)));
     }
 
@@ -180,7 +190,7 @@ contract ActionTargetTest is ActionTargetTestBase {
     function testSubmittedRejectsNonSubmitCaller() external {
         _createAction(11);
         vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotSubmit.selector, OUTSIDER));
         actionTarget.onProposalSubmitted(address(token), 11, 7, _targetData(address(executor)));
     }
 
@@ -196,17 +206,25 @@ contract ActionTargetTest is ActionTargetTestBase {
     function testSubmittedRejectsMismatchedTargetData() external {
         _createAction(11);
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.TargetDataLengthMismatch.selector, 1, 0)
+        );
         actionTarget.onProposalSubmitted(address(token), 11, 7, new bytes[](0));
 
         bytes[] memory malformed = new bytes[](1);
         malformed[0] = new bytes(33);
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, 33)
+        );
         actionTarget.onProposalSubmitted(address(token), 11, 7, malformed);
 
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionTargetErrors.TargetDataExecutorMismatch.selector, address(executor), OUTSIDER
+            )
+        );
         actionTarget.onProposalSubmitted(address(token), 11, 7, _targetData(OUTSIDER));
     }
 
@@ -246,7 +264,7 @@ contract ActionTargetTest is ActionTargetTestBase {
     function testVotedRejectsNonVoteCaller() external {
         _createAction(11);
         vm.prank(OUTSIDER);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.UnauthorizedCallback.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotVote.selector, OUTSIDER));
         actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, new bytes[](0));
     }
 
@@ -263,13 +281,19 @@ contract ActionTargetTest is ActionTargetTestBase {
         bytes[] memory malformed = new bytes[](1);
         malformed[0] = new bytes(20);
         vm.prank(voteAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, 20)
+        );
         actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, malformed);
 
         bytes[] memory mismatched = new bytes[](1);
         mismatched[0] = abi.encode(OUTSIDER);
         vm.prank(voteAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidExecutor.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionTargetErrors.TargetDataExecutorMismatch.selector, address(executor), OUTSIDER
+            )
+        );
         actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, mismatched);
     }
 
@@ -692,7 +716,9 @@ contract ActionTargetTest is ActionTargetTestBase {
 
         // Dedup belongs to Mint; the repeat must be rejected there.
         vm.prank(address(executor));
-        vm.expectRevert(abi.encodeWithSelector(IMintErrors.AlreadyMinted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, 11)
+        );
         actionTarget.mintActionReward(address(token), 11, round);
         require(mint.mintCalls() == 1, "mint not repeated");
         require(token.transferCalls() == 0, "no token transfer on the mint path");

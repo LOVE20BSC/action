@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {Pagination} from "@libs/Pagination.sol";
+import {IMintErrors} from "@core/interfaces/IMint.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract MockPhase {
@@ -61,7 +62,6 @@ contract MockVote {
 
 contract MockMint {
     error MintProposalRewardReverted();
-    error AlreadyMinted();
 
     address public voteAddress;
     address public submitAddress;
@@ -133,7 +133,9 @@ contract MockMint {
     ) external returns (uint256 amount) {
         if (revertOnMint) revert MintProposalRewardReverted();
         // Mirror Mint: it owns the per-round dedup ledger, and the minted amount stays queryable.
-        if (_proposalMinted[tokenAddress][round][proposalId]) revert AlreadyMinted();
+        if (_proposalMinted[tokenAddress][round][proposalId]) {
+            revert IMintErrors.ProposalRewardAlreadyMinted(tokenAddress, round, proposalId);
+        }
         mintCalls++;
         lastMintCaller = msg.sender;
         lastMintTokenAddress = tokenAddress;

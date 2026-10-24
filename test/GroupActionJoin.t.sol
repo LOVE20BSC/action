@@ -84,7 +84,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(joinToken.balanceOf(address(executor)) == 150e18, "invested part stays");
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaNotGranted.selector, MEMBER2_ID));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaNotGranted.selector, GROUP_ID, PROVIDER_ID, MEMBER2_ID));
         executor.providerQuotaRemove(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID));
 
         _exit(MEMBER2_ID);
@@ -96,6 +96,20 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _quotaRemove(PROVIDER_ID, MEMBER2_ID);
         require(joinToken.balanceOf(PROVIDER) - providerBefore == 150e18, "restored quota leaves the contract");
         require(joinToken.balanceOf(address(executor)) == 0, "contract emptied");
+    }
+
+    function testJoinRejectsAmountAboveProviderQuota() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 100e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 50e18);
+
+        vm.prank(MEMBER2);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupActionJoinErrors.InsufficientProviderQuota.selector, PROVIDER_ID, 80e18, 50e18
+            )
+        );
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, 80e18, PROVIDER_ID, new string[](0));
     }
 
     function testExitReturnsOwnAndRestoresProviderQuota() external {
@@ -176,7 +190,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _openJoinPhase();
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroParticipationAmount.selector));
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 0, 0, new string[](0));
 
         vm.prank(MEMBER1);
@@ -189,7 +203,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
 
         _fundJoinTokenFor(MEMBER1, 10e18);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.BelowMinJoinAmount.selector, 5e17, 1e18));
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 5e17, 0, new string[](0));
 
         _join(MEMBER1_ID, 1e18, 0);
@@ -217,12 +231,12 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _joinAt(GROUP_B_ID, MEMBER2_ID, 40e18, 0);
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.GroupAccountsFull.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.GroupAccountsFull.selector, GROUP_B_ID, 1, 1));
         executor.join(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, 10e18, 0, new string[](0));
 
         _joinAt(GROUP_B_ID, MEMBER2_ID, 10e18, 0);
         vm.prank(MEMBER2);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ExceedsGroupMaxJoinAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.GroupMaxJoinAmountExceeded.selector, MEMBER2_ID, 50e18 + 1, 50e18));
         executor.join(address(token), ACTION_ID, GROUP_B_ID, MEMBER2_ID, 1, 0, new string[](0));
     }
 
@@ -232,11 +246,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _join(MEMBER1_ID, 1e18, 0);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroParticipationAmount.selector));
         executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 0);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.WithdrawAmountExceeded.selector, 2e18, 1e18));
         executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 2e18);
 
         vm.prank(MEMBER2);
@@ -248,8 +262,23 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(PROVIDER, 1e18);
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 1e18);
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InvalidParticipationAmount.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroParticipationAmount.selector));
         executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 0);
+    }
+
+    function testProviderWithdrawAmountExceeded() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 2e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 2e18);
+        _join(MEMBER2_ID, 1e18, PROVIDER_ID);
+
+        vm.prank(PROVIDER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupActionJoinErrors.ProviderWithdrawAmountExceeded.selector, 1e18 + 1, 1e18
+            )
+        );
+        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 1e18 + 1);
     }
 
     function testProviderQuotaReverts() external {
@@ -268,11 +297,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         memberIds[0] = MEMBER2_ID;
         memberIds[1] = PROVIDER_ID;
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaArrayLengthMismatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaArrayLengthMismatch.selector, 2, 1));
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds, _ids(1e18));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaArrayLengthMismatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaArrayLengthMismatch.selector, 2, 1));
         executor.providerQuotaAdd(address(token), ACTION_ID, 0, PROVIDER_ID, memberIds, _ids(1e18));
 
         vm.prank(PROVIDER);
@@ -286,11 +315,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(PROVIDER_ID), _ids(1e18));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaAmountZero.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroQuotaAmount.selector, MEMBER2_ID));
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID), _ids(0));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaNotGranted.selector, MEMBER2_ID));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaNotGranted.selector, GROUP_ID, PROVIDER_ID, MEMBER2_ID));
         executor.providerQuotaRemove(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID));
 
         vm.prank(MEMBER1);

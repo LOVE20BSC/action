@@ -74,7 +74,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
 
     modifier onlyActionTarget() {
         if (msg.sender != actionTarget) {
-            revert UnauthorizedCallback();
+            revert NotActionTarget(msg.sender);
         }
         _;
     }
@@ -107,15 +107,24 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         }
         initialized = true;
 
-        if (actionTargetAddress == address(0) || stakeAddress == address(0)) {
-            revert InvalidAddress();
+        if (actionTargetAddress.code.length == 0) {
+            revert DependencyNotContract(actionTargetAddress);
+        }
+        if (stakeAddress.code.length == 0) {
+            revert DependencyNotContract(stakeAddress);
         }
 
         address memberNFTAddress = IStake(stakeAddress).memberNFTAddress();
         address phaseAddress = IStake(stakeAddress).phaseAddress();
         address pairFactoryAddress = IStake(stakeAddress).pairFactoryAddress();
-        if (memberNFTAddress == address(0) || phaseAddress == address(0) || pairFactoryAddress == address(0)) {
-            revert InvalidAddress();
+        if (memberNFTAddress.code.length == 0) {
+            revert DependencyNotContract(memberNFTAddress);
+        }
+        if (phaseAddress.code.length == 0) {
+            revert DependencyNotContract(phaseAddress);
+        }
+        if (pairFactoryAddress.code.length == 0) {
+            revert DependencyNotContract(pairFactoryAddress);
         }
 
         actionTarget = actionTargetAddress;
@@ -131,11 +140,14 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 actionId,
         bytes[] calldata targetData
     ) external onlyActionTarget {
-        if (
-            targetData.length != 4 || targetData[0].length != 32 || targetData[1].length != 32
-                || targetData[2].length != 32 || targetData[3].length != 32
-        ) {
-            revert InvalidTargetDataLength();
+        if (targetData.length != 4) {
+            revert TargetDataLengthMismatch(4, targetData.length);
+        }
+        // forge-lint: disable-next-item(require-revert-in-loop)
+        for (uint256 i = 0; i < 4; i++) {
+            if (targetData[i].length != 32) {
+                revert InvalidTargetDataShape(i, targetData[i].length);
+            }
         }
 
         address joinTokenAddress = abi.decode(targetData[1], (address));
@@ -143,13 +155,13 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 minGovRatio = abi.decode(targetData[3], (uint256));
 
         if (joinTokenAddress == address(0)) {
-            revert InvalidJoinTokenAddress();
+            revert ZeroJoinTokenAddress();
         }
         if (!_isRegisteredPair(joinTokenAddress, _pairFactory)) {
-            revert InvalidJoinTokenFactory();
+            revert InvalidJoinTokenFactory(joinTokenAddress, _pairFactory);
         }
         if (minGovRatio > PRECISION) {
-            revert InvalidMinGovRatio();
+            revert InvalidMinGovRatio(minGovRatio);
         }
 
         _joinTokenAddress[tokenAddress][actionId] = joinTokenAddress;
@@ -172,7 +184,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         onlyActionTarget
     {
         if (targetData.length > 1) {
-            revert InvalidTargetDataLength();
+            revert TargetDataLengthMismatch(1, targetData.length);
         }
     }
 
@@ -184,14 +196,18 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 amount
     ) external nonReentrant onlyMemberOwner(memberId) {
         if (amount == 0) {
-            revert InvalidParticipationAmount();
+            revert ZeroParticipationAmount();
         }
 
         uint256 joinRound = currentJoinRound();
 
         bool isFirstJoin = !IActionTarget(actionTarget).isJoined(tokenAddress, actionId, memberId);
-        if (isFirstJoin && _calculateGovRatio(tokenAddress, memberId) < _minGovRatio[tokenAddress][actionId]) {
-            revert InsufficientGovRatio();
+        if (isFirstJoin) {
+            uint256 minGovRatio = _minGovRatio[tokenAddress][actionId];
+            uint256 memberGovRatio = _calculateGovRatio(tokenAddress, memberId);
+            if (memberGovRatio < minGovRatio) {
+                revert InsufficientGovRatio(minGovRatio, memberGovRatio);
+            }
         }
 
         (uint256 phaseStartBlock, uint256 phaseBlocks) = IPhase(_phase).phaseInfo(joinRound + 1);
@@ -229,13 +245,13 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 amount
     ) external nonReentrant onlyMemberOwner(memberId) {
         if (amount == 0) {
-            revert InvalidParticipationAmount();
+            revert ZeroParticipationAmount();
         }
 
         uint256 joinRound = currentJoinRound();
         uint256 memberJoinedAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(joinRound);
         if (amount > memberJoinedAmount) {
-            revert InvalidParticipationAmount();
+            revert WithdrawAmountExceeded(amount, memberJoinedAmount);
         }
 
         if (amount == memberJoinedAmount) {
@@ -420,7 +436,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     function currentVoteRound() external view returns (uint256) {
         uint256 phase = IPhase(_phase).currentPhase();
         if (phase < 1) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, phase);
         }
         return phase;
     }
@@ -428,7 +444,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     function currentJoinRound() public view returns (uint256) {
         uint256 round = _joinRound();
         if (round == 0) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return round;
     }
@@ -436,7 +452,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     function currentMintRound() external view returns (uint256) {
         uint256 round = _mintRound();
         if (round == 0) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return round;
     }
@@ -538,10 +554,11 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
             revert ActionNotCreated(tokenAddress, actionId);
         }
         if (round < createdRound) {
-            revert RoundNotStarted();
+            revert RoundBeforeActionCreated(round, createdRound);
         }
-        if (round > _mintRound()) {
-            revert InvalidRound(round);
+        uint256 mintRound = _mintRound();
+        if (round > mintRound) {
+            revert RoundAfterMintWindow(round, mintRound);
         }
 
         if (_memberMinted[tokenAddress][actionId][round][memberId]) {
@@ -561,7 +578,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         }
 
         if (mintAmount == 0 && burnAmount == 0) {
-            revert NoRewardAvailable();
+            revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
         }
 
         _memberMinted[tokenAddress][actionId][round][memberId] = true;

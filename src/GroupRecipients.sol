@@ -251,10 +251,10 @@ library GroupRecipients {
     ) internal view {
         uint256 length = recipientIds.length;
         if (length != ratios.length || length != remarks.length) {
-            revert IGroupRecipientsErrors.ArrayLengthMismatch();
+            revert IGroupRecipientsErrors.RecipientArrayLengthMismatch(length, ratios.length, remarks.length);
         }
         if (length > GroupServiceStorage.DEFAULT_MAX_RECIPIENTS) {
-            revert IGroupRecipientsErrors.TooManyRecipients();
+            revert IGroupRecipientsErrors.TooManyRecipients(length, GroupServiceStorage.DEFAULT_MAX_RECIPIENTS);
         }
 
         uint256 totalRatios = 0;
@@ -264,7 +264,7 @@ library GroupRecipients {
                 revert IGroupRecipientsErrors.RecipientIsGroupId(groupId, recipientId);
             }
             if (ratios[i] == 0) {
-                revert IGroupRecipientsErrors.ZeroRatio();
+                revert IGroupRecipientsErrors.ZeroRecipientRatio(recipientId);
             }
             for (uint256 j = 0; j < i; j++) {
                 if (recipientIds[j] == recipientId) {

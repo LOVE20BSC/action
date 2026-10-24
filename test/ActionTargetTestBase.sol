@@ -21,13 +21,14 @@ interface ActionTargetVm {
     function getRecordedLogs() external returns (Log[] memory logs);
 }
 
+contract MockSubmit {}
+
 abstract contract ActionTargetTestBase {
     ActionTargetVm internal constant vm = ActionTargetVm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     uint256 internal constant MINT_AMOUNT = 1000;
     uint256 internal constant BURN_AMOUNT = 640;
 
-    address internal constant SUBMIT_ADDRESS = address(0x5b1);
     address internal constant MEMBER1 = address(0x1001);
     address internal constant MEMBER2 = address(0x1002);
     address internal constant MEMBER3 = address(0x1003);
@@ -48,7 +49,7 @@ abstract contract ActionTargetTestBase {
         _deployMocks();
         actionTarget = new ActionTarget();
         executor = new MockExecutor(address(actionTarget));
-        submitAddress = SUBMIT_ADDRESS;
+        submitAddress = address(new MockSubmit());
         voteAddress = address(vote);
         phase.setPhase(1);
         mint.setVoteAddress(voteAddress);

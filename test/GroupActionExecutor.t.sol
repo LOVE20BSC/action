@@ -29,13 +29,13 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         executor.init(address(actionTarget), address(stake), again);
 
         GroupActionExecutor fresh = new GroupActionExecutor();
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
         fresh.init(address(0), address(stake), again);
 
         GroupActionExecutor badSplits = new GroupActionExecutor();
         uint256[] memory zeroSplits = new uint256[](1);
         zeroSplits[0] = 0;
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidSplits.selector));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidSplits.selector, 0, 0));
         badSplits.init(address(actionTarget), address(stake), zeroSplits);
     }
 
@@ -102,7 +102,15 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                ACTION_ID,
+                MEMBER1_ID,
+                2
+            )
+        );
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
 
         (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
@@ -129,7 +137,15 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                ACTION_ID,
+                MEMBER1_ID,
+                2
+            )
+        );
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
     }
 
@@ -172,6 +188,33 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
             )
         );
         executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+    }
+
+    function testBatchSettlementLocalizesTheFailingElement() external {
+        _prepareRound();
+        _atPhase(4);
+        _submitScores(_scores(100, 60));
+        _atPhase(5);
+        _fundExecutor(PROPOSAL_REWARD);
+        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
+
+        uint256[] memory actionIds = new uint256[](2);
+        actionIds[0] = ACTION_ID;
+        actionIds[1] = ACTION_ID + 1;
+        uint256[] memory rounds = new uint256[](2);
+        rounds[0] = 2;
+        rounds[1] = 2;
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
+        );
+        executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+
+        (,, bool minted) = executor.memberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        require(!minted, "earlier element rolled back");
+        require(actionTarget.mintRewardCalls() == 0, "no action reward pulled");
     }
 
     function testJoinedAmountQueryGuards() external {
@@ -231,7 +274,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
     function testRoundGettersAndGuards() external {
         require(executor.currentVoteRound() == 2, "vote round at creation");
         require(executor.currentJoinRound() == 1, "join round at creation");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         executor.currentMintRound();
 
         GroupActionExecutor fresh = new GroupActionExecutor();
@@ -240,26 +283,26 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         fresh.init(address(actionTarget), address(stake), splits);
 
         phase.setCurrentPhase(0);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         fresh.currentVoteRound();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         fresh.currentJoinRound();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         fresh.currentMintRound();
 
         phase.setCurrentPhase(1);
         require(fresh.currentVoteRound() == 1, "vote at phase 1");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         fresh.currentJoinRound();
 
         phase.setCurrentPhase(2);
         require(fresh.currentJoinRound() == 1, "join at phase 2");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         fresh.currentVerifyRound();
 
         phase.setCurrentPhase(3);
         require(fresh.currentVerifyRound() == 1, "verify at phase 3");
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         fresh.currentMintRound();
 
         phase.setCurrentPhase(4);
@@ -276,7 +319,15 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
 
         _atPhase(5);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                address(token),
+                ACTION_ID,
+                MEMBER1_ID,
+                2
+            )
+        );
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
     }
 
@@ -301,11 +352,13 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _atPhase(5);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, 1, 2)
+        );
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 1);
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.InvalidRound.selector, 3));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 3, 2));
         executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 3);
     }
 

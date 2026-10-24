@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {MemberOwner} from "./MemberOwner.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
@@ -9,7 +10,6 @@ import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol"
 import {GroupConfig, IGroupActionManagerEvents, IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
-import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IVote} from "@core/interfaces/IVote.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -34,11 +34,11 @@ library GroupActionManager {
     }
 
     function groupOwnerOrRevert(GroupActionStorage.Layout storage s, uint256 groupId) internal view returns (address) {
-        try IMemberNFT(s.memberNFTAddress).ownerOf(groupId) returns (address owner) {
-            return owner;
-        } catch {
+        address owner = MemberOwner.ofOrZero(s.memberNFTAddress, groupId);
+        if (owner == address(0)) {
             revert IGroupActionManagerErrors.GroupNotExist(groupId);
         }
+        return owner;
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -48,13 +48,16 @@ library GroupActionManager {
         uint256 actionId,
         bytes[] calldata targetData
     ) external {
-        if (targetData.length != 6 && targetData.length != 7) {
-            revert IGroupActionExecutorErrors.InvalidTargetDataLength();
+        if (targetData.length < 6) {
+            revert IGroupActionExecutorErrors.TargetDataLengthMismatch(6, targetData.length);
+        }
+        if (targetData.length > 7) {
+            revert IGroupActionExecutorErrors.TargetDataLengthMismatch(7, targetData.length);
         }
         for (uint256 i = 1; i < 6; i++) {
             if (targetData[i].length != 32) {
                 // forge-lint: disable-next-line(require-revert-in-loop)
-                revert IGroupActionExecutorErrors.InvalidTargetDataLength();
+                revert IGroupActionExecutorErrors.InvalidTargetDataShape(i, targetData[i].length);
             }
         }
 
@@ -64,10 +67,13 @@ library GroupActionManager {
         uint256 activationMinGovRatio = abi.decode(targetData[4], (uint256));
         uint256 verifierStakeAmount = abi.decode(targetData[5], (uint256));
         if (joinTokenAddress == address(0)) {
-            revert IGroupActionExecutorErrors.InvalidAddress();
+            revert IGroupActionExecutorErrors.ZeroJoinTokenAddress();
         }
-        if (maxJoinAmountRatio > GroupActionStorage.PRECISION || activationMinGovRatio > GroupActionStorage.PRECISION) {
-            revert IGroupActionExecutorErrors.InvalidRatio();
+        if (maxJoinAmountRatio > GroupActionStorage.PRECISION) {
+            revert IGroupActionExecutorErrors.InvalidMaxJoinAmountRatio(maxJoinAmountRatio);
+        }
+        if (activationMinGovRatio > GroupActionStorage.PRECISION) {
+            revert IGroupActionExecutorErrors.InvalidActivationMinGovRatio(activationMinGovRatio);
         }
 
         s.joinTokenAddress[tokenAddress][actionId] = joinTokenAddress;
@@ -81,7 +87,7 @@ library GroupActionManager {
         if (targetData.length == 7) {
             (string[] memory keys, string[] memory descriptions) = abi.decode(targetData[6], (string[], string[]));
             if (keys.length != descriptions.length) {
-                revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch();
+                revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, descriptions.length);
             }
             s.verificationKeys[tokenAddress][actionId] = keys;
             s.verificationDescriptions[tokenAddress][actionId] = descriptions;
@@ -104,7 +110,7 @@ library GroupActionManager {
 
         GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
         if (group.active) {
-            revert IGroupActionManagerErrors.GroupAlreadyActivated();
+            revert IGroupActionManagerErrors.GroupAlreadyActivated(groupId);
         }
 
         _validateGroupConfig(config);
@@ -154,7 +160,7 @@ library GroupActionManager {
 
         uint256 round = s.currentJoinRound();
         if (round == group.activatedRound) {
-            revert IGroupActionManagerErrors.CannotDeactivateInActivatedRound();
+            revert IGroupActionManagerErrors.DeactivationLockedInActivatedRound(groupId, round);
         }
 
         uint256 stakeAmount = s.activationStakeAmount[tokenAddress][actionId];
@@ -366,13 +372,16 @@ library GroupActionManager {
 
     function _validateGroupConfig(GroupConfig calldata config) internal pure {
         if (config.minJoinAmount == 0) {
-            revert IGroupActionManagerErrors.InvalidMinMaxJoinAmount();
+            revert IGroupActionManagerErrors.InvalidMinJoinAmount(config.minJoinAmount);
         }
         if (config.maxJoinAmount != 0 && config.maxJoinAmount < config.minJoinAmount) {
-            revert IGroupActionManagerErrors.InvalidMinMaxJoinAmount();
+            revert IGroupActionManagerErrors.InvalidMaxJoinAmount(config.minJoinAmount, config.maxJoinAmount);
         }
-        if (bytes(config.description).length > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
-            revert IGroupActionExecutorErrors.DescriptionTooLong();
+        uint256 descriptionLength = bytes(config.description).length;
+        if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
+            revert IGroupActionExecutorErrors.DescriptionTooLong(
+                descriptionLength, GroupActionStorage.MAX_DESCRIPTION_BYTES
+            );
         }
     }
 
@@ -390,12 +399,13 @@ library GroupActionManager {
         IStake stake = IStake(s.stakeAddress);
         uint256 totalGovVotes = stake.globalGovVotes(tokenAddress);
         if (totalGovVotes == 0) {
-            revert IGroupActionManagerErrors.NoGovVotes();
+            revert IGroupActionManagerErrors.NoGovVotes(tokenAddress);
         }
 
         uint256 ownerGovVotes = stake.validGovVotes(tokenAddress, groupId);
-        if ((ownerGovVotes * GroupActionStorage.PRECISION) / totalGovVotes < minGovRatio) {
-            revert IGroupActionManagerErrors.InsufficientActivationMinGovRatio();
+        uint256 actualRatio = (ownerGovVotes * GroupActionStorage.PRECISION) / totalGovVotes;
+        if (actualRatio < minGovRatio) {
+            revert IGroupActionManagerErrors.InsufficientActivationMinGovRatio(groupId, minGovRatio, actualRatio);
         }
     }
 }

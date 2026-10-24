@@ -52,7 +52,9 @@ library GroupActionVerify {
             revert IGroupActionVerifyErrors.OriginScoresEmpty();
         }
         if (originScores.length > GroupActionStorage.MAX_VERIFICATION_BATCH) {
-            revert IGroupActionVerifyErrors.VerificationBatchTooLarge();
+            revert IGroupActionVerifyErrors.VerificationBatchTooLarge(
+                originScores.length, GroupActionStorage.MAX_VERIFICATION_BATCH
+            );
         }
 
         uint256 round = _currentVerifyRound(s);
@@ -69,17 +71,19 @@ library GroupActionVerify {
         uint256 memberCount = s.memberIdsByGroupId[tokenAddress][actionId][groupId].countByRound(round);
         uint256 verifiedCount = s.verifiedMemberCount[tokenAddress][actionId][round][groupId];
         if (memberCount != 0 && verifiedCount == memberCount) {
-            revert IGroupActionVerifyErrors.GroupVerificationComplete(groupId, round);
+            revert IGroupActionVerifyErrors.GroupVerificationAlreadyComplete(groupId, round);
         }
         if (startIndex != verifiedCount) {
             revert IGroupActionVerifyErrors.StartIndexMismatch(verifiedCount, startIndex);
         }
         if (startIndex + originScores.length > memberCount) {
-            revert IGroupActionVerifyErrors.ScoresExceedAccountCount();
+            revert IGroupActionVerifyErrors.ScoreCountExceeded(startIndex, originScores.length, memberCount);
         }
         for (uint256 i = 0; i < originScores.length; i++) {
             if (originScores[i] > GroupActionStorage.MAX_ORIGIN_SCORE) {
-                revert IGroupActionVerifyErrors.ScoreExceedsMax();
+                revert IGroupActionVerifyErrors.ScoreLimitExceeded(
+                    i, originScores[i], GroupActionStorage.MAX_ORIGIN_SCORE
+                );
             }
         }
 
@@ -179,10 +183,13 @@ library GroupActionVerify {
         string calldata description
     ) external onlyMemberOwner(s, memberId) returns (uint256 applicationId) {
         if (IStake(s.stakeAddress).validGovVotes(tokenAddress, memberId) == 0) {
-            revert IGroupActionVerifyErrors.VerifyVotesZero();
+            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, memberId);
         }
-        if (bytes(description).length > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
-            revert IGroupActionExecutorErrors.DescriptionTooLong();
+        uint256 descriptionLength = bytes(description).length;
+        if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
+            revert IGroupActionExecutorErrors.DescriptionTooLong(
+                descriptionLength, GroupActionStorage.MAX_DESCRIPTION_BYTES
+            );
         }
         uint256 round = IPhase(s.phaseAddress).currentPhase();
         if (s.createdRound[tokenAddress][actionId] == 0) {
@@ -393,10 +400,10 @@ library GroupActionVerify {
             return;
         }
         if (targetData.length > 2) {
-            revert IGroupActionExecutorErrors.InvalidTargetDataLength();
+            revert IGroupActionExecutorErrors.TargetDataLengthMismatch(2, targetData.length);
         }
         if (targetData[1].length != 32) {
-            revert IGroupActionExecutorErrors.InvalidTargetDataLength();
+            revert IGroupActionExecutorErrors.InvalidTargetDataShape(1, targetData[1].length);
         }
 
         uint256 candidateMemberId = abi.decode(targetData[1], (uint256));
@@ -516,7 +523,7 @@ library GroupActionVerify {
     function _currentVerifyRound(GroupActionStorage.Layout storage s) internal view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         if (phase < 3) {
-            revert IActionExecutorErrors.RoundNotStarted();
+            revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
         return phase - 2;
     }

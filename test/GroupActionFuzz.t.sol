@@ -84,7 +84,15 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
 
         if (total == 0) {
             vm.prank(MEMBER1);
-            vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                    address(token),
+                    ACTION_ID,
+                    MEMBER1_ID,
+                    2
+                )
+            );
             executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
             return;
         }
@@ -95,7 +103,15 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         uint256 mint1;
         if (expected1 == 0) {
             vm.prank(MEMBER1);
-            vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                    address(token),
+                    ACTION_ID,
+                    MEMBER1_ID,
+                    2
+                )
+            );
             executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
         } else {
             (mint1,) = _settle(MEMBER1_ID, 2);
@@ -104,7 +120,15 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         uint256 mint2;
         if (expected2 == 0) {
             vm.prank(MEMBER2);
-            vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NoRewardAvailable.selector));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                    address(token),
+                    ACTION_ID,
+                    MEMBER2_ID,
+                    2
+                )
+            );
             executor.mintMemberReward(address(token), ACTION_ID, MEMBER2_ID, 2);
         } else {
             (mint2,) = _settle(MEMBER2_ID, 2);

@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {GroupRecipients} from "./GroupRecipients.sol";
+import {MemberOwner} from "./MemberOwner.sol";
 import {IGroupServiceExecutor} from "./interfaces/IGroupServiceExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
@@ -49,7 +50,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
 
     modifier onlyActionTarget() {
         if (msg.sender != s.actionTarget) {
-            revert UnauthorizedCallback();
+            revert NotActionTarget(msg.sender);
         }
         _;
     }
@@ -63,12 +64,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     }
 
     modifier onlyGroupOwner(uint256 groupId) {
-        try IMemberNFT(s.memberNFTAddress).ownerOf(groupId) returns (address owner) {
-            if (owner != msg.sender) {
-                revert NotGroupOwner(groupId);
-            }
-        } catch {
+        address owner = MemberOwner.ofOrZero(s.memberNFTAddress, groupId);
+        if (owner == address(0)) {
             revert GroupNotExist(groupId);
+        }
+        if (owner != msg.sender) {
+            revert NotGroupOwner(groupId);
         }
         _;
     }
@@ -83,11 +84,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         }
         s.initialized = true;
 
-        if (
-            actionTargetAddress == address(0) || stakeAddress == address(0)
-                || groupActionExecutorAddress == address(0)
-        ) {
-            revert InvalidAddress();
+        if (actionTargetAddress.code.length == 0) {
+            revert DependencyNotContract(actionTargetAddress);
+        }
+        if (stakeAddress.code.length == 0) {
+            revert DependencyNotContract(stakeAddress);
+        }
+        if (groupActionExecutorAddress.code.length == 0) {
+            revert DependencyNotContract(groupActionExecutorAddress);
         }
 
         IStake stake = IStake(stakeAddress);
@@ -95,11 +99,17 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         address phaseAddress = stake.phaseAddress();
         address launchAddress = stake.launchAddress();
         address mintAddress = IActionTarget(actionTargetAddress).mintAddress();
-        if (
-            memberNFTAddress == address(0) || phaseAddress == address(0) || launchAddress == address(0)
-                || mintAddress == address(0)
-        ) {
-            revert InvalidAddress();
+        if (memberNFTAddress.code.length == 0) {
+            revert DependencyNotContract(memberNFTAddress);
+        }
+        if (phaseAddress.code.length == 0) {
+            revert DependencyNotContract(phaseAddress);
+        }
+        if (launchAddress.code.length == 0) {
+            revert DependencyNotContract(launchAddress);
+        }
+        if (mintAddress.code.length == 0) {
+            revert DependencyNotContract(mintAddress);
         }
 
         s.actionTarget = actionTargetAddress;
@@ -120,7 +130,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     function currentVerifyRound() public view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         if (phase < 3) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return phase - 2;
     }
@@ -128,7 +138,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     function currentVoteRound() external view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         if (phase < 1) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, phase);
         }
         return phase;
     }
@@ -136,7 +146,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     function currentJoinRound() public view returns (uint256) {
         uint256 round = s.joinRound();
         if (round == 0) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return round;
     }
@@ -144,7 +154,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     function currentMintRound() external view returns (uint256) {
         uint256 round = _mintRound();
         if (round == 0) {
-            revert RoundNotStarted();
+            revert RoundNotStarted(1, 0);
         }
         return round;
     }
@@ -493,11 +503,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 proposalId,
         bytes[] calldata targetData
     ) external override onlyActionTarget {
-        if (
-            targetData.length != 4 || targetData[0].length != 32 || targetData[1].length != 32
-                || targetData[2].length != 32 || targetData[3].length != 32
-        ) {
-            revert InvalidTargetDataLength();
+        if (targetData.length != 4) {
+            revert TargetDataLengthMismatch(4, targetData.length);
+        }
+        // forge-lint: disable-next-item(require-revert-in-loop)
+        for (uint256 i = 0; i < 4; i++) {
+            if (targetData[i].length != 32) {
+                revert InvalidTargetDataShape(i, targetData[i].length);
+            }
         }
 
         address actionTokenAddress = abi.decode(targetData[1], (address));
@@ -505,16 +518,16 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 ratioForPublicVerifier = abi.decode(targetData[3], (uint256));
 
         if (actionTokenAddress == address(0)) {
-            revert InvalidAddress();
+            revert ZeroActionTokenAddress();
         }
         if (ratioForPublicVerifier > PRECISION) {
-            revert InvalidRatio();
+            revert InvalidRatioForPublicVerifier(ratioForPublicVerifier);
         }
-        if (
-            actionTokenAddress != tokenAddress
-                && ILaunch(s.launchAddress).parentTokenOf(actionTokenAddress) != tokenAddress
-        ) {
-            revert InvalidParentToken();
+        if (actionTokenAddress != tokenAddress) {
+            address parentTokenAddress = ILaunch(s.launchAddress).parentTokenOf(actionTokenAddress);
+            if (parentTokenAddress != tokenAddress) {
+                revert ActionTokenParentMismatch(actionTokenAddress, tokenAddress, parentTokenAddress);
+            }
         }
 
         s.actionTokenAddress[tokenAddress][proposalId] = actionTokenAddress;
@@ -543,7 +556,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         bytes[] calldata targetData
     ) external virtual override onlyActionTarget {
         if (targetData.length > 1) {
-            revert InvalidTargetDataLength();
+            revert TargetDataLengthMismatch(1, targetData.length);
         }
     }
 
@@ -800,10 +813,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
             revert ActionNotCreated(tokenAddress, actionId);
         }
         if (round < createdRound) {
-            revert RoundNotStarted();
+            revert RoundBeforeActionCreated(round, createdRound);
         }
-        if (round > _mintRound()) {
-            revert InvalidRound(round);
+        uint256 mintRound = _mintRound();
+        if (round > mintRound) {
+            revert RoundAfterMintWindow(round, mintRound);
         }
 
         if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
@@ -814,7 +828,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         mintAmount = settlement.verifierReward + settlement.ownerReward;
         burnAmount = settlement.ownerBurned;
         if (mintAmount == 0 && burnAmount == 0) {
-            revert NoRewardAvailable();
+            revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
         }
 
         if (!settlement.actionMinted) {
@@ -824,7 +838,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
             mintAmount = settlement.verifierReward + settlement.ownerReward;
             burnAmount = settlement.ownerBurned;
             if (mintAmount == 0 && burnAmount == 0) {
-                revert NoRewardAvailable();
+                revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
             }
         }
 

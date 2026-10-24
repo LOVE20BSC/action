@@ -33,8 +33,10 @@ interface IActionTargetEvents {
 
 interface IActionTargetErrors {
     error AlreadyInitialized();
-    error InvalidAddress();
-    error UnauthorizedCallback();
+    error DependencyNotContract(address dependency);
+    error NotSubmit(address caller);
+    error NotVote(address caller);
+    error NotMemberOwner(uint256 memberId);
     error UnboundProposal(address tokenAddress, uint256 proposalId);
     error UnauthorizedExecutor(address tokenAddress, uint256 actionId);
     error JoinNotOpen(
@@ -43,9 +45,13 @@ interface IActionTargetErrors {
         uint256 currentRound,
         uint256 createdRound
     );
-    error NotMemberOwner(uint256 memberId);
     error ProposalNotVoted(address tokenAddress, uint256 proposalId);
-    error InvalidExecutor();
+    error TargetDataLengthMismatch(uint256 expected, uint256 actual);
+    error InvalidTargetDataShape(uint256 index, uint256 length);
+    error ExecutorNotContract(address executor);
+    error ExecutorTargetMismatch(address expected, address actual);
+    error ExecutorHandshakeFailed(address executor);
+    error TargetDataExecutorMismatch(address expected, address actual);
     error AlreadyCreated(address tokenAddress, uint256 actionId);
 }
 
