@@ -447,7 +447,7 @@ contract ActionTarget is IActionTarget {
             revert InvalidTargetDataShape(0, targetData[0].length);
         }
         address executor_ = abi.decode(targetData[0], (address));
-        if (executor_ == address(0) || executor_.code.length == 0) {
+        if (executor_.code.length == 0) {
             revert ExecutorNotContract(executor_);
         }
         try IActionExecutor(executor_).actionTarget() returns (address acknowledged) {
