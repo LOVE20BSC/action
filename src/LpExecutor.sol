@@ -3,8 +3,8 @@ pragma solidity =0.8.37;
 
 import {ILpExecutor} from "./interfaces/ILpExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
+import {MemberRewardEntry} from "./MemberRewardEntry.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
-import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {ILOVE20Token} from "@core/interfaces/ILOVE20Token.sol";
@@ -13,9 +13,8 @@ import {IUniswapV2Pair} from "@core/interfaces/UniswapV2/IUniswapV2Pair.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract LpExecutor is ILpExecutor, ReentrancyGuard {
+contract LpExecutor is ILpExecutor, MemberRewardEntry {
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using SafeERC20 for IERC20;
 
@@ -75,14 +74,6 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
     modifier onlyActionTarget() {
         if (msg.sender != actionTarget) {
             revert NotActionTarget(msg.sender);
-        }
-        _;
-    }
-
-    // forge-lint: disable-next-item(require-revert-in-loop)
-    modifier onlyMemberOwner(uint256 memberId) {
-        if (IMemberNFT(_memberNFT).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
         }
         _;
     }
@@ -371,34 +362,6 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         }
     }
 
-    // forge-lint: disable-next-item(missing-events-access-control)
-    function mintMemberReward(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 memberId,
-        uint256 round
-    ) public nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
-        return _mintMemberReward(tokenAddress, actionId, memberId, round);
-    }
-
-    function mintMemberRewards(
-        address tokenAddress,
-        uint256[] calldata actionIds,
-        uint256 memberId,
-        uint256[] calldata rounds
-    ) external nonReentrant onlyMemberOwner(memberId) returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
-        uint256 length = actionIds.length;
-        if (length != rounds.length) {
-            revert BatchLengthMismatch(length, rounds.length);
-        }
-
-        mintAmounts = new uint256[](length);
-        burnAmounts = new uint256[](length);
-        for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
-        }
-    }
-
     function memberReward(
         address tokenAddress,
         uint256 actionId,
@@ -416,22 +379,6 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         if (createdRound != 0 && round >= createdRound && round <= _mintRound()) {
             (mintAmount, burnAmount) = _pendingMemberReward(tokenAddress, actionId, round, memberId);
         }
-    }
-
-    function currentVoteRound() external view returns (uint256) {
-        uint256 phase = IPhase(_phase).currentPhase();
-        if (phase < 1) {
-            revert RoundNotStarted(1, phase);
-        }
-        return phase;
-    }
-
-    function currentJoinRound() public view returns (uint256) {
-        uint256 round = _joinRound();
-        if (round == 0) {
-            revert RoundNotStarted(1, 0);
-        }
-        return round;
     }
 
     function currentMintRound() external view returns (uint256) {
@@ -488,7 +435,15 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
             _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
     }
 
-    function _joinRound() internal view returns (uint256) {
+    function _memberNFTAddress() internal view override returns (address) {
+        return _memberNFT;
+    }
+
+    function _phaseAddress() internal view override returns (address) {
+        return _phase;
+    }
+
+    function _joinRound() internal view override returns (uint256) {
         uint256 phase = IPhase(_phase).currentPhase();
         return phase < 2 ? 0 : phase - 1;
     }
@@ -533,7 +488,7 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         uint256 actionId,
         uint256 memberId,
         uint256 round
-    ) private returns (uint256 mintAmount, uint256 burnAmount) {
+    ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound = _createdRound[tokenAddress][actionId];
         if (createdRound == 0) {
             revert ActionNotCreated(tokenAddress, actionId);

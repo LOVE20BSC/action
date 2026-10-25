@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {GroupRecipients} from "./GroupRecipients.sol";
+import {MemberRewardEntry} from "./MemberRewardEntry.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {IGroupServiceExecutor} from "./interfaces/IGroupServiceExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
@@ -13,13 +14,11 @@ import {ILaunch} from "@core/interfaces/ILaunch.sol";
 import {ILOVE20Token} from "@core/interfaces/ILOVE20Token.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
-import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
+contract GroupServiceExecutor is IGroupServiceExecutor, MemberRewardEntry {
     using GroupServiceStorage for GroupServiceStorage.Layout;
     using SafeERC20 for IERC20;
 
@@ -51,14 +50,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     modifier onlyActionTarget() {
         if (msg.sender != s.actionTarget) {
             revert NotActionTarget(msg.sender);
-        }
-        _;
-    }
-
-    // forge-lint: disable-next-item(require-revert-in-loop)
-    modifier onlyMemberOwner(uint256 memberId) {
-        if (IMemberNFT(s.memberNFTAddress).ownerOf(memberId) != msg.sender) {
-            revert NotMemberOwner(memberId);
         }
         _;
     }
@@ -111,22 +102,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
             revert RoundNotStarted(1, 0);
         }
         return phase - 2;
-    }
-
-    function currentVoteRound() external view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        if (phase < 1) {
-            revert RoundNotStarted(1, phase);
-        }
-        return phase;
-    }
-
-    function currentJoinRound() public view returns (uint256) {
-        uint256 round = s.joinRound();
-        if (round == 0) {
-            revert RoundNotStarted(1, 0);
-        }
-        return round;
     }
 
     function currentMintRound() external view returns (uint256) {
@@ -353,34 +328,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
         // forge-lint: disable-next-line(boolean-cst)
         return (settlement.verifierReward + settlement.ownerReward, settlement.ownerBurned, false);
-    }
-
-    // forge-lint: disable-next-item(missing-events-access-control)
-    function mintMemberReward(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 memberId,
-        uint256 round
-    ) public nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
-        return _mintMemberReward(tokenAddress, actionId, memberId, round);
-    }
-
-    function mintMemberRewards(
-        address tokenAddress,
-        uint256[] calldata actionIds,
-        uint256 memberId,
-        uint256[] calldata rounds
-    ) external nonReentrant onlyMemberOwner(memberId) returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts) {
-        uint256 length = actionIds.length;
-        if (length != rounds.length) {
-            revert BatchLengthMismatch(length, rounds.length);
-        }
-
-        mintAmounts = new uint256[](length);
-        burnAmounts = new uint256[](length);
-        for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
-        }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -779,6 +726,18 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         return createdRound != 0 && round >= createdRound && round <= _mintRound();
     }
 
+    function _memberNFTAddress() internal view override returns (address) {
+        return s.memberNFTAddress;
+    }
+
+    function _phaseAddress() internal view override returns (address) {
+        return s.phaseAddress;
+    }
+
+    function _joinRound() internal view override returns (uint256) {
+        return s.joinRound();
+    }
+
     function _mintRound() internal view returns (uint256) {
         uint256 phase = IPhase(s.phaseAddress).currentPhase();
         return phase < 4 ? 0 : phase - 3;
@@ -789,7 +748,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
         uint256 actionId,
         uint256 memberId,
         uint256 round
-    ) private returns (uint256 mintAmount, uint256 burnAmount) {
+    ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound = s.createdRound[tokenAddress][actionId];
         if (createdRound == 0) {
             revert ActionNotCreated(tokenAddress, actionId);
