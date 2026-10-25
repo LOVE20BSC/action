@@ -16,6 +16,10 @@ cd "$PROJECT_ROOT"
 
 network="${1:?usage: script/deploy/21_check.sh <network>}"
 NETWORK_DIR="$PROJECT_ROOT/script/network/$network"
+
+# 参数文件载入器：1e17 / 1_000_000 这类写法在载入时展开为十进制（见 params.sh）。
+source "$SCRIPT_DIR/params.sh"
+
 if [ ! -d "$NETWORK_DIR" ]; then
     echo "Error: Network directory not found: $NETWORK_DIR"
     exit 1
@@ -26,12 +30,10 @@ if [ ! -f "$NETWORK_DIR/addresses.action.params" ]; then
     exit 1
 fi
 
-set -a
-source "$NETWORK_DIR/network.params"
-source "$NETWORK_DIR/addresses.core.params"
-source "$NETWORK_DIR/action.params"
-source "$NETWORK_DIR/addresses.action.params"
-set +a
+params_load "$NETWORK_DIR/network.params"
+params_load "$NETWORK_DIR/addresses.core.params"
+params_load "$NETWORK_DIR/action.params"
+params_load "$NETWORK_DIR/addresses.action.params"
 
 # 地址文件的键集合必须与期望合约/库集合一致：键名漏改会让后续变量静默为空，
 # 逐项 cast 调用要到很后面才以难以定位的形式失败，故在此显式断言。

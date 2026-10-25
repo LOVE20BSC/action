@@ -92,7 +92,31 @@ def fake_tool(tool, args):
     return 0
 
 
+def params_loader_cases() -> None:
+    """params.sh：1e 写法展开、行尾注释、引号内 # 保留、逗号项去空格。"""
+    repo = Path(__file__).resolve().parents[1]
+    cases = [
+        ("A=1e17\n", "100000000000000000"),
+        ("A=3e15  # 0.30%\n", "3000000000000000"),
+        ("A=1_000\n", "1000"),
+        ('A="a # b"\n', "a # b"),
+        ("A=1e17, 4e17\n", "100000000000000000,400000000000000000"),
+        ("A=x1e5y\n", "x1e5y"),
+    ]
+    with tempfile.TemporaryDirectory(prefix="params-loader-test-") as directory:
+        path = Path(directory) / "case.params"
+        for text, expected in cases:
+            path.write_text(text)
+            result = subprocess.run(
+                ["bash", "-c", '. "$1"; params_load "$2"; printf "%s" "$A"',
+                 "bash", str(repo / "script/deploy/params.sh"), str(path)],
+                text=True, capture_output=True)
+            assert result.returncode == 0, (text, result.stderr)
+            assert result.stdout == expected, (text, result.stdout)
+
+
 def main():
+    params_loader_cases()
     action = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="action-deploy-test-") as directory:
         root = Path(directory)

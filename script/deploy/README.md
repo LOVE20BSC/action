@@ -61,8 +61,10 @@ KEYSTORE_PASSWORD=anvil
 ```bash
 # GroupActionExecutor 初始化参数
 # 奖励分层阈值（splits）：可为空数组（不分层）；非空时严格递增、每项大于 0 且小于 1e18。
-GROUP_ACTION_SPLITS=100000000000000000,400000000000000000,700000000000000000
+GROUP_ACTION_SPLITS=1e17,4e17,7e17      # 10% / 40% / 70%
 ```
+
+参数文件里的长整数可写成 `<尾数>e<指数>`（`1e17` 即 10%）或带下划线的分组写法（`1_000_000`），由 `script/deploy/params.sh` 在载入时展开为十进制再导出；展开是纯词法的、没有键表，写错的写法会留给 `vm.envUint` 在广播前报错。
 
 `splits` 经 `11_deploy.sh` 以 `--sig "run(uint256[])"` 传入 `DeployAction.s.sol`；`DeployAction` 在广播前校验：空数组合法（不分层，仅投票第一名作为当轮唯一公共验证者），非空时每项 `0 < split < 1e18` 且严格递增；21_check 复核。splits 是部署期静态配置，由部署脚本校验、21_check 复核，合约不重复校验；`ActionTarget` 允许提案绑定任意 Executor，非本脚本部署的 Executor 由其提案方自担 splits 配置风险。其余合约无构造/init 数值参数：`ActionTarget.init` 只收 `Mint` 地址，三个 Executor 的 `memberNFT/phase/vote/launch/pairFactory` 均由 `Stake` 派生。
 
