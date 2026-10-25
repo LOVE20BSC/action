@@ -3,7 +3,8 @@ pragma solidity =0.8.37;
 
 import {ILpExecutor} from "./interfaces/ILpExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
-import {MemberRewardEntry} from "./MemberRewardEntry.sol";
+import {ExecutorBase} from "./ExecutorBase.sol";
+import {LpRoundAxis} from "./LpRoundAxis.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
@@ -14,7 +15,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-contract LpExecutor is ILpExecutor, MemberRewardEntry {
+contract LpExecutor is ILpExecutor, ExecutorBase {
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using SafeERC20 for IERC20;
 
@@ -381,14 +382,6 @@ contract LpExecutor is ILpExecutor, MemberRewardEntry {
         }
     }
 
-    function currentMintRound() external view returns (uint256) {
-        uint256 round = _mintRound();
-        if (round == 0) {
-            revert RoundNotStarted(1, 0);
-        }
-        return round;
-    }
-
     function joinedAmount(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
         if (round > _joinRound()) {
             return 0;
@@ -444,13 +437,11 @@ contract LpExecutor is ILpExecutor, MemberRewardEntry {
     }
 
     function _joinRound() internal view override returns (uint256) {
-        uint256 phase = IPhase(_phase).currentPhase();
-        return phase < 2 ? 0 : phase - 1;
+        return LpRoundAxis.joinRound(_phase);
     }
 
-    function _mintRound() internal view returns (uint256) {
-        uint256 phase = IPhase(_phase).currentPhase();
-        return phase < 3 ? 0 : phase - 2;
+    function _mintRound() internal view override returns (uint256) {
+        return LpRoundAxis.mintRound(_phase);
     }
 
     function _isRegisteredPair(address lpToken, address factory) internal view returns (bool) {

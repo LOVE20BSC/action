@@ -6,7 +6,7 @@ import {IPhase} from "@core/interfaces/IPhase.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IActionExecutor, IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
-abstract contract MemberRewardEntry is IActionExecutor, ReentrancyGuard {
+abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
     // forge-lint: disable-next-item(require-revert-in-loop)
     modifier onlyMemberOwner(uint256 memberId) {
         if (IMemberNFT(_memberNFTAddress()).ownerOf(memberId) != msg.sender) {
@@ -65,11 +65,21 @@ abstract contract MemberRewardEntry is IActionExecutor, ReentrancyGuard {
         return round;
     }
 
+    function currentMintRound() external view override returns (uint256) {
+        uint256 round = _mintRound();
+        if (round == 0) {
+            revert IActionExecutorErrors.RoundNotStarted(1, 0);
+        }
+        return round;
+    }
+
     function _memberNFTAddress() internal view virtual returns (address);
 
     function _phaseAddress() internal view virtual returns (address);
 
     function _joinRound() internal view virtual returns (uint256);
+
+    function _mintRound() internal view virtual returns (uint256);
 
     function _mintMemberReward(
         address tokenAddress,

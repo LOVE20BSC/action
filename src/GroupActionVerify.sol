@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {
     VerifierApplication,
@@ -521,11 +522,11 @@ library GroupActionVerify {
     }
 
     function _currentVerifyRound(GroupActionStorage.Layout storage s) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        if (phase < 3) {
+        uint256 round = GroupActionRoundAxis.verifyRound(s.phaseAddress);
+        if (round == 0) {
             revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
-        return phase - 2;
+        return round;
     }
 
     function _requireOpenCandidate(

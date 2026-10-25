@@ -2,13 +2,13 @@
 pragma solidity =0.8.37;
 
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
-import {IPhase} from "@core/interfaces/IPhase.sol";
 
 library GroupActionStorage {
     using AddressSet for AddressSet.Storage;
@@ -171,8 +171,7 @@ library GroupActionStorage {
     }
 
     function joinRound(Layout storage s) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        return phase < 2 ? 0 : phase - 1;
+        return GroupActionRoundAxis.joinRound(s.phaseAddress);
     }
 
     function currentJoinRound(Layout storage s) internal view returns (uint256) {

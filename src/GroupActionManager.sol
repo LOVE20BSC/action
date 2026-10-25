@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
@@ -348,8 +349,7 @@ library GroupActionManager {
         address tokenAddress,
         uint256 actionId
     ) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        uint256 round = phase < 2 ? 0 : phase - 1;
+        uint256 round = GroupActionRoundAxis.joinRound(s.phaseAddress);
         if (round == 0) {
             return 0;
         }

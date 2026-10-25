@@ -3,7 +3,8 @@ pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {GroupRecipients} from "./GroupRecipients.sol";
-import {MemberRewardEntry} from "./MemberRewardEntry.sol";
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
+import {ExecutorBase} from "./ExecutorBase.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {IGroupServiceExecutor} from "./interfaces/IGroupServiceExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
@@ -18,7 +19,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-contract GroupServiceExecutor is IGroupServiceExecutor, MemberRewardEntry {
+contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     using GroupServiceStorage for GroupServiceStorage.Layout;
     using SafeERC20 for IERC20;
 
@@ -97,15 +98,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, MemberRewardEntry {
     // settles it at phase - 3. If either side shifts, the service reads a round the GroupAction has
     // not verified yet and the divisor silently reads 0.
     function currentVerifyRound() public view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        if (phase < 3) {
-            revert RoundNotStarted(1, 0);
-        }
-        return phase - 2;
-    }
-
-    function currentMintRound() external view returns (uint256) {
-        uint256 round = _mintRound();
+        uint256 round = GroupActionRoundAxis.verifyRound(s.phaseAddress);
         if (round == 0) {
             revert RoundNotStarted(1, 0);
         }
@@ -735,12 +728,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, MemberRewardEntry {
     }
 
     function _joinRound() internal view override returns (uint256) {
-        return s.joinRound();
+        return GroupActionRoundAxis.joinRound(s.phaseAddress);
     }
 
-    function _mintRound() internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        return phase < 4 ? 0 : phase - 3;
+    function _mintRound() internal view override returns (uint256) {
+        return GroupActionRoundAxis.mintRound(s.phaseAddress);
     }
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function _mintMemberReward(

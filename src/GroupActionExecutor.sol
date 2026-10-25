@@ -2,23 +2,22 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {GroupActionJoin} from "./GroupActionJoin.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
-import {MemberRewardEntry} from "./MemberRewardEntry.sol";
+import {ExecutorBase} from "./ExecutorBase.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
-import {IActionExecutor} from "./interfaces/IActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
 import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
-import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-contract GroupActionExecutor is IGroupActionExecutor, MemberRewardEntry {
+contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     using GroupActionStorage for GroupActionStorage.Layout;
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using SafeERC20 for IERC20;
@@ -76,11 +75,11 @@ contract GroupActionExecutor is IGroupActionExecutor, MemberRewardEntry {
     }
 
     function currentVerifyRound() external view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        if (phase < 3) {
+        uint256 round = GroupActionRoundAxis.verifyRound(s.phaseAddress);
+        if (round == 0) {
             revert RoundNotStarted(1, 0);
         }
-        return phase - 2;
+        return round;
     }
 
     function generatedActionRewardByGroupId(
@@ -606,14 +605,6 @@ contract GroupActionExecutor is IGroupActionExecutor, MemberRewardEntry {
         return s.initialized;
     }
 
-    function currentMintRound() external view returns (uint256) {
-        uint256 round = _mintRound();
-        if (round == 0) {
-            revert RoundNotStarted(1, 0);
-        }
-        return round;
-    }
-
     function joinedAmount(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
         if (round > s.joinRound()) {
             return 0;
@@ -701,12 +692,11 @@ contract GroupActionExecutor is IGroupActionExecutor, MemberRewardEntry {
     }
 
     function _joinRound() internal view override returns (uint256) {
-        return s.joinRound();
+        return GroupActionRoundAxis.joinRound(s.phaseAddress);
     }
 
-    function _mintRound() internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        return phase < 4 ? 0 : phase - 3;
+    function _mintRound() internal view override returns (uint256) {
+        return GroupActionRoundAxis.mintRound(s.phaseAddress);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
 import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
-import {IPhase} from "@core/interfaces/IPhase.sol";
 
 library GroupServiceStorage {
     uint256 constant PRECISION = 1e18;
@@ -55,8 +55,7 @@ library GroupServiceStorage {
     // argument here is read in the same round space; if the two drift, the reported round and the
     // recorded snapshot disagree without any revert.
     function joinRound(Layout storage s) internal view returns (uint256) {
-        uint256 phase = IPhase(s.phaseAddress).currentPhase();
-        return phase < 2 ? 0 : phase - 1;
+        return GroupActionRoundAxis.joinRound(s.phaseAddress);
     }
 
     function currentJoinRound(Layout storage s) internal view returns (uint256) {
