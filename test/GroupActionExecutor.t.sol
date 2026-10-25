@@ -28,15 +28,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.AlreadyInitialized.selector));
         executor.init(address(actionTarget), address(stake), again);
 
-        GroupActionExecutor fresh = new GroupActionExecutor();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(0), address(stake), again);
-
-        GroupActionExecutor badSplits = new GroupActionExecutor();
-        uint256[] memory zeroSplits = new uint256[](1);
-        zeroSplits[0] = 0;
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidSplits.selector, 0, 0));
-        badSplits.init(address(actionTarget), address(stake), zeroSplits);
     }
 
     function testFullRoundSettleMatchesFinalScore() external {

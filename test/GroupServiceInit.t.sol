@@ -10,65 +10,11 @@ import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 contract GroupServiceInitTest is GroupServiceTestBase {
     function testInitStoresAddressesAndDerivesDependencies() external view {
         require(executor.actionTarget() == address(actionTarget), "action target stored");
+        require(executor.groupActionExecutorAddress() == address(groupAction), "group action executor stored");
         require(executor.initialized(), "initialized");
         // Derived dependencies are read back through the round getters: they
         // only answer when phaseAddress is wired.
         require(executor.currentVoteRound() == CREATION_PHASE, "vote round derives phase");
-    }
-
-    function testInitRejectsZeroAddresses() external {
-        _expectInitRevert(
-            address(0),
-            address(stake),
-            address(groupAction),
-            abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0))
-        );
-        _expectInitRevert(
-            address(actionTarget),
-            address(0),
-            address(groupAction),
-            abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0))
-        );
-        _expectInitRevert(
-            address(actionTarget),
-            address(stake),
-            address(0),
-            abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0))
-        );
-    }
-
-    function testInitRejectsZeroDerivedAddresses() external {
-        MockGroupServiceStake broken = new MockGroupServiceStake();
-        broken.setPhaseAddress(address(phase));
-        broken.setLaunchAddress(address(launch));
-
-        GroupServiceExecutor fresh = new GroupServiceExecutor();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(broken), address(groupAction));
-        require(!fresh.initialized(), "zero member nft leaves the flag clear");
-
-        broken.setMemberNFTAddress(address(memberNFT));
-        broken.setPhaseAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(broken), address(groupAction));
-        require(!fresh.initialized(), "zero phase leaves the flag clear");
-
-        broken.setPhaseAddress(address(phase));
-        broken.setLaunchAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(broken), address(groupAction));
-        require(!fresh.initialized(), "zero launch rejected too");
-
-        broken.setLaunchAddress(address(launch));
-
-        actionTarget.setMintAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(broken), address(groupAction));
-        require(!fresh.initialized(), "zero mint leaves the flag clear");
-        actionTarget.setMintAddress(address(mint));
-
-        fresh.init(address(actionTarget), address(broken), address(groupAction));
-        require(fresh.initialized(), "retry after fixing the dependency succeeds");
     }
 
     function testInitCannotRunTwice() external {

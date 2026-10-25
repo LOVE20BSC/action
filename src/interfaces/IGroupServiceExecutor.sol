@@ -66,6 +66,7 @@ interface IGroupServiceExecutor is
         address stakeAddress,
         address groupActionExecutorAddress
     ) external;
+    function groupActionExecutorAddress() external view returns (address);
     function currentVerifyRound() external view returns (uint256);
 
     function GOV_RATIO_MULTIPLIER(

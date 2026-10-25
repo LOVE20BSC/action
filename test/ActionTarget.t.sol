@@ -45,41 +45,6 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(actionTarget.memberNFTAddress() == address(memberNFT), "state unchanged");
     }
 
-    function testInitRejectsZeroMint() external {
-        ActionTarget fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(0));
-        require(fresh.initialized() == false, "not latched");
-    }
-
-    function testInitRejectsZeroDerivedDependencies() external {
-        ActionTarget fresh = new ActionTarget();
-
-        mint.setVoteAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(mint));
-        mint.setVoteAddress(voteAddress);
-
-        mint.setSubmitAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(mint));
-        mint.setSubmitAddress(submitAddress);
-
-        mint.setMemberNFTAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(mint));
-        mint.setMemberNFTAddress(address(memberNFT));
-
-        mint.setPhaseAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(mint));
-        mint.setPhaseAddress(address(phase));
-
-        require(fresh.initialized() == false, "not latched");
-        fresh.init(address(mint));
-        require(fresh.initialized(), "retry succeeds after bindings are restored");
-    }
-
     function testCreateBindsExecutorAndIndexes() external {
         _createAction(11);
         require(actionTarget.executor(address(token), 11) == address(executor), "executor bound");

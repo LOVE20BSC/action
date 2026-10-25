@@ -225,7 +225,7 @@ print_contract_header() {
     local name=$2
     local address=$3
     echo ""
-    echo -e "${BLUE}[$num/4]${NC} ${CYAN}${name}${NC}"
+    echo -e "${BLUE}[$num/5]${NC} ${CYAN}${name}${NC}"
     echo -e "${GRAY}      ${address}${NC}"
 }
 
@@ -269,8 +269,27 @@ verify_value "memberNFTAddress" "$MEMBER_NFT_ADDRESS" "$ACTUAL_MEMBER" || ((FAIL
 ACTUAL_PHASE=$(cast call "$ACTION_TARGET_ADDRESS" "phaseAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "phaseAddress" "$PHASE_ADDRESS" "$ACTUAL_PHASE" || ((FAILED+=1))
 
-# 2. 验证 LpExecutor
-print_contract_header "2" "LpExecutor" "$LP_EXECUTOR_ADDRESS"
+# Executor 的派生值在 init 时从 Stake 缓存且不可回读；核对 Stake 本身与 core 地址文件一致，
+# 才能证明三个 Executor 的 memberNFT/phase/vote/launch 派生源正确。
+print_contract_header "2" "Stake (derived bindings)" "$STAKE_ADDRESS"
+verify_deployed "Stake" "$STAKE_ADDRESS" || ((FAILED+=1))
+ACTUAL_STAKE_MEMBER=$(cast call "$STAKE_ADDRESS" "memberNFTAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "memberNFTAddress" "$MEMBER_NFT_ADDRESS" "$ACTUAL_STAKE_MEMBER" || ((FAILED+=1))
+ACTUAL_STAKE_PHASE=$(cast call "$STAKE_ADDRESS" "phaseAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "phaseAddress" "$PHASE_ADDRESS" "$ACTUAL_STAKE_PHASE" || ((FAILED+=1))
+ACTUAL_STAKE_VOTE=$(cast call "$STAKE_ADDRESS" "voteAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "voteAddress" "$VOTE_ADDRESS" "$ACTUAL_STAKE_VOTE" || ((FAILED+=1))
+ACTUAL_STAKE_LAUNCH=$(cast call "$STAKE_ADDRESS" "launchAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "launchAddress" "$LAUNCH_ADDRESS" "$ACTUAL_STAKE_LAUNCH" || ((FAILED+=1))
+ACTUAL_STAKE_FACTORY=$(cast call "$STAKE_ADDRESS" "pairFactoryAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_deployed "Stake pairFactoryAddress" "$ACTUAL_STAKE_FACTORY" || ((FAILED+=1))
+ACTUAL_LAUNCH_FACTORY=$(cast call "$LAUNCH_ADDRESS" "pairFactoryAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "Stake/Launch pairFactoryAddress" "$ACTUAL_LAUNCH_FACTORY" "$ACTUAL_STAKE_FACTORY" || ((FAILED+=1))
+ACTUAL_STAKE_ROUTER=$(cast call "$STAKE_ADDRESS" "routerAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_deployed "Stake routerAddress" "$ACTUAL_STAKE_ROUTER" || ((FAILED+=1))
+
+# 3. 验证 LpExecutor
+print_contract_header "3" "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 
 ACTUAL_INIT=$(cast call "$LP_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
@@ -279,8 +298,8 @@ verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 ACTUAL_TARGET=$(cast call "$LP_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
-# 3. 验证 GroupActionExecutor
-print_contract_header "3" "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS"
+# 4. 验证 GroupActionExecutor
+print_contract_header "4" "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" \
     "${GROUP_ACTION_LIBRARY_ARGS[@]}"
 
@@ -299,8 +318,23 @@ ACTUAL_SPLITS=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "SPLITS()(uint256[])"
 EXPECTED_SPLITS="[${GROUP_ACTION_SPLITS:-}]"
 verify_value "SPLITS" "$(strip_sci_notation "$EXPECTED_SPLITS")" "$(strip_sci_notation "$ACTUAL_SPLITS")" || ((FAILED+=1))
 
-# 4. 验证 GroupServiceExecutor
-print_contract_header "4" "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS"
+if [ -n "${GROUP_ACTION_SPLITS:-}" ]; then
+    previous=0
+    IFS=',' read -ra split_items <<< "$GROUP_ACTION_SPLITS"
+    for item in "${split_items[@]}"; do
+        item=$(echo "$item" | tr -d ' ')
+        if [[ ! "$item" =~ ^[0-9]+$ ]] || [ "$item" -eq 0 ] \
+            || [ "$item" -ge 1000000000000000000 ] || [ "$item" -le "$previous" ]; then
+            echo -e "  ${RED}✗${NC} GROUP_ACTION_SPLITS must be strictly increasing in (0, 1e18)"
+            ((FAILED+=1))
+            break
+        fi
+        previous=$item
+    done
+fi
+
+# 5. 验证 GroupServiceExecutor
+print_contract_header "5" "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS" \
     "${GROUP_SERVICE_LIBRARY_ARGS[@]}"
 
@@ -309,6 +343,9 @@ verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
 ACTUAL_TARGET=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+
+ACTUAL_GAE=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "groupActionExecutorAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+verify_value "groupActionExecutorAddress" "$GROUP_ACTION_EXECUTOR_ADDRESS" "$ACTUAL_GAE" || ((FAILED+=1))
 
 for i in "${!ALL_LIBRARY_NAMES[@]}"; do
     field=${ALL_LIBRARY_FIELDS[$i]}

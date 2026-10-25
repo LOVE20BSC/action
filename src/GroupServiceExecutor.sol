@@ -77,45 +77,23 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
     function init(
         address actionTargetAddress,
         address stakeAddress,
-        address groupActionExecutorAddress
+        address groupActionExecutorAddress_
     ) external {
         if (s.initialized) {
             revert AlreadyInitialized();
         }
         s.initialized = true;
 
-        if (actionTargetAddress.code.length == 0) {
-            revert DependencyNotContract(actionTargetAddress);
-        }
-        if (stakeAddress.code.length == 0) {
-            revert DependencyNotContract(stakeAddress);
-        }
-        if (groupActionExecutorAddress.code.length == 0) {
-            revert DependencyNotContract(groupActionExecutorAddress);
-        }
-
         IStake stake = IStake(stakeAddress);
         address memberNFTAddress = stake.memberNFTAddress();
         address phaseAddress = stake.phaseAddress();
         address launchAddress = stake.launchAddress();
         address mintAddress = IActionTarget(actionTargetAddress).mintAddress();
-        if (memberNFTAddress.code.length == 0) {
-            revert DependencyNotContract(memberNFTAddress);
-        }
-        if (phaseAddress.code.length == 0) {
-            revert DependencyNotContract(phaseAddress);
-        }
-        if (launchAddress.code.length == 0) {
-            revert DependencyNotContract(launchAddress);
-        }
-        if (mintAddress.code.length == 0) {
-            revert DependencyNotContract(mintAddress);
-        }
 
         s.actionTarget = actionTargetAddress;
         s.mintAddress = mintAddress;
         s.stakeAddress = stakeAddress;
-        s.groupActionExecutorAddress = groupActionExecutorAddress;
+        s.groupActionExecutorAddress = groupActionExecutorAddress_;
         s.memberNFTAddress = memberNFTAddress;
         s.phaseAddress = phaseAddress;
         s.launchAddress = launchAddress;
@@ -470,6 +448,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ReentrancyGuard {
 
     function actionTarget() external view returns (address) {
         return s.actionTarget;
+    }
+
+    function groupActionExecutorAddress() external view returns (address) {
+        return s.groupActionExecutorAddress;
     }
 
     function initialized() external view returns (bool) {

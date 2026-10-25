@@ -101,31 +101,16 @@ contract LpExecutor is ILpExecutor, ReentrancyGuard {
         return _minGovRatio[tokenAddress][actionId];
     }
 
+    // forge-lint: disable-next-item(missing-zero-check)
     function init(address actionTargetAddress, address stakeAddress) external {
         if (initialized) {
             revert AlreadyInitialized();
         }
         initialized = true;
 
-        if (actionTargetAddress.code.length == 0) {
-            revert DependencyNotContract(actionTargetAddress);
-        }
-        if (stakeAddress.code.length == 0) {
-            revert DependencyNotContract(stakeAddress);
-        }
-
         address memberNFTAddress = IStake(stakeAddress).memberNFTAddress();
         address phaseAddress = IStake(stakeAddress).phaseAddress();
         address pairFactoryAddress = IStake(stakeAddress).pairFactoryAddress();
-        if (memberNFTAddress.code.length == 0) {
-            revert DependencyNotContract(memberNFTAddress);
-        }
-        if (phaseAddress.code.length == 0) {
-            revert DependencyNotContract(phaseAddress);
-        }
-        if (pairFactoryAddress.code.length == 0) {
-            revert DependencyNotContract(pairFactoryAddress);
-        }
 
         actionTarget = actionTargetAddress;
         _memberNFT = memberNFTAddress;

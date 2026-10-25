@@ -22,6 +22,8 @@ fail_on_revert = false
 [lint]
 severity = ["high", "med", "low"]
 ignore = ["test/**/*.sol"]
+# missing-zero-check: init 的静态零值校验由部署脚本负责（dev-standards §5.7）；
+# 具体 init 行用行内抑制，不整类禁用。
 exclude_lints = ["calls-loop", "reentrancy-events", "unused-return"]
 # Same policy as core:
 # - calls-loop: per-round settlement needs fresh external state (supply, votes, proposals)

@@ -7,6 +7,13 @@ import {ActionTarget} from "../../src/ActionTarget.sol";
 import {LpExecutor} from "../../src/LpExecutor.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
+import {GroupActionStorage} from "../../src/GroupActionStorage.sol";
+import {IActionTarget} from "../../src/interfaces/IActionTarget.sol";
+import {ILaunch} from "@core/interfaces/ILaunch.sol";
+import {IMint} from "@core/interfaces/IMint.sol";
+import {IStake} from "@core/interfaces/IStake.sol";
+import {ISubmit} from "@core/interfaces/ISubmit.sol";
+import {IVote} from "@core/interfaces/IVote.sol";
 
 contract DeployAction is Script {
     struct DeploymentAddresses {
@@ -16,57 +23,156 @@ contract DeployAction is Script {
         address groupServiceExecutor;
     }
 
+    struct ActionConfig {
+        uint256 chainId;
+        address mint;
+        address stake;
+        uint256[] splits;
+    }
+
     function run(uint256[] memory groupActionSplits) external returns (DeploymentAddresses memory addrs) {
-        require(block.chainid == vm.envUint("CHAIN_ID"), "Chain ID mismatch");
+        ActionConfig memory config = _loadConfig(groupActionSplits);
+        _validateConfig(config);
+
+        vm.startBroadcast();
+        addrs = _deployContracts(config.mint, config.stake, config.splits);
+        vm.stopBroadcast();
+
+        _validateDeployment(config.mint, config.splits, addrs);
+        _logDeploymentSummary(addrs);
+    }
+
+    function _loadConfig(uint256[] memory groupActionSplits) internal view returns (ActionConfig memory config) {
+        config.chainId = vm.envUint("CHAIN_ID");
+        config.mint = vm.envAddress("MINT_ADDRESS");
+        config.stake = vm.envAddress("STAKE_ADDRESS");
+        config.splits = groupActionSplits;
+    }
+
+    function _validateConfig(ActionConfig memory config) internal view {
+        require(block.chainid == config.chainId, "Chain ID mismatch");
 
         // Core 依赖必须是已部署合约：ActionTarget 从 Mint 派生 vote/submit/memberNFT/phase，
         // 三个 Executor 从 Stake 派生 memberNFT/phase/vote/launch/pairFactory，
         // 地址配错时模拟阶段不会回滚，会白广播 4 个合约（要到 21_check.sh 才拦下）。
-        address mint = vm.envAddress("MINT_ADDRESS");
-        address stake = vm.envAddress("STAKE_ADDRESS");
-        require(mint.code.length != 0, "Mint must be a deployed contract");
-        require(stake.code.length != 0, "Stake must be a deployed contract");
+        require(config.mint.code.length != 0, "Mint must be a deployed contract");
+        require(config.stake.code.length != 0, "Stake must be a deployed contract");
 
-        vm.startBroadcast();
+        IMint mint = IMint(config.mint);
+        IStake stake = IStake(config.stake);
+        address memberNFT = mint.memberNFTAddress();
+        address phase = mint.phaseAddress();
+        address vote = mint.voteAddress();
+        address submit = mint.submitAddress();
+        require(memberNFT.code.length != 0, "Mint memberNFTAddress must be a deployed contract");
+        require(phase.code.length != 0, "Mint phaseAddress must be a deployed contract");
+        require(vote.code.length != 0, "Mint voteAddress must be a deployed contract");
+        require(submit.code.length != 0, "Mint submitAddress must be a deployed contract");
 
-        addrs = _deployContracts(groupActionSplits);
+        // Executor 的派生值不可回读，部署前用 Stake 的 getter 与 Mint 的派生图逐项对齐。
+        require(stake.memberNFTAddress() == memberNFT, "Stake memberNFTAddress mismatch");
+        require(stake.phaseAddress() == phase, "Stake phaseAddress mismatch");
+        require(stake.voteAddress() == vote, "Stake voteAddress mismatch");
+        address launch = stake.launchAddress();
+        require(launch.code.length != 0, "Stake launchAddress must be a deployed contract");
+        require(launch == mint.launchAddress(), "Stake launchAddress mismatch");
+        require(
+            stake.pairFactoryAddress().code.length != 0, "Stake pairFactoryAddress must be a deployed contract"
+        );
+        require(
+            ILaunch(launch).pairFactoryAddress() == stake.pairFactoryAddress(),
+            "Stake pairFactoryAddress mismatch"
+        );
+        require(stake.routerAddress().code.length != 0, "Stake routerAddress must be a deployed contract");
 
-        vm.stopBroadcast();
+        require(IVote(vote).stakeAddress() == config.stake, "Vote stakeAddress mismatch");
+        require(IVote(vote).submitAddress() == submit, "Vote submitAddress mismatch");
+        require(IVote(vote).memberNFTAddress() == memberNFT, "Vote memberNFTAddress mismatch");
+        require(IVote(vote).phaseAddress() == phase, "Vote phaseAddress mismatch");
+        require(ISubmit(submit).stakeAddress() == config.stake, "Submit stakeAddress mismatch");
+        require(ISubmit(submit).memberNFTAddress() == memberNFT, "Submit memberNFTAddress mismatch");
+        require(ISubmit(submit).phaseAddress() == phase, "Submit phaseAddress mismatch");
 
-        _logDeploymentSummary(addrs);
+        uint256 previous = 0;
+        for (uint256 i = 0; i < config.splits.length; i++) {
+            // forge-lint: disable-next-item(require-revert-in-loop)
+            require(
+                config.splits[i] != 0 && config.splits[i] < GroupActionStorage.PRECISION
+                    && config.splits[i] > previous,
+                "Invalid GroupAction splits"
+            );
+            previous = config.splits[i];
+        }
     }
 
-    function _deployContracts(uint256[] memory groupActionSplits)
-        private
+    function _deployContracts(address mint, address stake, uint256[] memory groupActionSplits)
+        internal
         returns (DeploymentAddresses memory addrs)
     {
         addrs.actionTarget = address(new ActionTarget());
         console2.log("ActionTarget deployed at:", addrs.actionTarget);
-        ActionTarget(addrs.actionTarget).init(vm.envAddress("MINT_ADDRESS"));
+        ActionTarget(addrs.actionTarget).init(mint);
         console2.log("ActionTarget initialized");
 
         addrs.lpExecutor = address(new LpExecutor());
         console2.log("LpExecutor deployed at:", addrs.lpExecutor);
-        LpExecutor(addrs.lpExecutor).init(addrs.actionTarget, vm.envAddress("STAKE_ADDRESS"));
+        LpExecutor(addrs.lpExecutor).init(addrs.actionTarget, stake);
         console2.log("LpExecutor initialized");
 
         addrs.groupActionExecutor = address(new GroupActionExecutor());
         console2.log("GroupActionExecutor deployed at:", addrs.groupActionExecutor);
-        GroupActionExecutor(addrs.groupActionExecutor).init(
-            addrs.actionTarget,
-            vm.envAddress("STAKE_ADDRESS"),
-            groupActionSplits
-        );
+        GroupActionExecutor(addrs.groupActionExecutor).init(addrs.actionTarget, stake, groupActionSplits);
         console2.log("GroupActionExecutor initialized");
 
         addrs.groupServiceExecutor = address(new GroupServiceExecutor());
         console2.log("GroupServiceExecutor deployed at:", addrs.groupServiceExecutor);
         GroupServiceExecutor(addrs.groupServiceExecutor).init(
-            addrs.actionTarget,
-            vm.envAddress("STAKE_ADDRESS"),
-            addrs.groupActionExecutor
+            addrs.actionTarget, stake, addrs.groupActionExecutor
         );
         console2.log("GroupServiceExecutor initialized");
+    }
+
+    function _validateDeployment(
+        address mintAddress,
+        uint256[] memory expectedSplits,
+        DeploymentAddresses memory addrs
+    ) internal view {
+        IMint mint = IMint(mintAddress);
+        IActionTarget actionTarget = IActionTarget(addrs.actionTarget);
+        require(actionTarget.initialized(), "ActionTarget not initialized");
+        require(actionTarget.mintAddress() == mintAddress, "ActionTarget mint mismatch");
+        require(actionTarget.voteAddress() == mint.voteAddress(), "ActionTarget vote mismatch");
+        require(actionTarget.submitAddress() == mint.submitAddress(), "ActionTarget submit mismatch");
+        require(actionTarget.memberNFTAddress() == mint.memberNFTAddress(), "ActionTarget member NFT mismatch");
+        require(actionTarget.phaseAddress() == mint.phaseAddress(), "ActionTarget phase mismatch");
+
+        LpExecutor lpExecutor = LpExecutor(addrs.lpExecutor);
+        require(lpExecutor.initialized(), "LpExecutor not initialized");
+        require(lpExecutor.actionTarget() == addrs.actionTarget, "LpExecutor action target mismatch");
+
+        GroupActionExecutor groupActionExecutor = GroupActionExecutor(addrs.groupActionExecutor);
+        require(groupActionExecutor.initialized(), "GroupActionExecutor not initialized");
+        require(
+            groupActionExecutor.actionTarget() == addrs.actionTarget,
+            "GroupActionExecutor action target mismatch"
+        );
+        uint256[] memory splits = groupActionExecutor.SPLITS();
+        require(splits.length == expectedSplits.length, "GroupActionExecutor splits length mismatch");
+        for (uint256 i = 0; i < splits.length; i++) {
+            // forge-lint: disable-next-item(require-revert-in-loop)
+            require(splits[i] == expectedSplits[i], "GroupActionExecutor split mismatch");
+        }
+
+        GroupServiceExecutor groupServiceExecutor = GroupServiceExecutor(addrs.groupServiceExecutor);
+        require(groupServiceExecutor.initialized(), "GroupServiceExecutor not initialized");
+        require(
+            groupServiceExecutor.actionTarget() == addrs.actionTarget,
+            "GroupServiceExecutor action target mismatch"
+        );
+        require(
+            groupServiceExecutor.groupActionExecutorAddress() == addrs.groupActionExecutor,
+            "GroupServiceExecutor binding mismatch"
+        );
     }
 
     function _logDeploymentSummary(DeploymentAddresses memory addrs) private pure {

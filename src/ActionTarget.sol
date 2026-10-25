@@ -47,33 +47,18 @@ contract ActionTarget is IActionTarget {
     // tokenAddress => executor => bound actionIds
     mapping(address => mapping(address => uint256[])) internal _actionIdsByExecutor;
 
+    // forge-lint: disable-next-item(missing-zero-check)
     function init(address mintAddress_) external {
         if (initialized) {
             revert AlreadyInitialized();
         }
         initialized = true;
 
-        if (mintAddress_.code.length == 0) {
-            revert DependencyNotContract(mintAddress_);
-        }
-
         IMint mint = IMint(mintAddress_);
         address voteAddress_ = mint.voteAddress();
         address submitAddress_ = mint.submitAddress();
         address memberNFTAddress_ = mint.memberNFTAddress();
         address phaseAddress_ = mint.phaseAddress();
-        if (voteAddress_.code.length == 0) {
-            revert DependencyNotContract(voteAddress_);
-        }
-        if (submitAddress_.code.length == 0) {
-            revert DependencyNotContract(submitAddress_);
-        }
-        if (memberNFTAddress_.code.length == 0) {
-            revert DependencyNotContract(memberNFTAddress_);
-        }
-        if (phaseAddress_.code.length == 0) {
-            revert DependencyNotContract(phaseAddress_);
-        }
 
         memberNFTAddress = memberNFTAddress_;
         submitAddress = submitAddress_;

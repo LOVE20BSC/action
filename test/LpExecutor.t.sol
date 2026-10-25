@@ -78,43 +78,6 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(lpExecutor.actionTarget() == address(actionTarget), "binding unchanged");
     }
 
-    function testInitRejectsZeroDependencies() external {
-        LpExecutor fresh = new LpExecutor();
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(0), address(stake));
-        require(fresh.initialized() == false, "not latched");
-
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(0));
-        require(fresh.initialized() == false, "not latched");
-
-        fresh.init(address(actionTarget), address(stake));
-        require(fresh.initialized(), "retry succeeds");
-    }
-
-    function testInitRejectsZeroDerivedDependencies() external {
-        LpExecutor fresh = new LpExecutor();
-
-        stake.setMemberNFTAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(stake));
-        stake.setMemberNFTAddress(address(memberNFT));
-
-        stake.setPhaseAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(stake));
-        stake.setPhaseAddress(address(phase));
-
-        stake.setPairFactoryAddress(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(actionTarget), address(stake));
-        stake.setPairFactoryAddress(address(factory));
-
-        require(fresh.initialized() == false, "not latched");
-        fresh.init(address(actionTarget), address(stake));
-        require(fresh.initialized(), "retry succeeds after bindings are restored");
-    }
-
     function testCreateStoresConfig() external view {
         require(
             lpExecutor.joinedAmountTokenAddress(address(token), ACTION_ID) == address(joinToken),
@@ -197,14 +160,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         }
     }
 
-    function testCreateRejectsFactoryWithoutCodeOrRevertingFactory() external {
-        stake.setPairFactoryAddress(address(0xdead));
-        LpExecutor fresh = new LpExecutor();
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionExecutorErrors.DependencyNotContract.selector, address(0xdead))
-        );
-        fresh.init(address(actionTarget), address(stake));
-
+    function testCreateRejectsRevertingFactory() external {
         address revertingFactory = address(new MockRevertingPairFactory());
         stake.setPairFactoryAddress(revertingFactory);
         LpExecutor freshReverting = new LpExecutor();

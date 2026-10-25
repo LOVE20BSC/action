@@ -33,7 +33,6 @@ interface IActionTargetEvents {
 
 interface IActionTargetErrors {
     error AlreadyInitialized();
-    error DependencyNotContract(address dependency);
     error NotSubmit(address caller);
     error NotVote(address caller);
     error NotMemberOwner(uint256 memberId);

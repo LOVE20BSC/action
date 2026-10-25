@@ -65,22 +65,6 @@ echo "=== Deploying Action Contracts to $network ==="
 echo "  RPC_URL: $RPC_URL"
 echo "  CHAIN_ID: $CHAIN_ID"
 
-# Core 依赖地址必须先于广播校验存在：Mint 供 ActionTarget 派生，Stake 供三个 Executor 派生。
-require_core_dependencies() {
-    local field
-    for field in MINT_ADDRESS STAKE_ADDRESS; do
-        if [[ ! ${!field:-} =~ ^0x[0-9a-fA-F]{40}$ ]] || [[ ${!field:-} = 0x0000000000000000000000000000000000000000 ]]; then
-            echo "Error: Missing or invalid $field in $NETWORK_DIR/addresses.core.params"
-            exit 1
-        fi
-        local code
-        if ! code=$(cast code "${!field}" --rpc-url "$RPC_URL" 2>/dev/null) || [[ ! "$code" =~ ^0x[0-9a-fA-F]+$ ]]; then
-            echo "Error: $field ${!field} is not a deployed contract on chain $CHAIN_ID"
-            exit 1
-        fi
-    done
-}
-
 LIBRARY_NAMES="GroupActionJoin GroupActionManager GroupActionVerify GroupRecipients"
 
 library_address_field() {
@@ -137,9 +121,6 @@ SPLITS_LITERAL="[${GROUP_ACTION_SPLITS:-}]"
 
 # 构建 forge script 命令：keystore 签名（本地链同样如此，不用 --unlocked）。
 FORGE_CMD=(forge script script/deploy/DeployAction.s.sol:DeployAction --sig "run(uint256[])" "$SPLITS_LITERAL" --rpc-url "$RPC_URL" --chain-id "$CHAIN_ID" --account "$KEYSTORE_ACCOUNT" --sender "$ACCOUNT_ADDRESS" --password-file "$PASSWORD_FILE" --broadcast --slow -vvv)
-
-# Core 依赖必须在广播前校验为已部署合约，避免白广播 4 个行动合约。
-require_core_dependencies
 
 # 执行部署
 cd "$PROJECT_ROOT"

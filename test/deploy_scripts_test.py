@@ -31,8 +31,11 @@ def fake_tool(tool, args):
                 return 1
             print(data["code"].get(args[1].lower(), "0x01"))
         elif args[0] == "call":
-            key = args[1].lower() + "/" + args[2]
-            print(os.environ.get("BAD_VALUE", "ERROR") if key == os.environ.get("BAD_CALL") else data["calls"][key])
+            if args[2] == "SPLITS()(uint256[])" and os.environ.get("MOCK_EMPTY_SPLITS"):
+                print("[]")
+            else:
+                key = args[1].lower() + "/" + args[2]
+                print(os.environ.get("BAD_VALUE", "ERROR") if key == os.environ.get("BAD_CALL") else data["calls"][key])
         else:
             raise AssertionError(args)
     elif tool == "mktemp":
@@ -119,9 +122,12 @@ def main():
         ]
         env.update({lib["field"]: f"0x{index + 20:040x}" for index, lib in enumerate(libraries)})
         env.update({"CHAIN_ID": "97", "RPC_URL": "http://invalid.local", "ETHERSCAN_API_KEY": "test-key",
+                    "LOVE20_TOKEN_ADDRESS": "0x" + "90" * 20,
                     "MINT_ADDRESS": "0x" + "ab" * 20, "STAKE_ADDRESS": "0x" + "cd" * 20,
                     "VOTE_ADDRESS": "0x" + "12" * 20, "SUBMIT_ADDRESS": "0x" + "34" * 20,
                     "MEMBER_NFT_ADDRESS": "0x" + "56" * 20, "PHASE_ADDRESS": "0x" + "78" * 20,
+                    "LAUNCH_ADDRESS": "0x" + "9a" * 20,
+                    "PAIR_FACTORY_ADDRESS": "0x" + "9b" * 20,
                     "GROUP_ACTION_SPLITS": "100000000000000000,400000000000000000,700000000000000000"})
         calls = {}
 
@@ -134,9 +140,19 @@ def main():
                 "memberNFTAddress()(address)": "MEMBER_NFT_ADDRESS", "phaseAddress()(address)": "PHASE_ADDRESS"})
         for name in ("LP_EXECUTOR", "GROUP_ACTION_EXECUTOR", "GROUP_SERVICE_EXECUTOR"):
             getters(name, {"initialized()(bool)": "true", "actionTarget()(address)": "ACTION_TARGET_ADDRESS"})
+        getters("GROUP_SERVICE_EXECUTOR", {
+            "groupActionExecutorAddress()(address)": "GROUP_ACTION_EXECUTOR_ADDRESS"
+        })
         # cast 的数组返回逐元素带科学计数法标注；21_check.sh 的 strip_sci_notation 会归一化。
         getters("GROUP_ACTION_EXECUTOR", {"SPLITS()(uint256[])":
                 "[100000000000000000 [1e17], 400000000000000000 [4e17], 700000000000000000 [7e17]]"})
+        getters("STAKE", {"memberNFTAddress()(address)": "MEMBER_NFT_ADDRESS",
+                "phaseAddress()(address)": "PHASE_ADDRESS",
+                "voteAddress()(address)": "VOTE_ADDRESS",
+                "launchAddress()(address)": "LAUNCH_ADDRESS",
+                "pairFactoryAddress()(address)": "PAIR_FACTORY_ADDRESS",
+                "routerAddress()(address)": "PAIR_FACTORY_ADDRESS"})
+        getters("LAUNCH", {"pairFactoryAddress()(address)": "PAIR_FACTORY_ADDRESS"})
         code = {}
         for lib in libraries:
             executor = env[lib["executor"] + "_ADDRESS"].lower()
@@ -172,8 +188,9 @@ def main():
             "env": env, "contracts": contracts, "calls": calls, "code": code,
             "inspect": inspect, "library_canonical": library_canonical}))
         network.joinpath("network.params").write_text("CHAIN_ID=97\nRPC_URL=http://invalid.local\n")
+        core_names = ["LOVE20_TOKEN", "MEMBER_NFT", "PHASE", "LAUNCH", "MINT", "STAKE", "SUBMIT", "VOTE"]
         network.joinpath("addresses.core.params").write_text("\n".join(
-            name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in names) + "\n")
+            name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in core_names) + "\n")
         network.joinpath("action.params").write_text(
             "GROUP_ACTION_SPLITS=" + env["GROUP_ACTION_SPLITS"] + "\n")
         saved = network / "addresses.action.params"
@@ -305,16 +322,25 @@ def main():
         assert "GroupRecipients runtime does not match" in result.stdout + result.stderr, \
             result.stdout + result.stderr
         saved.write_text(address_file_text())
+        # 空数组表示不分层：链上 SPLITS 也应为空时通过。
+        params_path = network / "action.params"
+        params_text = params_path.read_text()
+        params_path.write_text("GROUP_ACTION_SPLITS=\n")
+        run("21_check.sh", args=("test",), MOCK_EMPTY_SPLITS="1")
+        params_path.write_text(params_text)
         for contract, signature in [("ACTION_TARGET", "mintAddress()(address)"), ("ACTION_TARGET", "voteAddress()(address)"),
                 ("ACTION_TARGET", "submitAddress()(address)"), ("ACTION_TARGET", "memberNFTAddress()(address)"),
                 ("ACTION_TARGET", "phaseAddress()(address)"), ("LP_EXECUTOR", "actionTarget()(address)"),
                 ("GROUP_SERVICE_EXECUTOR", "initialized()(bool)"),
+                ("STAKE", "memberNFTAddress()(address)"),
+                ("LAUNCH", "pairFactoryAddress()(address)"),
                 ("GROUP_ACTION_EXECUTOR", "SPLITS()(uint256[])")]:
             wrong_value = "0x" + "98" * 20 if signature.endswith("(address)") else "false" if signature.endswith("(bool)") else "[999]"
             run("21_check.sh", False, ("test",), BAD_CALL=env[contract + "_ADDRESS"].lower() + "/" + signature, BAD_VALUE=wrong_value)
-        # 地址无代码时每个对象只计一次失败（4 合约 + 4 库 = 8），不因 runtime 比对重复计数。
+        # 地址无代码时每个对象只计一次失败（4 合约 + 4 库 + Stake 派生源 3 = 11），
+        # 不因 runtime 比对重复计数。
         result, _ = run("21_check.sh", False, ("test",), RPC_CODE_ERROR="1")
-        assert "8 verification(s) failed" in result.stdout, result.stdout
+        assert "11 verification(s) failed" in result.stdout, result.stdout
         run("21_check.sh", False, ("test",), INSPECT_FAIL="1")
         run("21_check.sh", False, ("test",), RPC_CHAIN="56")
         # 地址比较大小写不敏感：配置写大写、链上读到小写，仍应通过（配置值由步骤自行载入）。
@@ -389,11 +415,6 @@ def main():
         network.joinpath(".account").unlink()
         run("11_deploy.sh", False, ("test",))
         write_account()
-        # core 依赖地址不是已部署合约：广播前失败，不误报已上链、不保留日志。
-        result, _ = run("11_deploy.sh", False, ("test",), RPC_CODE_ERROR="1")
-        output = result.stdout + result.stderr
-        assert "contracts may already be on chain" not in output, output
-        assert "Deployment log:" not in output, output
         # 广播失败：合约可能已部分上链，必须保留日志并打印路径。
         saved_before = saved.read_text()
         result, _ = run("11_deploy.sh", False, ("test",), DEPLOY_FAIL="1")

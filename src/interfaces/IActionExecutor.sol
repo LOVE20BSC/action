@@ -16,7 +16,6 @@ interface IActionExecutorEvents {
 
 interface IActionExecutorErrors {
     error AlreadyInitialized();
-    error DependencyNotContract(address dependency);
     error NotActionTarget(address caller);
     error ActionNotCreated(address tokenAddress, uint256 actionId);
     error NotMemberOwner(uint256 memberId);

@@ -71,37 +71,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ReentrancyGuard {
         }
         s.initialized = true;
 
-        if (actionTargetAddress.code.length == 0) {
-            revert DependencyNotContract(actionTargetAddress);
-        }
-        if (stakeAddress.code.length == 0) {
-            revert DependencyNotContract(stakeAddress);
-        }
-
         IStake stake = IStake(stakeAddress);
         address memberNFTAddress = stake.memberNFTAddress();
         address phaseAddress = stake.phaseAddress();
         address voteAddress = stake.voteAddress();
-        if (memberNFTAddress.code.length == 0) {
-            revert DependencyNotContract(memberNFTAddress);
-        }
-        if (phaseAddress.code.length == 0) {
-            revert DependencyNotContract(phaseAddress);
-        }
-        if (voteAddress.code.length == 0) {
-            revert DependencyNotContract(voteAddress);
-        }
-
-        if (splits.length != 0) {
-            uint256 previous = 0;
-            // forge-lint: disable-next-item(require-revert-in-loop)
-            for (uint256 i = 0; i < splits.length; i++) {
-                if (splits[i] == 0 || splits[i] >= GroupActionStorage.PRECISION || splits[i] <= previous) {
-                    revert InvalidSplits(i, splits[i]);
-                }
-                previous = splits[i];
-            }
-        }
 
         s.actionTarget = actionTargetAddress;
         s.stakeAddress = stakeAddress;

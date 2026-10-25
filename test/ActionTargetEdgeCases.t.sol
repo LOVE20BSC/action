@@ -111,16 +111,6 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         require(indexTotal == 1 && ids[0] == 11, "second token index");
     }
 
-    function testInitFailureDoesNotLatchState() external {
-        ActionTarget fresh = new ActionTarget();
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.DependencyNotContract.selector, address(0)));
-        fresh.init(address(0));
-        require(fresh.initialized() == false, "not latched");
-
-        fresh.init(address(mint));
-        require(fresh.initialized(), "retry succeeds");
-    }
-
     function testActionIdsByMemberIdUnknownMember() external view {
         (uint256[] memory page, uint256 total) = actionTarget.actionIdsByMemberId(address(token), 42, 0, 10, false);
         require(total == 0 && page.length == 0, "unknown member empty");

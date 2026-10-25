@@ -60,11 +60,11 @@ KEYSTORE_PASSWORD=anvil
 
 ```bash
 # GroupActionExecutor 初始化参数
-# 奖励分层阈值（splits）：严格递增、每项小于 1e18；留空表示不配置分层。
+# 奖励分层阈值（splits）：可为空数组（不分层）；非空时严格递增、每项大于 0 且小于 1e18。
 GROUP_ACTION_SPLITS=100000000000000000,400000000000000000,700000000000000000
 ```
 
-`splits` 经 `11_deploy.sh` 以 `--sig "run(uint256[])"` 传入 `DeployAction.s.sol`；`GroupActionExecutor.init` 内部校验递增性与上界，不合规在模拟阶段即回滚。其余合约无构造/init 数值参数：`ActionTarget.init` 只收 `Mint` 地址，三个 Executor 的 `memberNFT/phase/vote/launch/pairFactory` 均由 `Stake` 派生。
+`splits` 经 `11_deploy.sh` 以 `--sig "run(uint256[])"` 传入 `DeployAction.s.sol`；`DeployAction` 在广播前校验：空数组合法（不分层，仅投票第一名作为当轮唯一公共验证者），非空时每项 `0 < split < 1e18` 且严格递增；21_check 复核。splits 是部署期静态配置，由部署脚本校验、21_check 复核，合约不重复校验；`ActionTarget` 允许提案绑定任意 Executor，非本脚本部署的 Executor 由其提案方自担 splits 配置风险。其余合约无构造/init 数值参数：`ActionTarget.init` 只收 `Mint` 地址，三个 Executor 的 `memberNFT/phase/vote/launch/pairFactory` 均由 `Stake` 派生。
 
 ## 设计约定：自包含步骤
 
@@ -78,7 +78,7 @@ GROUP_ACTION_SPLITS=100000000000000000,400000000000000000,700000000000000000
 
 入口 `one_click_deploy.sh` 只做编排：备份地址 → 依次跑三步 → 校验失败回滚。新增合约/模块时新建 `one_click_deploy_<x>.sh` 与自己的步骤脚本、参数文件，对现有文件零改动——各模块的部署输入互不要求存在，不会因别的模块参数变动而失败。
 
-`11_deploy.sh` 会校验 `MINT_ADDRESS` 与 `STAKE_ADDRESS` 为已部署合约；缺失或地址无代码在广播前即失败，不会白广播行动合约。
+`DeployAction.s.sol` 在广播前校验 `MINT_ADDRESS` 与 `STAKE_ADDRESS` 有代码，并交叉核对 Mint 派生的 `memberNFT/phase/vote/submit/launch`、Stake 派生的 `memberNFT/phase/vote/launch/pairFactory/router`、`Stake.launch == Mint.launch`、`Launch.pairFactory == Stake.pairFactory` 以及 Vote/Submit 的绑定；缺失、地址无代码或 splits 非法在广播前即失败，不会白广播行动合约。`11_deploy.sh` 只做文件、链、账户与密码编排，不重复这些校验。部署后 `_validateDeployment` 再核对四个合约的初始化与固定关系；`21_check.sh` 独立复核，并直接读取 Stake 的派生 getter。
 
 ## 部署流程
 
@@ -91,11 +91,11 @@ cd action
 
 该脚本依次调用下列单步骤脚本（各步骤只做自己那一步、互不调用、自行载入输入；单独执行见「分步部署」）：
 
-1. `11_deploy.sh` —— 自载入部署输入（链 ID、core 依赖地址已部署校验）并部署初始化 4 个合约，写入合约地址；Foundry 自动以 CREATE2 部署的 4 个链接库地址从本次 broadcast 产物提取、核对后一并写入
+1. `11_deploy.sh` —— 自载入部署输入并调用 forge 部署初始化 4 个合约，原子写入地址；Foundry 自动以 CREATE2 部署的 4 个链接库地址从本次 broadcast 产物提取、核对后一并写入
 2. `21_check.sh` —— 自载入校验文件，校验部署与初始化结果
 3. `31_verify.sh` —— 自载入地址文件，对 4 个合约与 4 个链接库做合约开源验证；链支持时执行（需 `ETHERSCAN_API_KEY`），链不支持时跳过
 
-链 ID、core 依赖地址、初始化绑定任一不一致，部署入口返回失败，并回滚到上一次已保存的地址（校验失败不覆盖旧地址）。网络名必填，缺参直接报错。
+链 ID、core 依赖地址、初始化绑定任一不一致，部署入口返回失败，并回滚到上一次已保存的地址（校验失败不覆盖旧地址）。网络名必填，缺参直接报错。广播前校验全部在 `DeployAction.s.sol` 内完成。
 
 ### 分步部署
 
@@ -150,13 +150,13 @@ GROUP_RECIPIENTS_LIBRARY_ADDRESS=0x...
 
 - 4 个合约均已部署（`cast code` 非空）、运行时代码与构建产物逐字节一致，且 `initialized() == true`
 - `ActionTarget` 的 `mintAddress / voteAddress / submitAddress / memberNFTAddress / phaseAddress` 与 core 地址一致
-- 三个 Executor 的 `actionTarget()` 指向本次部署的 `ActionTarget`
-- `GroupActionExecutor.SPLITS()` 与 `action.params` 配置一致（cast 对大整数的 `[1e17]` 科学计数法标注已归一化）
+- 三个 Executor 的 `actionTarget()` 指向本次部署的 `ActionTarget`；`GroupServiceExecutor.groupActionExecutorAddress()` 指向本次部署的 `GroupActionExecutor`
+- `GroupActionExecutor.SPLITS()` 与 `action.params` 配置一致，并复核每项 `0 < split < 1e18` 且严格递增（cast 对大整数的 `[1e17]` 科学计数法标注已归一化）
 - 4 个链接库地址均已入账、链上有代码，且运行时字节码与构建产物一致（库的 runtime 内嵌自身地址，比对时按入账地址替换该处）；两个 Executor 的比对按入账地址传 `--libraries`（地址文件键集合必须恰好是 4 个合约 + 4 个库）
 
 部署后若修改过源码，`forge inspect` 会用当前产物比对，校验会失败——这是预期结果（链上代码与工作区源码不符），不是部署缺陷。
 
-Executor 对 `Stake` 等派生依赖的绑定无独立 getter，由 `init` 的参数校验与 `initialized` 状态保证；core 侧重建后重新部署 action 即可刷新绑定。
+Executor 对 `Stake` 的派生依赖没有独立 getter；部署前由 `DeployAction` 用 `Stake` 的 getter 与 Mint 的派生图交叉核对，部署后由 21_check 直接读取 `Stake` 的 `memberNFT/phase/vote/launch/pairFactory/router` 并与 core 地址文件比对。`GroupServiceExecutor -> GroupActionExecutor` 的绑定通过 getter 由 21_check 复核。core 侧重建后重新部署 action 即可刷新绑定。
 
 ## 安全注意事项
 
