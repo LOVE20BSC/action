@@ -22,7 +22,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint64 ratioSeed,
         uint64 govSeed,
         uint72 validVotesSeed,
-        uint72 globalVotesSeed,
+        uint72 totalValidGovVotesSeed,
         uint96 recipientSeed,
         uint96 serviceSeed
     ) external {
@@ -35,7 +35,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratio = 1 + uint256(ratioSeed) % (PRECISION - 1);
         uint256 govMultiplier = uint256(govSeed) % (2 * PRECISION + 1);
         uint256 validVotes = uint256(validVotesSeed);
-        uint256 globalVotes = 1 + uint256(globalVotesSeed) % 1e21;
+        uint256 totalValidGovVotes = 1 + uint256(totalValidGovVotesSeed) % 1e21;
         uint256 recipientRatio = 1 + uint256(recipientSeed) % PRECISION;
 
         // The divisor is the sum of every action's total (action A pays
@@ -46,14 +46,14 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 serviceReward = denominator * (PRECISION + uint256(serviceSeed) % (1e21 - PRECISION));
 
         _settleFuzzScenario(
-            rewardA, rewardB, ratio, govMultiplier, validVotes, globalVotes, recipientRatio, serviceReward
+            rewardA, rewardB, ratio, govMultiplier, validVotes, totalValidGovVotes, recipientRatio, serviceReward
         );
 
         _assertOwnerSettlement(
-            GROUP_ID, serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, globalVotes
+            GROUP_ID, serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalValidGovVotes
         );
         _assertOwnerSettlement(
-            GROUP_OWNER_B_ID, serviceReward, denominator, rewardB, ratio, govMultiplier, validVotes, globalVotes
+            GROUP_OWNER_B_ID, serviceReward, denominator, rewardB, ratio, govMultiplier, validVotes, totalValidGovVotes
         );
         _assertVerifierSettlement(VERIFIER_ID, rewardA + rewardB, serviceReward, denominator, ratio);
         _assertVerifierSettlement(MEMBER1_ID, rewardA, serviceReward, denominator, ratio);
@@ -72,11 +72,11 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         (,, uint256 ownerBurned, uint256 ownerDistributed, uint256 ownerRemaining,) =
             executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         (uint256 expectedOwner,) =
-            _expectedOwner(serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, globalVotes);
+            _expectedOwner(serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalValidGovVotes);
         require(
             ownerBurned
                 == _expectedBurn(
-                    serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, globalVotes
+                    serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalValidGovVotes
                 ),
             "recorded burn matches"
         );
@@ -149,7 +149,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratio,
         uint256 govMultiplier,
         uint256 validVotes,
-        uint256 globalVotes,
+        uint256 totalValidGovVotes,
         uint256 recipientRatio,
         uint256 serviceReward
     ) internal {
@@ -168,7 +168,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         // Owner B holds a group in action A, the plain owner in action B.
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(rewardA, rewardB), VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(rewardA), MEMBER1_ID);
-        stake.setGlobalGovVotes(address(token), globalVotes);
+        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
         stake.setValidGovVotes(address(token), GROUP_ID, validVotes);
         stake.setValidGovVotes(address(token), GROUP_OWNER_B_ID, validVotes);
         _armServiceReward(serviceReward);
@@ -185,10 +185,10 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratio,
         uint256 govMultiplier,
         uint256 validVotes,
-        uint256 globalVotes
+        uint256 totalValidGovVotes
     ) internal {
         (uint256 expectedMint, uint256 expectedBurned) = _expectedOwner(
-            serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, globalVotes
+            serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalValidGovVotes
         );
         (uint256 mintAmount, uint256 burnAmount) = _settleService(memberId);
         require(mintAmount == expectedMint && burnAmount == expectedBurned, "owner settlement matches the reference");
@@ -216,7 +216,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratioForPublicVerifier,
         uint256 govRatioMultiplier,
         uint256 validGovVotes,
-        uint256 globalGovVotes
+        uint256 totalValidGovVotes
     ) internal pure returns (uint256) {
         (, uint256 burned) = _expectedOwner(
             serviceReward,
@@ -225,7 +225,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
             ratioForPublicVerifier,
             govRatioMultiplier,
             validGovVotes,
-            globalGovVotes
+            totalValidGovVotes
         );
         return burned;
     }
@@ -239,7 +239,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratioForPublicVerifier,
         uint256 govRatioMultiplier,
         uint256 validGovVotes,
-        uint256 globalGovVotes
+        uint256 totalValidGovVotes
     ) internal pure returns (uint256 ownerReward, uint256 ownerBurned) {
         uint256 ownerRatioWeight = (PRECISION - ratioForPublicVerifier) * ownerWeight;
         uint256 theoretical = Math.mulDiv(serviceReward, ownerRatioWeight, denominator * PRECISION);
@@ -247,8 +247,8 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
             return (theoretical, 0);
         }
         uint256 cap;
-        if (globalGovVotes != 0) {
-            uint256 govRatio = Math.mulDiv(validGovVotes, PRECISION, globalGovVotes);
+        if (totalValidGovVotes != 0) {
+            uint256 govRatio = Math.mulDiv(validGovVotes, PRECISION, totalValidGovVotes);
             cap = Math.mulDiv(govRatio, govRatioMultiplier, PRECISION);
         }
         if (cap * denominator >= ownerRatioWeight) {

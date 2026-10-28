@@ -41,7 +41,7 @@ contract ServiceCoreRegressionTest is Test {
         _mock(STAKE, abi.encodeWithSignature("phaseAddress()"), abi.encode(PHASE));
         _mock(STAKE, abi.encodeWithSignature("voteAddress()"), abi.encode(VOTE));
         _mock(STAKE, abi.encodeWithSignature("launchAddress()"), abi.encode(LAUNCH));
-        _mock(STAKE, abi.encodeWithSignature("validGovVotes(address,uint256)"), abi.encode(uint256(1)));
+        _mock(STAKE, abi.encodeWithSignature("validGovVotes(address,uint256,uint256)"), abi.encode(uint256(1)));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 1), abi.encode(ALICE));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 2), abi.encode(BOB));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 3), abi.encode(ALICE));

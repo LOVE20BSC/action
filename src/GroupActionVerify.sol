@@ -141,7 +141,8 @@ library GroupActionVerify {
         uint256 memberId,
         string calldata description
     ) external onlyMemberOwner(s, memberId) returns (uint256 applicationId) {
-        if (IStake(s.stakeAddress).validGovVotes(tokenAddress, memberId) == 0) {
+        uint256 round = IPhase(s.phaseAddress).currentPhase();
+        if (IStake(s.stakeAddress).validGovVotes(tokenAddress, round, memberId) == 0) {
             revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, memberId);
         }
         uint256 descriptionLength = bytes(description).length;
@@ -150,7 +151,6 @@ library GroupActionVerify {
                 descriptionLength, GroupActionStorage.MAX_DESCRIPTION_BYTES
             );
         }
-        uint256 round = IPhase(s.phaseAddress).currentPhase();
         if (s.createdRound[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }

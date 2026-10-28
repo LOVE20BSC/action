@@ -368,8 +368,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(actionTarget.registerCalls() == 0, "already registered member");
     }
 
-    function testJoinZeroGlobalVotesRequiresZeroMinRatio() external {
-        stake.setGlobalGovVotes(address(token), 0);
+    function testJoinZeroTotalValidGovVotesRequiresZeroMinRatio() external {
+        stake.setTotalValidGovVotes(address(token), 0);
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, 1e17, 0));
         lpExecutor.join(address(token), ACTION_ID, 1, 1e18);
@@ -721,7 +721,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testMintMemberRewardBurnsAllWhenNoGovVotes() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
-        stake.setGlobalGovVotes(address(token), 0);
+        stake.setTotalValidGovVotes(address(token), 0);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
@@ -1113,8 +1113,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(minted == false && ratio == 9e17, "unminted round reads the current ratio");
     }
 
-    function testGovRatioZeroWithoutGlobalVotes() external {
-        stake.setGlobalGovVotes(address(token), 0);
+    function testGovRatioZeroWithoutTotalValidGovVotes() external {
+        stake.setTotalValidGovVotes(address(token), 0);
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(ratio == 0 && minted == false, "zero denominator returns zero");
     }

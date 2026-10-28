@@ -200,7 +200,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(60e18), VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(40e18), VERIFIER_ID);
-        stake.setGlobalGovVotes(address(token), 100e18);
+        stake.setTotalValidGovVotes(address(token), 100e18);
         stake.setValidGovVotes(address(token), GROUP_ID, 10e18);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(VERIFY_PHASE);

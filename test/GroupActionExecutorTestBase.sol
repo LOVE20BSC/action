@@ -96,7 +96,7 @@ abstract contract GroupActionExecutorTestBase {
         stake.setMemberNFTAddress(address(memberNFT));
         stake.setPhaseAddress(address(phase));
         stake.setVoteAddress(address(vote));
-        stake.setGlobalGovVotes(address(token), 1000e18);
+        stake.setTotalValidGovVotes(address(token), 1000e18);
         stake.setValidGovVotes(address(token), MEMBER1_ID, 100e18);
         stake.setValidGovVotes(address(token), VERIFIER_ID, 100e18);
 

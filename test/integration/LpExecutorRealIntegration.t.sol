@@ -254,7 +254,8 @@ contract LpExecutorRealIntegrationTest {
         require(
             ratioMinted
                 && ratio
-                    == stake.validGovVotes(address(token), 1) * PRECISION / stake.globalGovVotes(address(token)),
+                    == stake.validGovVotes(address(token), phase.currentPhase(), 1) * PRECISION
+                        / stake.totalValidGovVotes(address(token), phase.currentPhase()),
             "gov ratio recorded"
         );
         require(lpPair.balanceOf(address(lpExecutor)) == LP_JOIN_AMOUNT, "principal untouched");
@@ -271,11 +272,12 @@ contract LpExecutorRealIntegrationTest {
     }
 
     function _expectedSplit(uint256 proposalReward) internal view returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 totalGovVotes = stake.globalGovVotes(address(token));
+        uint256 currentPhase = phase.currentPhase();
+        uint256 totalGovVotes = stake.totalValidGovVotes(address(token), currentPhase);
         if (totalGovVotes == 0) {
             return (0, proposalReward);
         }
-        uint256 govRatio = stake.validGovVotes(address(token), 1) * PRECISION / totalGovVotes;
+        uint256 govRatio = stake.validGovVotes(address(token), currentPhase, 1) * PRECISION / totalGovVotes;
         uint256 capped = govRatio < PRECISION ? govRatio : PRECISION;
         mintAmount = proposalReward * capped / PRECISION;
         burnAmount = proposalReward - mintAmount;
@@ -418,7 +420,8 @@ contract LpExecutorRealIntegrationTest {
         _voteOne(member1, 1, proposalId, MEMBER1_VOTES);
         _advanceToPhaseStart(round + 1);
         _fundMemberLp(member2, LP_JOIN_AMOUNT);
-        uint256 member2GovRatio = stake.validGovVotes(address(token), 2) * PRECISION / stake.globalGovVotes(address(token));
+        uint256 member2GovRatio = stake.validGovVotes(address(token), phase.currentPhase(), 2) * PRECISION
+            / stake.totalValidGovVotes(address(token), phase.currentPhase());
         vm.prank(member2);
         vm.expectRevert(
             abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, PRECISION, member2GovRatio)

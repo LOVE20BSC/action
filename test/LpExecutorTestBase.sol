@@ -83,7 +83,7 @@ abstract contract LpExecutorTestBase {
         stake.setMemberNFTAddress(address(memberNFT));
         stake.setPhaseAddress(address(phase));
         stake.setPairFactoryAddress(address(factory));
-        stake.setGlobalGovVotes(address(token), 1000e18);
+        stake.setTotalValidGovVotes(address(token), 1000e18);
         stake.setValidGovVotes(address(token), 1, 100e18);
         stake.setValidGovVotes(address(token), 2, 200e18);
         stake.setValidGovVotes(address(token), 3, 300e18);

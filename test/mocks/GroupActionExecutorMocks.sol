@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {IPhase} from "@core/interfaces/IPhase.sol";
+
 contract MockGroupActionExecutorStake {
     address public memberNFTAddress;
     address public phaseAddress;
     address public voteAddress;
 
-    // tokenAddress => global gov votes
-    mapping(address => uint256) internal _globalGovVotes;
+    // tokenAddress => total valid gov votes
+    mapping(address => uint256) internal _totalValidGovVotes;
     // tokenAddress => memberId => valid gov votes
     mapping(address => mapping(uint256 => uint256)) internal _validGovVotes;
 
@@ -23,19 +25,26 @@ contract MockGroupActionExecutorStake {
         voteAddress = voteAddress_;
     }
 
-    function setGlobalGovVotes(address tokenAddress, uint256 votes) external {
-        _globalGovVotes[tokenAddress] = votes;
+    function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
+        _totalValidGovVotes[tokenAddress] = votes;
     }
 
     function setValidGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
         _validGovVotes[tokenAddress][memberId] = votes;
     }
 
-    function globalGovVotes(address tokenAddress) external view returns (uint256) {
-        return _globalGovVotes[tokenAddress];
+    // The real `Stake` is round-keyed; this double answers only the phase's current round (zero otherwise).
+    function totalValidGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
+        if (round != IPhase(phaseAddress).currentPhase()) return 0;
+        return _totalValidGovVotes[tokenAddress];
     }
 
-    function validGovVotes(address tokenAddress, uint256 memberId) external view returns (uint256) {
+    function validGovVotes(
+        address tokenAddress,
+        uint256 round,
+        uint256 memberId
+    ) external view returns (uint256) {
+        if (round != IPhase(phaseAddress).currentPhase()) return 0;
         return _validGovVotes[tokenAddress][memberId];
     }
 }

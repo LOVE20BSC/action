@@ -189,7 +189,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         bool isFirstJoin = !IActionTarget(actionTarget).isJoined(tokenAddress, actionId, memberId);
         if (isFirstJoin) {
             uint256 minGovRatio = _minGovRatio[tokenAddress][actionId];
-            uint256 memberGovRatio = _calculateGovRatio(tokenAddress, memberId);
+            uint256 memberGovRatio = _calculateGovRatio(tokenAddress, IPhase(_phase).currentPhase(), memberId);
             if (memberGovRatio < minGovRatio) {
                 revert InsufficientGovRatio(minGovRatio, memberGovRatio);
             }
@@ -335,11 +335,13 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             return (theoreticalReward, 0);
         }
 
-        if (IStake(_stake).globalGovVotes(tokenAddress) == 0) {
+        uint256 currentPhase = IPhase(_phase).currentPhase();
+        if (IStake(_stake).totalValidGovVotes(tokenAddress, currentPhase) == 0) {
             return (0, theoreticalReward);
         }
 
-        uint256 govRatioCap = Math.mulDiv(_calculateGovRatio(tokenAddress, memberId), govRatioMultiplier, PRECISION);
+        uint256 govRatioCap =
+            Math.mulDiv(_calculateGovRatio(tokenAddress, currentPhase, memberId), govRatioMultiplier, PRECISION);
         uint256 cappedRatio = effectiveLpRatio < govRatioCap ? effectiveLpRatio : govRatioCap;
 
         // Load-bearing: when the cap does not bind, mint the exact theoretical amount. Re-deriving it
@@ -365,15 +367,19 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         return _totalDeduction[tokenAddress][actionId][round];
     }
 
+    /// @dev The cap is priced on the weight the member holds now, not on the weight of the round being
+    ///      settled: the old protocol read the live `globalGovVotes` / `validGovVotes` too.
     function _calculateGovRatio(
         address tokenAddress,
+        uint256 currentPhase,
         uint256 memberId
     ) internal view returns (uint256) {
-        uint256 totalGovVotes = IStake(_stake).globalGovVotes(tokenAddress);
-        if (totalGovVotes == 0) {
+        uint256 totalValidGovVotes = IStake(_stake).totalValidGovVotes(tokenAddress, currentPhase);
+        if (totalValidGovVotes == 0) {
             return 0;
         }
-        return Math.mulDiv(IStake(_stake).validGovVotes(tokenAddress, memberId), PRECISION, totalGovVotes);
+        uint256 memberGovVotes = IStake(_stake).validGovVotes(tokenAddress, currentPhase, memberId);
+        return Math.mulDiv(memberGovVotes, PRECISION, totalValidGovVotes);
     }
 
     function govRatio(
@@ -386,7 +392,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         if (minted) {
             ratio = _govRatioAtMint[tokenAddress][actionId][round][memberId];
         } else {
-            ratio = _calculateGovRatio(tokenAddress, memberId);
+            ratio = _calculateGovRatio(tokenAddress, IPhase(_phase).currentPhase(), memberId);
         }
     }
 
@@ -542,7 +548,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         _memberMinted[tokenAddress][actionId][round][memberId] = true;
         _mintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
         _burnedReward[tokenAddress][actionId][round][memberId] = burnAmount;
-        _govRatioAtMint[tokenAddress][actionId][round][memberId] = _calculateGovRatio(tokenAddress, memberId);
+        _govRatioAtMint[tokenAddress][actionId][round][memberId] =
+            _calculateGovRatio(tokenAddress, IPhase(_phase).currentPhase(), memberId);
 
         if (burnAmount != 0) {
             ILOVE20Token(tokenAddress).burn(burnAmount);

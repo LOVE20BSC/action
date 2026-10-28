@@ -51,7 +51,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         _joinService(GROUP_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
-        stake.setGlobalGovVotes(address(token), 1);
+        stake.setTotalValidGovVotes(address(token), 1);
         stake.setValidGovVotes(address(token), GROUP_ID, 1);
         _atPhase(MINT_PHASE);
 

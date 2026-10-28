@@ -63,25 +63,25 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
     function testFuzzRewardSplitMatchesReference(
         uint96 rewardSeed,
         uint96 validSeed,
-        uint96 globalSeed,
+        uint96 totalValidGovVotesSeed,
         uint96 multiplierSeed
     ) external {
         uint256 reward = uint256(rewardSeed) % 1e27 + 1;
         uint256 validVotes = uint256(validSeed) % 1e24;
-        uint256 globalVotes = uint256(globalSeed) % 1e24;
+        uint256 totalValidGovVotes = uint256(totalValidGovVotesSeed) % 1e24;
         uint256 multiplier = uint256(multiplierSeed) % 3e18;
 
         _createActionWithConfig(SECOND_ACTION_ID, multiplier, 0);
         _atPhaseBlock(3, 3000);
         _join(SECOND_ACTION_ID, 1, 100e18);
         stake.setValidGovVotes(address(token), 1, validVotes);
-        stake.setGlobalGovVotes(address(token), globalVotes);
+        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
         _atPhase(4);
         _setActionReward(SECOND_ACTION_ID, 2, reward, true);
         _fundExecutor(reward);
 
         (uint256 expectedMint, uint256 expectedBurn) =
-            _referenceReward(reward, validVotes, globalVotes, multiplier);
+            _referenceReward(reward, validVotes, totalValidGovVotes, multiplier);
         (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
             lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 1, 2);
         require(mintedBefore == false, "not minted yet");
@@ -103,14 +103,14 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         }
     }
 
-    function testFuzzGovRatioFloor(uint96 validSeed, uint96 globalSeed) external {
-        uint256 globalVotes = uint256(globalSeed) % 1e24 + 1;
+    function testFuzzGovRatioFloor(uint96 validSeed, uint96 totalValidGovVotesSeed) external {
+        uint256 totalValidGovVotes = uint256(totalValidGovVotesSeed) % 1e24 + 1;
         uint256 validVotes = uint256(validSeed) % 1e24;
-        stake.setGlobalGovVotes(address(token), globalVotes);
+        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
         stake.setValidGovVotes(address(token), 1, validVotes);
 
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
-        require(minted == false && ratio == validVotes * 1e18 / globalVotes, "floor division");
+        require(minted == false && ratio == validVotes * 1e18 / totalValidGovVotes, "floor division");
     }
 
     function testFuzzBatchLengthMismatch(uint8 actionLength, uint8 roundLength) external {
@@ -132,7 +132,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
     function _referenceReward(
         uint256 reward,
         uint256 validVotes,
-        uint256 globalVotes,
+        uint256 totalValidGovVotes,
         uint256 multiplier
     ) internal pure returns (uint256 mintAmount, uint256 burnAmount) {
         // The member joined at the phase start as the only participant, so effectiveLpRatio is 1e18.
@@ -140,10 +140,10 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         if (multiplier == 0) {
             return (theoreticalReward, 0);
         }
-        if (globalVotes == 0) {
+        if (totalValidGovVotes == 0) {
             return (0, theoreticalReward);
         }
-        uint256 govRatio = validVotes * 1e18 / globalVotes;
+        uint256 govRatio = validVotes * 1e18 / totalValidGovVotes;
         uint256 govRatioCap = govRatio * multiplier / 1e18;
         uint256 cappedRatio = govRatioCap < 1e18 ? govRatioCap : 1e18;
         mintAmount = reward * cappedRatio / 1e18;

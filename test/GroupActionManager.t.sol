@@ -141,12 +141,12 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         _atPhase(3);
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
 
-        stake.setGlobalGovVotes(address(token), 0);
+        stake.setTotalValidGovVotes(address(token), 0);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NoGovVotes.selector, address(token)));
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
 
-        stake.setGlobalGovVotes(address(token), 1000e18);
+        stake.setTotalValidGovVotes(address(token), 1000e18);
         stake.setValidGovVotes(address(token), GROUP_8, 50e18);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InsufficientActivationMinGovRatio.selector, GROUP_8, 1e17, 5e16));
