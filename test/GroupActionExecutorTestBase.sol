@@ -142,6 +142,18 @@ abstract contract GroupActionExecutorTestBase {
         executor.onProposalCreated(address(token), actionId, _targetData());
     }
 
+    function _targetDataWithSchema(
+        string[] memory keys,
+        string[] memory descriptions
+    ) internal view returns (bytes[] memory targetData) {
+        bytes[] memory base = _targetData();
+        targetData = new bytes[](7);
+        for (uint256 i = 0; i < 6; i++) {
+            targetData[i] = base[i];
+        }
+        targetData[6] = abi.encode(keys, descriptions);
+    }
+
     function _createActionWith(uint256 actionId, bytes[] memory targetData) internal {
         _createActionOn(address(token), actionId, targetData);
     }

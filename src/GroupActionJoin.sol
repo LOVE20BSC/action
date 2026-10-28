@@ -91,14 +91,15 @@ library GroupActionJoin {
             _pullJoinToken(s, tokenAddress, actionId, amount);
         }
 
-        emit IGroupActionJoinEvents.Joined({
+        emit IGroupActionJoinEvents.GroupActionJoined({
             tokenAddress: tokenAddress,
             actionId: actionId,
             memberId: memberId,
             round: round,
-            amount: amount,
+            groupId: groupId,
             providerId: providerId,
-            groupId: groupId
+            amount: amount,
+            verificationValues: verificationInfos
         });
     }
 
@@ -134,14 +135,14 @@ library GroupActionJoin {
 
         IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
-        emit IGroupActionJoinEvents.Withdrawn({
+        emit IGroupActionJoinEvents.GroupActionWithdrawn({
             tokenAddress: tokenAddress,
             actionId: actionId,
             memberId: memberId,
             round: round,
-            amount: amount,
+            groupId: groupId,
             providerId: 0,
-            groupId: groupId
+            amount: amount
         });
 
         if (ownAmount - amount == 0 && s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0) {
@@ -173,14 +174,14 @@ library GroupActionJoin {
 
         IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
-        emit IGroupActionJoinEvents.Withdrawn({
+        emit IGroupActionJoinEvents.GroupActionWithdrawn({
             tokenAddress: tokenAddress,
             actionId: actionId,
             memberId: memberId,
             round: round,
-            amount: amount,
+            groupId: groupId,
             providerId: providerId,
-            groupId: groupId
+            amount: amount
         });
 
         if (
@@ -208,14 +209,14 @@ library GroupActionJoin {
         if (ownAmount != 0) {
             _decreaseOwnAmount(s, tokenAddress, actionId, round, groupId, memberId, ownAmount, ownAmount);
             IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, ownAmount);
-            emit IGroupActionJoinEvents.Withdrawn({
+            emit IGroupActionJoinEvents.GroupActionWithdrawn({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
                 memberId: memberId,
                 round: round,
-                amount: ownAmount,
+                groupId: groupId,
                 providerId: 0,
-                groupId: groupId
+                amount: ownAmount
             });
         }
 
@@ -250,14 +251,13 @@ library GroupActionJoin {
             s.quotaMemberIds[tokenAddress][actionId][groupId][providerIds[i]].add(memberId);
             s.quotaBlockNumber[tokenAddress][actionId][groupId][providerIds[i]][memberId] = block.number;
 
-            emit IGroupActionJoinEvents.Withdrawn({
+            emit IGroupActionJoinEvents.ProviderQuotaRefunded({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
-                memberId: memberId,
-                round: round,
-                amount: invested,
+                groupId: groupId,
                 providerId: providerIds[i],
-                groupId: groupId
+                memberId: memberId,
+                amount: invested
             });
         }
     }
@@ -372,7 +372,8 @@ library GroupActionJoin {
             }
             IMemberNFT(s.memberNFTAddress).ownerOf(memberId);
 
-            s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] += amounts[i];
+            uint256 quotaTotal = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] + amounts[i];
+            s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = quotaTotal;
             s.quotaMemberIds[tokenAddress][actionId][groupId][providerId].add(memberId);
             s.quotaBlockNumber[tokenAddress][actionId][groupId][providerId][memberId] = block.number;
             totalAmount += amounts[i];
@@ -383,7 +384,8 @@ library GroupActionJoin {
                 groupId: groupId,
                 providerId: providerId,
                 memberId: memberId,
-                amount: amounts[i]
+                amount: amounts[i],
+                quotaTotal: quotaTotal
             });
         }
 
@@ -690,10 +692,22 @@ library GroupActionJoin {
         if (!isFirstJoin && verificationInfos.length == 0) {
             return;
         }
+        if (verificationInfos.length > GroupActionStorage.MAX_VERIFICATION_ENTRIES) {
+            revert IGroupActionJoinErrors.TooManyVerificationValues(
+                verificationInfos.length, GroupActionStorage.MAX_VERIFICATION_ENTRIES
+            );
+        }
         if (verificationInfos.length != keys.length) {
             revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, verificationInfos.length);
         }
         for (uint256 i = 0; i < verificationInfos.length; i++) {
+            uint256 valueLength = bytes(verificationInfos[i]).length;
+            if (valueLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
+                // forge-lint: disable-next-item(require-revert-in-loop)
+                revert IGroupActionJoinErrors.VerificationValueTooLong(
+                    i, valueLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
+                );
+            }
             s.verificationValueHistory[tokenAddress][actionId][memberId][i].record(round, verificationInfos[i]);
         }
     }
@@ -780,7 +794,7 @@ library GroupActionJoin {
 
         IActionTarget(s.actionTarget).clearJoinState(tokenAddress, actionId, memberId);
 
-        emit IGroupActionJoinEvents.Exited({
+        emit IGroupActionJoinEvents.GroupActionExited({
             tokenAddress: tokenAddress,
             actionId: actionId,
             memberId: memberId,

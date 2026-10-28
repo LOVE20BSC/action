@@ -5,19 +5,27 @@ import {IActionExecutor} from "./IActionExecutor.sol";
 import {IGroupRecipients} from "./IGroupRecipients.sol";
 
 interface IGroupServiceExecutorEvents {
-    event DistributeRecipient(
+    event ServiceActionCreated(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        address actionTokenAddress,
+        uint256 govRatioMultiplier,
+        uint256 ratioForPublicVerifier
+    );
+    event RecipientPaid(
         address indexed serviceTokenAddress,
-        uint256 round,
         uint256 indexed serviceActionId,
+        uint256 round,
         uint256 indexed groupId,
+        address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 recipientId,
         uint256 amount
     );
-    event ServiceRewardDistributed(
+    event ServiceRewardsDistributed(
         address indexed serviceTokenAddress,
-        uint256 round,
         uint256 indexed serviceActionId,
+        uint256 round,
         address indexed actionTokenAddress,
         uint256 memberId,
         uint256 verifierReward,
@@ -26,13 +34,13 @@ interface IGroupServiceExecutorEvents {
         uint256 ownerDistributed,
         uint256 ownerRemaining
     );
-    event Joined(
+    event ServiceJoined(
         address indexed serviceTokenAddress,
         uint256 indexed serviceActionId,
         uint256 indexed memberId,
         uint256 round
     );
-    event Exited(
+    event ServiceExited(
         address indexed serviceTokenAddress,
         uint256 indexed serviceActionId,
         uint256 indexed memberId,

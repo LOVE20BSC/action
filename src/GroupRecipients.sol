@@ -27,6 +27,23 @@ library GroupRecipients {
         uint256 ownerAmount;
     }
 
+    struct RecipientPaidArgs {
+        address serviceTokenAddress;
+        uint256 round;
+        uint256 serviceActionId;
+        uint256 groupId;
+        address sourceTokenAddress;
+        uint256 sourceActionId;
+        uint256 recipientId;
+        uint256 amount;
+    }
+
+    struct RecipientTable {
+        uint256[] recipientIds;
+        uint256[] ratios;
+        string[] remarks;
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control)
     function setRecipients(
         GroupServiceStorage.Layout storage s,
@@ -38,7 +55,14 @@ library GroupRecipients {
         uint256[] calldata ratios,
         string[] calldata remarks
     ) external {
-        _setRecipients(s, round, sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks);
+        _setRecipients(
+            s,
+            round,
+            sourceTokenAddress,
+            sourceActionId,
+            groupId,
+            RecipientTable({recipientIds: recipientIds, ratios: ratios, remarks: remarks})
+        );
     }
 
     function _setRecipients(
@@ -47,9 +71,7 @@ library GroupRecipients {
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256[] calldata recipientIds,
-        uint256[] calldata ratios,
-        string[] calldata remarks
+        RecipientTable memory table
     ) private {
 
         // Load-bearing: settlement only reads configs for actions this executor created, so any other
@@ -61,25 +83,34 @@ library GroupRecipients {
             revert IGroupRecipientsErrors.UnknownSourceAction(sourceTokenAddress, sourceActionId);
         }
 
-        _validateRecipients(s, recipientIds, ratios, remarks, groupId);
+        _validateRecipients(s, table, groupId);
 
-        s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].record(round, recipientIds);
-        s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].record(round, ratios);
-        s.remarksHistory[sourceTokenAddress][sourceActionId][groupId].record(round, remarks);
+        uint256[] memory prevRecipientIds =
+            s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        uint256[] memory prevRatios = s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        string[] memory prevRemarks = s.remarksHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
 
-        if (recipientIds.length != 0) {
+        s.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.recipientIds);
+        s.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.ratios);
+        s.remarksHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.remarks);
+
+        if (table.recipientIds.length != 0) {
             s.actionIdsWithRecipients[sourceTokenAddress][groupId].add(round, sourceActionId);
         } else {
             s.actionIdsWithRecipients[sourceTokenAddress][groupId].remove(round, sourceActionId);
         }
 
-        emit IGroupRecipientsEvents.SetRecipients({
+        emit IGroupRecipientsEvents.RecipientTableChanged({
             sourceTokenAddress: sourceTokenAddress,
             round: round,
             sourceActionId: sourceActionId,
             groupId: groupId,
-            recipientIds: recipientIds,
-            ratios: ratios
+            recipientIds: table.recipientIds,
+            ratios: table.ratios,
+            remarks: table.remarks,
+            prevRecipientIds: prevRecipientIds,
+            prevRatios: prevRatios,
+            prevRemarks: prevRemarks
         });
     }
 
@@ -199,8 +230,17 @@ library GroupRecipients {
                 continue;
             }
             IERC20(serviceTokenAddress).safeTransfer(IMemberNFT(s.memberNFTAddress).ownerOf(recipientIds[j]), amount);
-            emit IGroupServiceExecutorEvents.DistributeRecipient(
-                serviceTokenAddress, round, serviceActionId, groupId, sourceActionId, recipientIds[j], amount
+            _emitRecipientPaid(
+                RecipientPaidArgs({
+                    serviceTokenAddress: serviceTokenAddress,
+                    round: round,
+                    serviceActionId: serviceActionId,
+                    groupId: groupId,
+                    sourceTokenAddress: sourceTokenAddress,
+                    sourceActionId: sourceActionId,
+                    recipientId: recipientIds[j],
+                    amount: amount
+                })
             );
         }
     }
@@ -244,14 +284,14 @@ library GroupRecipients {
     // forge-lint: disable-next-item(require-revert-in-loop)
     function _validateRecipients(
         GroupServiceStorage.Layout storage s,
-        uint256[] calldata recipientIds,
-        uint256[] calldata ratios,
-        string[] calldata remarks,
+        RecipientTable memory table,
         uint256 groupId
     ) internal view {
-        uint256 length = recipientIds.length;
-        if (length != ratios.length || length != remarks.length) {
-            revert IGroupRecipientsErrors.RecipientArrayLengthMismatch(length, ratios.length, remarks.length);
+        uint256 length = table.recipientIds.length;
+        if (length != table.ratios.length || length != table.remarks.length) {
+            revert IGroupRecipientsErrors.RecipientArrayLengthMismatch(
+                length, table.ratios.length, table.remarks.length
+            );
         }
         if (length > GroupServiceStorage.DEFAULT_MAX_RECIPIENTS) {
             revert IGroupRecipientsErrors.TooManyRecipients(length, GroupServiceStorage.DEFAULT_MAX_RECIPIENTS);
@@ -259,20 +299,24 @@ library GroupRecipients {
 
         uint256 totalRatios = 0;
         for (uint256 i = 0; i < length; i++) {
-            uint256 recipientId = recipientIds[i];
+            uint256 recipientId = table.recipientIds[i];
             if (recipientId == groupId) {
                 revert IGroupRecipientsErrors.RecipientIsGroupId(groupId, recipientId);
             }
-            if (ratios[i] == 0) {
+            if (table.ratios[i] == 0) {
                 revert IGroupRecipientsErrors.ZeroRecipientRatio(recipientId);
             }
+            uint256 remarkLength = bytes(table.remarks[i]).length;
+            if (remarkLength > GroupServiceStorage.MAX_REMARK_BYTES) {
+                revert IGroupRecipientsErrors.RemarkTooLong(i, remarkLength, GroupServiceStorage.MAX_REMARK_BYTES);
+            }
             for (uint256 j = 0; j < i; j++) {
-                if (recipientIds[j] == recipientId) {
+                if (table.recipientIds[j] == recipientId) {
                     revert IGroupRecipientsErrors.DuplicateMemberId(recipientId);
                 }
             }
             IMemberNFT(s.memberNFTAddress).ownerOf(recipientId);
-            totalRatios += ratios[i];
+            totalRatios += table.ratios[i];
         }
         if (totalRatios > GroupServiceStorage.PRECISION) {
             revert IGroupRecipientsErrors.DistributionOverflow(totalRatios, GroupServiceStorage.PRECISION);
@@ -291,4 +335,17 @@ library GroupRecipients {
             distributed += amounts[i];
         }
     }
+    function _emitRecipientPaid(RecipientPaidArgs memory args) private {
+        emit IGroupServiceExecutorEvents.RecipientPaid(
+            args.serviceTokenAddress,
+            args.serviceActionId,
+            args.round,
+            args.groupId,
+            args.sourceTokenAddress,
+            args.sourceActionId,
+            args.recipientId,
+            args.amount
+        );
+    }
+
 }

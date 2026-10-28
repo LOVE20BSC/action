@@ -17,6 +17,9 @@ interface IGroupActionVerifyEvents {
         uint256 round,
         uint256 verifierId,
         uint256 startIndex,
+        uint256 totalFinalScore,
+        uint256 verifiedGroupCount,
+        bool roundVerified,
         uint256[] scores
     );
     event VerifierApplicationSubmitted(
@@ -24,7 +27,10 @@ interface IGroupActionVerifyEvents {
         uint256 indexed actionId,
         uint256 indexed memberId,
         uint256 round,
-        uint256 applicationId
+        uint256 applicationId,
+        uint256 previousApplicationId,
+        bool hasPreviousApplication,
+        string description
     );
     event VerifierApplicationCancelled(
         address indexed tokenAddress,
@@ -50,8 +56,17 @@ interface IGroupActionVerifyEvents {
     event VerifierLocked(
         address indexed tokenAddress,
         uint256 indexed actionId,
-        uint256 indexed round,
-        uint256 memberId
+        uint256 indexed memberId,
+        uint256 round
+    );
+    event ApplicationVoteRecorded(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 round,
+        uint256 indexed applicationId,
+        uint256 candidateMemberId,
+        uint256 votesAdded,
+        uint256 totalVotes
     );
 }
 
@@ -59,9 +74,9 @@ interface IGroupActionVerifyErrors {
     error OriginScoresEmpty();
     error CandidateNotRanked(uint256 memberId, uint256 round);
     error CandidateNotOpen(uint256 memberId, uint256 round);
-    error ScoreLimitExceeded(uint256 index, uint256 score, uint256 max);
+    error ScoreLimitExceeded(uint256 index, uint256 score, uint256 maxScore);
     error GroupVerificationAlreadyComplete(uint256 groupId, uint256 round);
-    error VerificationBatchTooLarge(uint256 count, uint256 max);
+    error VerificationBatchTooLarge(uint256 count, uint256 maxCount);
     error StartIndexMismatch(uint256 expected, uint256 actual);
     error ScoreCountExceeded(uint256 startIndex, uint256 count, uint256 memberCount);
     error ZeroVerifyVotes(address tokenAddress, uint256 memberId);

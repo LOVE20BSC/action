@@ -21,6 +21,8 @@ library GroupActionStorage {
     uint256 constant MAX_ORIGIN_SCORE = 100;
     uint256 constant MAX_VERIFICATION_BATCH = 100;
     uint256 constant MAX_DESCRIPTION_BYTES = 1024;
+    uint256 constant MAX_VERIFICATION_ENTRIES = 16;
+    uint256 constant MAX_VERIFICATION_TEXT_BYTES = 1024;
 
     struct GroupInfo {
         GroupConfig config;

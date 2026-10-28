@@ -8,7 +8,7 @@ import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
     function testActionCreatedEvent() external {
         vm.expectEmit(true, true, true, true);
-        emit ActionCreated(address(token), 11, address(executor), 1);
+        emit ActionRegistered(address(token), 11, 1, address(executor));
         _createAction(11);
     }
 
@@ -30,14 +30,14 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         _clear(11, 1);
     }
 
-    function testJoinStateClearedEventOnForceExit() external {
+    function testJoinStateClearedEventOnForceClearJoinState() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
         phase.setPhase(3);
         vm.expectEmit(true, true, true, true);
         emit JoinStateCleared(address(token), 11, 1, 2, true);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
     }
 
     function testActionRewardMintedEvent() external {
@@ -62,14 +62,14 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         require(vm.getRecordedLogs().length == 0, "duplicate join emits nothing");
     }
 
-    function testNoEventOnDuplicateClearAndForceExit() external {
+    function testNoEventOnDuplicateClearAndForceClearJoinState() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
         _clear(11, 1);
         vm.recordLogs();
         _clear(11, 1);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
         require(vm.getRecordedLogs().length == 0, "no-op exits emit nothing");
     }
 
@@ -88,7 +88,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
     function testCreationEventRoundIsVoteRound() external {
         phase.setPhase(7);
         vm.expectEmit(true, true, true, true);
-        emit ActionCreated(address(token), 11, address(executor), 7);
+        emit ActionRegistered(address(token), 11, 7, address(executor));
         _createAction(11);
     }
 }

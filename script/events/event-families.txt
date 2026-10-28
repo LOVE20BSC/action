@@ -1,0 +1,34 @@
+# Event -> family map, enforced by script/check-events.py.
+# Families and slot rules: matt-gov/docs/event-standards.md §6.1.
+ActionRegistered action.registry
+ActionRewardMinted action.round
+JoinStateRegistered action.participation
+JoinStateCleared action.participation
+MemberRewardMinted action.participation
+GroupActionCreated action.config
+ServiceActionCreated action.config
+LpActionCreated action.config
+GroupActivated action.group
+GroupDeactivated action.group
+GroupConfigChanged action.group
+GroupActionJoined action.participation
+GroupActionWithdrawn action.participation
+GroupActionExited action.participation
+LpJoined action.participation
+LpWithdrawn action.participation
+LpExited action.participation
+ServiceJoined action.participation
+ServiceExited action.participation
+ProviderQuotaAdded action.quota
+ProviderQuotaRemoved action.quota
+ProviderQuotaRefunded action.quota
+OriginScoresSubmitted action.verification
+VerifierApplicationSubmitted action.verification
+VerifierApplicationCancelled action.verification
+VerifierStakeDeposited action.verification
+VerifierStakeRefunded action.verification
+VerifierLocked action.verification
+ApplicationVoteRecorded action.verification
+RecipientTableChanged action.recipients
+RecipientPaid action.service
+ServiceRewardsDistributed action.service

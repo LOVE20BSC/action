@@ -273,7 +273,7 @@ contract ActionTargetRealIntegrationTest {
         actionTarget.mintActionReward(address(token), proposalId, round);
     }
 
-    function testRealIntegration_JoinWindowAndForceExit() external {
+    function testRealIntegration_JoinWindowAndForceClearJoinState() external {
         bytes[] memory badData = new bytes[](1);
         badData[0] = abi.encode(address(0xdead));
         vm.prank(member1);
@@ -318,11 +318,11 @@ contract ActionTargetRealIntegrationTest {
         require(total == 1 && memberIds[0] == 1, "first join window list");
 
         vm.prank(member1);
-        actionTarget.forceExit(address(token), proposalId, 1);
-        require(actionTarget.isJoined(address(token), proposalId, 1) == false, "force exit cleared");
+        actionTarget.forceClearJoinState(address(token), proposalId, 1);
+        require(actionTarget.isJoined(address(token), proposalId, 1) == false, "force clear cleared");
         vm.prank(address(executor));
         actionTarget.clearJoinState(address(token), proposalId, 1);
-        require(actionTarget.isJoined(address(token), proposalId, 1) == false, "clear after forceExit is idempotent");
+        require(actionTarget.isJoined(address(token), proposalId, 1) == false, "clear after forceClearJoinState is idempotent");
     }
 
     function testRealIntegration_SettlesToExecutorAndVoidsNothing() external {

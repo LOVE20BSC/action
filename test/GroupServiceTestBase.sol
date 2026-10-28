@@ -297,6 +297,16 @@ abstract contract GroupServiceTestBase {
         for (uint256 i = 0; i < recipientIds.length; i++) {
             remarks[i] = "";
         }
+        _setRecipients(groupId, sourceActionId, recipientIds, ratios, remarks);
+    }
+
+    function _setRecipients(
+        uint256 groupId,
+        uint256 sourceActionId,
+        uint256[] memory recipientIds,
+        uint256[] memory ratios,
+        string[] memory remarks
+    ) internal {
         vm.prank(_memberAddress(groupId));
         executor.setRecipients(address(token), sourceActionId, groupId, recipientIds, ratios, remarks);
     }

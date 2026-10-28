@@ -84,14 +84,14 @@ contract ActionTargetHandler {
         actionTarget.clearJoinState(address(token), actionId, memberId);
     }
 
-    function forceExit(uint256 seed) external {
+    function forceClearJoinState(uint256 seed) external {
         uint256 actionId = ACTION_ID_BASE + seed % ACTION_COUNT;
         uint256 memberId = seed % MEMBER_COUNT + 1;
         if (!joined[actionId][memberId]) return;
         joined[actionId][memberId] = false;
         phaseContract.setPhase(JOIN_PHASE);
         vm.prank(memberNFT.ownerOf(memberId));
-        actionTarget.forceExit(address(token), actionId, memberId);
+        actionTarget.forceClearJoinState(address(token), actionId, memberId);
     }
 
     function mintReward(uint256 seed) external {

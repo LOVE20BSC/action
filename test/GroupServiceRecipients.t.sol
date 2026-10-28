@@ -12,21 +12,54 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
     function testSetRecipientsStoresTheVerifyRoundAndEmits() external {
         _prepareRecipientsScenario();
 
+        string[] memory remarks = new string[](1);
+        remarks[0] = "";
         vm.expectEmit(true, true, true, true);
-        emit SetRecipients(
-            address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2)
+        emit RecipientTableChanged(
+            address(token),
+            GROUP_ACTION_ID,
+            SERVICE_ROUND,
+            GROUP_ID,
+            _ids(MEMBER1_ID),
+            _ratios(PRECISION / 2),
+            remarks,
+            new uint256[](0),
+            new uint256[](0),
+            new string[](0)
         );
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
 
-        (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory remarks) =
+        (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory storedRemarks) =
             executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
         require(recipientIds.length == 1 && recipientIds[0] == MEMBER1_ID, "recipient stored");
         require(ratios[0] == PRECISION / 2, "ratio stored");
-        require(remarks.length == 1 && keccak256(bytes(remarks[0])) == keccak256(""), "remark stored");
+        require(storedRemarks.length == 1 && keccak256(bytes(storedRemarks[0])) == keccak256(""), "remark stored");
 
         uint256[] memory actionIds;
         (actionIds,) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 10, false);
         require(actionIds.length == 1 && actionIds[0] == GROUP_ACTION_ID, "action registered");
+    }
+
+    function testSetRecipientsCarriesThePreviousTable() external {
+        _prepareRecipientsScenario();
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
+
+        string[] memory remarks = new string[](1);
+        remarks[0] = "second";
+        vm.expectEmit(true, true, true, true);
+        emit RecipientTableChanged(
+            address(token),
+            GROUP_ACTION_ID,
+            SERVICE_ROUND,
+            GROUP_ID,
+            _ids(MEMBER2_ID),
+            _ratios(PRECISION / 4),
+            remarks,
+            _ids(MEMBER1_ID),
+            _ratios(PRECISION / 2),
+            new string[](1)
+        );
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(PRECISION / 4), remarks);
     }
 
     function testSetRecipientsRejectsUnknownSourceAction() external {
@@ -143,6 +176,16 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
             _ids(MEMBER1_ID + DEFAULT_MAX_RECIPIENTS + 5),
             _ratios(PRECISION),
             new string[](1)
+        );
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupRecipientsErrors.RemarkTooLong.selector, 0, 257, 256)
+        );
+        string[] memory longRemarks = new string[](1);
+        longRemarks[0] = string(new bytes(257));
+        executor.setRecipients(
+            address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), longRemarks
         );
 
         vm.prank(GROUP_OWNER);
@@ -461,5 +504,37 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(VERIFY_PHASE);
+    }
+
+    /// 边界成功值：10 个收款人 + 每条 256 字节备注，恰好等于上限时接受。
+    function testSetRecipientsAcceptsTenRecipientsAndMaxRemarks() external {
+        _prepareRecipientsScenario();
+
+        uint256 count = 10;
+        uint256[] memory ids = new uint256[](count);
+        uint256[] memory ratios = new uint256[](count);
+        string[] memory remarks = new string[](count);
+        uint256 id = 100;
+        for (uint256 i; i < count; ++i) {
+            ids[i] = id++;
+            memberNFT.setOwner(ids[i], address(uint160(0x2000 + i)));
+            ratios[i] = PRECISION / count;
+            remarks[i] = _repeat("R", 256);
+        }
+
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, ids, ratios, remarks);
+
+        (uint256[] memory storedIds,, string[] memory storedRemarks) =
+            executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        require(storedIds.length == count, "ten recipients stored");
+        require(bytes(storedRemarks[count - 1]).length == 256, "max remark stored");
+    }
+
+    function _repeat(bytes1 char, uint256 count) private pure returns (string memory result) {
+        bytes memory out = new bytes(count);
+        for (uint256 i; i < count; ++i) {
+            out[i] = char;
+        }
+        result = string(out);
     }
 }

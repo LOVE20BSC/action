@@ -95,6 +95,14 @@ contract MockLpActionTarget {
     error ClearJoinStateReverted();
     error MintActionRewardReverted();
 
+    event JoinStateCleared(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed memberId,
+        uint256 round,
+        bool forced
+    );
+
     // tokenAddress => actionId => memberId => joined
     mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _joined;
     // tokenAddress => actionId => round => reward amount
@@ -105,6 +113,7 @@ contract MockLpActionTarget {
     bool public revertRegister;
     bool public revertClear;
     bool public revertMint;
+    bool public emitClearEvent;
     uint256 public mintReturnAmount;
 
     uint256 public registerCalls;
@@ -134,6 +143,10 @@ contract MockLpActionTarget {
 
     function setRevertMint(bool revertMint_) external {
         revertMint = revertMint_;
+    }
+
+    function setEmitClearEvent(bool emitClearEvent_) external {
+        emitClearEvent = emitClearEvent_;
     }
 
     function setMintReturnAmount(uint256 mintReturnAmount_) external {
@@ -175,6 +188,9 @@ contract MockLpActionTarget {
         lastClearActionId = actionId;
         lastClearMemberId = memberId;
         _joined[tokenAddress][actionId][memberId] = false;
+        if (emitClearEvent) {
+            emit JoinStateCleared(tokenAddress, actionId, memberId, 0, false);
+        }
     }
 
     function actionReward(

@@ -145,6 +145,14 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         _govRatioMultiplier[tokenAddress][actionId] = govRatioMultiplier;
         _minGovRatio[tokenAddress][actionId] = minGovRatio;
         _createdRound[tokenAddress][actionId] = IPhase(_phase).currentPhase();
+
+        emit LpActionCreated({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            joinTokenAddress: joinTokenAddress,
+            govRatioMultiplier: govRatioMultiplier,
+            minGovRatio: minGovRatio
+        });
     }
 
     function onProposalSubmitted(address, uint256, uint256, bytes[] calldata)
@@ -205,7 +213,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IERC20(_joinTokenAddress[tokenAddress][actionId]).safeTransferFrom(msg.sender, address(this), amount);
 
-        emit Joined({
+        emit LpJoined({
             tokenAddress: tokenAddress,
             actionId: actionId,
             memberId: memberId,
@@ -231,7 +239,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             revert WithdrawAmountExceeded(amount, memberJoinedAmount);
         }
 
-        if (amount == memberJoinedAmount) {
+        bool isFullExit = amount == memberJoinedAmount;
+        if (isFullExit) {
             _clearJoinState(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
         } else {
             uint256 memberDeduction = _deduction[tokenAddress][actionId][joinRound][memberId];
@@ -245,13 +254,12 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IERC20(_joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
-        emit Withdrawn({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            memberId: memberId,
-            round: joinRound,
-            amount: amount
-        });
+        _emitLpWithdrawn(tokenAddress, actionId, memberId, joinRound, amount);
+
+        if (isFullExit) {
+            IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+            emit LpExited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
+        }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -270,7 +278,11 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IERC20(_joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, memberJoinedAmount);
 
-        emit Exited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
+        _emitLpWithdrawn(tokenAddress, actionId, memberId, joinRound, memberJoinedAmount);
+
+        IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+
+        emit LpExited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -287,7 +299,22 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         delete _joinAmounts[tokenAddress][actionId][round][memberId];
         _joinedAmountByMemberId[tokenAddress][actionId][memberId].record(round, 0);
         _joinedAmount[tokenAddress][actionId].decrease(round, memberJoinedAmount);
-        IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+    }
+
+    function _emitLpWithdrawn(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round,
+        uint256 amount
+    ) private {
+        emit LpWithdrawn({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: round,
+            amount: amount
+        });
     }
 
     function _calculateReward(

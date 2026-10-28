@@ -7,6 +7,20 @@ import {IGroupActionVerify} from "./IGroupActionVerify.sol";
 import {IGroupActionManager} from "./IGroupActionManager.sol";
 import {IActionExecutor} from "./IActionExecutor.sol";
 
+interface IGroupActionExecutorEvents {
+    event GroupActionCreated(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        address joinTokenAddress,
+        uint256 activationStakeAmount,
+        uint256 maxJoinAmountRatio,
+        uint256 activationMinGovRatio,
+        uint256 verifierStakeAmount,
+        string[] verificationKeys,
+        string[] verificationDescriptions
+    );
+}
+
 interface IGroupActionExecutorErrors {
     error ZeroJoinTokenAddress();
     error InvalidMaxJoinAmountRatio(uint256 value);
@@ -14,7 +28,7 @@ interface IGroupActionExecutorErrors {
     error TargetDataLengthMismatch(uint256 expected, uint256 actual);
     error InvalidTargetDataShape(uint256 index, uint256 length);
     error VerificationInfoLengthMismatch(uint256 expected, uint256 actual);
-    error DescriptionTooLong(uint256 length, uint256 max);
+    error DescriptionTooLong(uint256 length, uint256 maxLength);
 }
 
 interface IGroupActionExecutor is
@@ -23,6 +37,7 @@ interface IGroupActionExecutor is
     IGroupActionVerify,
     IGroupActionManager,
     IActionExecutor,
+    IGroupActionExecutorEvents,
     IGroupActionExecutorErrors
 {
     function JOIN_TOKEN_ADDRESS(address tokenAddress, uint256 actionId) external view returns (address);

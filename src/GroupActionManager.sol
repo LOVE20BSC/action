@@ -7,7 +7,7 @@ import {MemberOwner} from "./MemberOwner.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
-import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
+import {IGroupActionExecutorErrors, IGroupActionExecutorEvents} from "./interfaces/IGroupActionExecutor.sol";
 import {GroupConfig, IGroupActionManagerEvents, IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
@@ -90,11 +90,34 @@ library GroupActionManager {
             if (keys.length != descriptions.length) {
                 revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, descriptions.length);
             }
+            if (keys.length > GroupActionStorage.MAX_VERIFICATION_ENTRIES) {
+                revert IGroupActionManagerErrors.TooManyVerificationEntries(
+                    keys.length, GroupActionStorage.MAX_VERIFICATION_ENTRIES
+                );
+            }
+            for (uint256 i = 0; i < keys.length; i++) {
+                uint256 keyLength = bytes(keys[i]).length;
+                if (keyLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
+                    // forge-lint: disable-next-item(require-revert-in-loop)
+                    revert IGroupActionManagerErrors.VerificationKeyTooLong(
+                        i, keyLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
+                    );
+                }
+                uint256 descriptionLength = bytes(descriptions[i]).length;
+                if (descriptionLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
+                    // forge-lint: disable-next-item(require-revert-in-loop)
+                    revert IGroupActionManagerErrors.VerificationDescriptionTooLong(
+                        i, descriptionLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
+                    );
+                }
+            }
             s.verificationKeys[tokenAddress][actionId] = keys;
             s.verificationDescriptions[tokenAddress][actionId] = descriptions;
         }
 
         s.createdRound[tokenAddress][actionId] = IPhase(s.phaseAddress).currentPhase();
+
+        _emitGroupActionCreated(s, tokenAddress, actionId);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -143,7 +166,12 @@ library GroupActionManager {
             actionId: actionId,
             round: round,
             groupId: groupId,
-            stakeAmount: stakeAmount
+            stakeAmount: stakeAmount,
+            maxCapacity: config.maxCapacity,
+            minJoinAmount: config.minJoinAmount,
+            maxJoinAmount: config.maxJoinAmount,
+            maxAccounts: config.maxAccounts,
+            description: config.description
         });
     }
 
@@ -208,21 +236,13 @@ library GroupActionManager {
 
         _validateGroupConfig(config);
 
+        GroupConfig memory previousConfig = group.config;
+
         uint256 round = s.currentJoinRound();
         group.config = config;
         s.descriptionHistory[tokenAddress][actionId][groupId].record(round, config.description);
 
-        emit IGroupActionManagerEvents.GroupConfigUpdated({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            round: round,
-            groupId: groupId,
-            description: config.description,
-            maxCapacity: config.maxCapacity,
-            minJoinAmount: config.minJoinAmount,
-            maxJoinAmount: config.maxJoinAmount,
-            maxAccounts: config.maxAccounts
-        });
+        _emitGroupConfigChanged(tokenAddress, actionId, round, groupId, previousConfig, config);
     }
 
     function groupInfo(
@@ -407,5 +427,49 @@ library GroupActionManager {
         if (actualRatio < minGovRatio) {
             revert IGroupActionManagerErrors.InsufficientActivationMinGovRatio(groupId, minGovRatio, actualRatio);
         }
+    }
+
+    function _emitGroupActionCreated(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId
+    ) private {
+        emit IGroupActionExecutorEvents.GroupActionCreated({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            joinTokenAddress: s.joinTokenAddress[tokenAddress][actionId],
+            activationStakeAmount: s.activationStakeAmount[tokenAddress][actionId],
+            maxJoinAmountRatio: s.maxJoinAmountRatio[tokenAddress][actionId],
+            activationMinGovRatio: s.activationMinGovRatio[tokenAddress][actionId],
+            verifierStakeAmount: s.verifierStakeAmount[tokenAddress][actionId],
+            verificationKeys: s.verificationKeys[tokenAddress][actionId],
+            verificationDescriptions: s.verificationDescriptions[tokenAddress][actionId]
+        });
+    }
+
+    function _emitGroupConfigChanged(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        GroupConfig memory previousConfig,
+        GroupConfig memory config
+    ) private {
+        emit IGroupActionManagerEvents.GroupConfigChanged({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            round: round,
+            groupId: groupId,
+            maxCapacity: config.maxCapacity,
+            minJoinAmount: config.minJoinAmount,
+            maxJoinAmount: config.maxJoinAmount,
+            maxAccounts: config.maxAccounts,
+            description: config.description,
+            prevMaxCapacity: previousConfig.maxCapacity,
+            prevMinJoinAmount: previousConfig.minJoinAmount,
+            prevMaxJoinAmount: previousConfig.maxJoinAmount,
+            prevMaxAccounts: previousConfig.maxAccounts,
+            prevDescription: previousConfig.description
+        });
     }
 }

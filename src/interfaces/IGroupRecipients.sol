@@ -2,24 +2,29 @@
 pragma solidity =0.8.37;
 
 interface IGroupRecipientsEvents {
-    event SetRecipients(
+    event RecipientTableChanged(
         address indexed sourceTokenAddress,
-        uint256 round,
         uint256 indexed sourceActionId,
+        uint256 round,
         uint256 indexed groupId,
         uint256[] recipientIds,
-        uint256[] ratios
+        uint256[] ratios,
+        string[] remarks,
+        uint256[] prevRecipientIds,
+        uint256[] prevRatios,
+        string[] prevRemarks
     );
 }
 
 interface IGroupRecipientsErrors {
     error DistributionOverflow(uint256 configured, uint256 available);
     error UnknownSourceAction(address sourceTokenAddress, uint256 sourceActionId);
-    error TooManyRecipients(uint256 count, uint256 max);
+    error TooManyRecipients(uint256 count, uint256 maxCount);
     error ZeroRecipientRatio(uint256 recipientId);
     error RecipientArrayLengthMismatch(uint256 recipientIdsLength, uint256 ratiosLength, uint256 remarksLength);
     error DuplicateMemberId(uint256 memberId);
     error RecipientIsGroupId(uint256 groupId, uint256 recipientId);
+    error RemarkTooLong(uint256 index, uint256 length, uint256 maxLength);
 }
 
 interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {

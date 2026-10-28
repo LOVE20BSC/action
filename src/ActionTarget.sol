@@ -168,7 +168,7 @@ contract ActionTarget is IActionTarget {
         });
     }
 
-    function forceExit(
+    function forceClearJoinState(
         address tokenAddress,
         uint256 actionId,
         uint256 memberId
@@ -454,7 +454,7 @@ contract ActionTarget is IActionTarget {
         _allActionIds[tokenAddress].push(proposalId);
         _actionIdsByExecutor[tokenAddress][executor_].push(proposalId);
 
-        emit ActionCreated({
+        emit ActionRegistered({
             tokenAddress: tokenAddress,
             actionId: proposalId,
             executor: executor_,

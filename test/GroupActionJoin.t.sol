@@ -186,6 +186,36 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(joinedRound == 0 && amount == 0, "emptied member exits");
     }
 
+    function testJoinRejectsUnboundedVerificationValues() external {
+        string[] memory keys = new string[](1);
+        keys[0] = "k";
+        string[] memory descriptions = new string[](1);
+        descriptions[0] = "d";
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(address(token), ACTION_ID, _targetDataWithSchema(keys, descriptions));
+
+        _openJoinPhase();
+        _fundJoinTokenFor(MEMBER1, 100e18);
+
+        string[] memory values = new string[](17);
+        for (uint256 i = 0; i < 17; i++) {
+            values[i] = "v";
+        }
+        vm.prank(MEMBER1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionJoinErrors.TooManyVerificationValues.selector, 17, 16)
+        );
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 1e18, 0, values);
+
+        string[] memory longValues = new string[](1);
+        longValues[0] = string(new bytes(1025));
+        vm.prank(MEMBER1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionJoinErrors.VerificationValueTooLong.selector, 0, 1025, 1024)
+        );
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 1e18, 0, longValues);
+    }
+
     function testJoinReverts() external {
         _openJoinPhase();
 

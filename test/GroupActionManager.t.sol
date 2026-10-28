@@ -338,6 +338,40 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector, 1, 2));
         executor.onProposalCreated(address(token), ACTION_2, seven);
+
+        string[] memory tooManyKeys = new string[](17);
+        string[] memory tooManyDescriptions = new string[](17);
+        for (uint256 i = 0; i < 17; i++) {
+            tooManyKeys[i] = "k";
+            tooManyDescriptions[i] = "d";
+        }
+        vm.prank(address(actionTarget));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionManagerErrors.TooManyVerificationEntries.selector, 17, 16)
+        );
+        executor.onProposalCreated(
+            address(token), ACTION_2, _targetDataWithSchema(tooManyKeys, tooManyDescriptions)
+        );
+
+        string[] memory longKey = new string[](1);
+        longKey[0] = string(new bytes(1025));
+        string[] memory oneDescription = new string[](1);
+        oneDescription[0] = "d";
+        vm.prank(address(actionTarget));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionManagerErrors.VerificationKeyTooLong.selector, 0, 1025, 1024)
+        );
+        executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(longKey, oneDescription));
+
+        string[] memory oneKey = new string[](1);
+        oneKey[0] = "k";
+        string[] memory longDescription = new string[](1);
+        longDescription[0] = string(new bytes(1025));
+        vm.prank(address(actionTarget));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionManagerErrors.VerificationDescriptionTooLong.selector, 0, 1025, 1024)
+        );
+        executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(oneKey, longDescription));
     }
 
     function testActivateGroupRevertsForUncreatedAction() external {

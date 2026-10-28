@@ -17,11 +17,11 @@ interface IActionTargetEvents {
         uint256 round,
         bool forced
     );
-    event ActionCreated(
+    event ActionRegistered(
         address indexed tokenAddress,
         uint256 indexed actionId,
-        address indexed executor,
-        uint256 round
+        uint256 round,
+        address indexed executor
     );
     event ActionRewardMinted(
         address indexed tokenAddress,
@@ -74,7 +74,7 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 actionId,
         uint256 memberId
     ) external;
-    function forceExit(
+    function forceClearJoinState(
         address tokenAddress,
         uint256 actionId,
         uint256 memberId

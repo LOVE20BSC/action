@@ -475,7 +475,7 @@ contract MockGroupServiceGroupActionExecutor {
 ///         matching `LOVE20Token.burn`.
 contract MockGroupServiceToken {
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event TokenBurn(address indexed from, uint256 amount);
+    event TokenBurned(address indexed from, uint256 amount);
 
     uint256 internal _totalSupply;
     uint256 public burnedTotal;
@@ -491,7 +491,7 @@ contract MockGroupServiceToken {
         _balanceOf[msg.sender] -= amount;
         _totalSupply -= amount;
         burnedTotal += amount;
-        emit TokenBurn(msg.sender, amount);
+        emit TokenBurned(msg.sender, amount);
     }
 
     function balanceOf(address account) external view returns (uint256) {

@@ -3,7 +3,7 @@ pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IActionTargetEvents} from "../src/interfaces/IActionTarget.sol";
-import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
+import {GroupServiceTestBase, GroupServiceVm} from "./GroupServiceTestBase.sol";
 
 contract GroupServiceSettlementTest is GroupServiceTestBase {
     function testSettlementSplitsBetweenVerifierAndOwner() external {
@@ -310,7 +310,23 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         mint.setRewardPrepared(serviceTokenAddress, SERVICE_ROUND, true);
         require(!mint.isRewardPrepared(actionTokenAddress, SERVICE_ROUND), "action token round stays open");
 
+        // Cross-token settlement: the two address fields must not be interchangeable.
+        vm.recordLogs();
         _settleService(GROUP_ID);
+        GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 splitTopic =
+            keccak256("ServiceRewardsDistributed(address,uint256,uint256,address,uint256,uint256,uint256,uint256,uint256,uint256)");
+        bool splitSeen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 4 || logs[i].topics[0] != splitTopic) continue;
+            require(
+                logs[i].topics[1] == bytes32(uint256(uint160(serviceTokenAddress))), "split service token topic"
+            );
+            require(logs[i].topics[2] == bytes32(SERVICE_ACTION_ID), "split action topic");
+            require(logs[i].topics[3] == bytes32(uint256(uint160(actionTokenAddress))), "split action token topic");
+            splitSeen = true;
+        }
+        require(splitSeen, "missing ServiceRewardsDistributed");
         groupAction.setActionReward(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, 400e18);
         require(
             executor.totalGroupActionReward(actionTokenAddress, SERVICE_ROUND) == 400e18,

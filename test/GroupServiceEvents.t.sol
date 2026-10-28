@@ -15,7 +15,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
 
         // Two recipient transfers, then the paired settlement events.
         GroupServiceVm.Log[] memory transfers = _logsWithTopic(
-            logs, bytes32(keccak256("DistributeRecipient(address,uint256,uint256,uint256,uint256,uint256,uint256)"))
+            logs, bytes32(keccak256("RecipientPaid(address,uint256,uint256,uint256,address,uint256,uint256,uint256)"))
         );
         GroupServiceVm.Log[] memory mintLogs = _logsWithTopic(
             logs, bytes32(keccak256("MemberRewardMinted(address,uint256,uint256,uint256,uint256,uint256)"))
@@ -24,11 +24,12 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
             logs,
             bytes32(
                 keccak256(
-                    "ServiceRewardDistributed(address,uint256,uint256,address,uint256,uint256,uint256,uint256,uint256,uint256)"
+                    "ServiceRewardsDistributed(address,uint256,uint256,address,uint256,uint256,uint256,uint256,uint256,uint256)"
                 )
             )
         );
-        _assertRecipientTransfers(transfers);
+        _assertRecipientTransfers(transfers, address(token));
+        require(transfers[0].emitter == address(executor), "recipient event emitted by the executor");
         require(mintLogs.length == 1 && splitLogs.length == 1, "one settlement event pair");
         require(_indexOf(logs, mintLogs[0]) < _indexOf(logs, splitLogs[0]), "base event precedes the role split");
 
@@ -36,6 +37,8 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
             abi.decode(mintLogs[0].data, (uint256, uint256, uint256));
         require(loggedMintAmount == mintAmount && loggedBurnAmount == burnAmount, "mint event matches the return");
         // The event carries the member id in the data, after the round.
+        require(splitLogs[0].topics[1] == bytes32(uint256(uint160(address(token)))), "role split service token topic");
+        require(splitLogs[0].topics[2] == bytes32(SERVICE_ACTION_ID), "role split action topic");
         require(splitLogs[0].topics[3] == bytes32(uint256(uint160(address(token)))), "role split action token topic");
 
         uint256 ownerBurned;
@@ -95,16 +98,23 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         revert("log not found");
     }
 
-    function _assertRecipientTransfers(GroupServiceVm.Log[] memory logs) internal pure {
+    function _assertRecipientTransfers(GroupServiceVm.Log[] memory logs, address expectedSourceToken)
+        internal
+        pure
+    {
         require(logs.length == 2, "one event per recipient transfer");
         require(logs[0].topics[3] == bytes32(uint256(GROUP_ID)), "recipient event group topic");
 
-        (uint256 round, uint256 sourceActionId, uint256 recipientId, uint256 amount) =
-            abi.decode(logs[0].data, (uint256, uint256, uint256, uint256));
+        (uint256 round, address sourceTokenAddress, uint256 sourceActionId, uint256 recipientId, uint256 amount) =
+            abi.decode(logs[0].data, (uint256, address, uint256, uint256, uint256));
+        require(sourceTokenAddress == expectedSourceToken, "first transfer source token");
         require(round == SERVICE_ROUND && sourceActionId == GROUP_ACTION_ID, "first transfer source");
         require(recipientId == MEMBER1_ID && amount == 27e18, "first transfer amount");
 
-        (, sourceActionId, recipientId, amount) = abi.decode(logs[1].data, (uint256, uint256, uint256, uint256));
+        address sourceTokenAddressB;
+        (, sourceTokenAddressB, sourceActionId, recipientId, amount) =
+            abi.decode(logs[1].data, (uint256, address, uint256, uint256, uint256));
+        require(sourceTokenAddressB == expectedSourceToken, "second transfer source token");
         require(sourceActionId == GROUP_ACTION_ID_B && recipientId == MEMBER2_ID, "second transfer source");
         require(amount == 9e18, "second transfer amount");
     }
@@ -125,6 +135,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         uint256 memberId;
         (round, memberId, verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining) =
             abi.decode(data, (uint256, uint256, uint256, uint256, uint256, uint256, uint256));
+        require(round == SERVICE_ROUND, "split event round");
         require(memberId == GROUP_ID, "split event member");
     }
 
@@ -153,8 +164,29 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _atPhase(VERIFY_PHASE);
 
         vm.expectEmit(true, true, true, true);
-        emit Exited(address(token), SERVICE_ACTION_ID, GROUP_ID, VERIFY_PHASE - 1);
+        emit ServiceExited(address(token), SERVICE_ACTION_ID, GROUP_ID, VERIFY_PHASE - 1);
         _exitService(GROUP_ID);
+    }
+
+    function testServiceActionCreatedEmitsFromTheExecutor() external {
+        _atPhase(CREATION_PHASE);
+        vm.recordLogs();
+        // A child action token keeps `tokenAddress` and `actionTokenAddress` distinguishable.
+        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 2e18, PRECISION / 2);
+        GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
+        require(logs.length == 1, "single creation event");
+        require(logs[0].emitter == address(executor), "emitter is the executor");
+        require(
+            logs[0].topics[0] == keccak256("ServiceActionCreated(address,uint256,address,uint256,uint256)"),
+            "creation signature"
+        );
+        require(logs[0].topics[1] == bytes32(uint256(uint160(address(token)))), "token topic");
+        require(logs[0].topics[2] == bytes32(SERVICE_ACTION_ID), "action topic");
+        (address actionTokenAddress, uint256 govRatioMultiplier, uint256 ratioForPublicVerifier) =
+            abi.decode(logs[0].data, (address, uint256, uint256));
+        require(actionTokenAddress == address(childToken), "action token");
+        require(govRatioMultiplier == 2e18, "gov ratio multiplier");
+        require(ratioForPublicVerifier == PRECISION / 2, "public verifier ratio");
     }
 
     function _prepareCappedTwoActionScenario() internal {

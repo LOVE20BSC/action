@@ -145,7 +145,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
         IActionTarget(s.actionTarget).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
 
-        emit Joined({
+        emit ServiceJoined({
             serviceTokenAddress: serviceTokenAddress,
             serviceActionId: serviceActionId,
             memberId: memberId,
@@ -411,7 +411,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round = s.currentJoinRound();
         IActionTarget(s.actionTarget).clearJoinState(tokenAddress, actionId, memberId);
 
-        emit Exited({
+        emit ServiceExited({
             serviceTokenAddress: tokenAddress,
             serviceActionId: actionId,
             memberId: memberId,
@@ -456,6 +456,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         s.govRatioMultiplier[tokenAddress][proposalId] = govRatioMultiplier;
         s.ratioForPublicVerifier[tokenAddress][proposalId] = ratioForPublicVerifier;
         s.createdRound[tokenAddress][proposalId] = IPhase(s.phaseAddress).currentPhase();
+
+        emit ServiceActionCreated({
+            tokenAddress: tokenAddress,
+            actionId: proposalId,
+            actionTokenAddress: actionTokenAddress,
+            govRatioMultiplier: govRatioMultiplier,
+            ratioForPublicVerifier: ratioForPublicVerifier
+        });
     }
 
     function onProposalSubmitted(
@@ -826,7 +834,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             mintAmount: mintAmount,
             burnAmount: burnAmount
         });
-        emit ServiceRewardDistributed({
+        emit ServiceRewardsDistributed({
             serviceTokenAddress: tokenAddress,
             round: round,
             serviceActionId: actionId,

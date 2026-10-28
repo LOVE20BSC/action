@@ -16,21 +16,28 @@ interface ILpExecutorErrors {
 }
 
 interface ILpExecutorEvents {
-    event Joined(
+    event LpActionCreated(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        address joinTokenAddress,
+        uint256 govRatioMultiplier,
+        uint256 minGovRatio
+    );
+    event LpJoined(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed memberId,
         uint256 round,
         uint256 amount
     );
-    event Withdrawn(
+    event LpWithdrawn(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed memberId,
         uint256 round,
         uint256 amount
     );
-    event Exited(
+    event LpExited(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed memberId,

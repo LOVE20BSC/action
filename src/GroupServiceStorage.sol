@@ -11,6 +11,7 @@ import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 library GroupServiceStorage {
     uint256 constant PRECISION = 1e18;
     uint256 constant DEFAULT_MAX_RECIPIENTS = 10;
+    uint256 constant MAX_REMARK_BYTES = 256;
 
     struct Layout {
         address actionTarget;

@@ -362,18 +362,18 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(2);
         _createAction(11);
         _clear(11, 1);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "exit paths stay no-ops");
     }
 
-    function testForceExitClearsOnlyTargetState() external {
+    function testForceClearJoinStateClearsOnlyTargetState() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
         executor.setRevertCreated(true);
         executor.setRevertSubmitted(true);
         executor.setRevertVoted(true);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "membership cleared");
         (uint256[] memory actionIds, uint256 actionTotal) =
             actionTarget.actionIdsByMemberId(address(token), 1, 0, 10, false);
@@ -382,46 +382,46 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(token.transferCalls() == 0, "no token movement");
     }
 
-    function testForceExitThenClearJoinStateIsIdempotent() external {
+    function testForceClearJoinStateThenClearIsIdempotent() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
         phase.setPhase(3);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
         _clear(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "still cleared");
         (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
         require(total == 0 && memberIds.length == 0, "round 2 snapshot stays empty");
     }
 
-    function testForceExitRequiresCurrentOwner() external {
+    function testForceClearJoinStateRequiresCurrentOwner() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotMemberOwner.selector, 1));
-        actionTarget.forceExit(address(token), 11, 1);
+        actionTarget.forceClearJoinState(address(token), 11, 1);
         require(actionTarget.isJoined(address(token), 11, 1), "membership retained");
     }
 
-    function testForceExitTracksCurrentOwnerAfterTransfer() external {
+    function testForceClearJoinStateTracksCurrentOwnerAfterTransfer() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
         memberNFT.setOwner(1, MEMBER2);
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotMemberOwner.selector, 1));
-        actionTarget.forceExit(address(token), 11, 1);
+        actionTarget.forceClearJoinState(address(token), 11, 1);
         vm.prank(MEMBER2);
-        actionTarget.forceExit(address(token), 11, 1);
-        require(actionTarget.isJoined(address(token), 11, 1) == false, "current owner can force exit");
+        actionTarget.forceClearJoinState(address(token), 11, 1);
+        require(actionTarget.isJoined(address(token), 11, 1) == false, "current owner can force clear");
     }
 
-    function testForceExitIsIdempotent() external {
+    function testForceClearJoinStateIsIdempotent() external {
         _createAction(11);
         phase.setPhase(2);
-        _forceExit(11, 1);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
+        _forceClearJoinState(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "no-op stays cleared");
     }
 
@@ -484,11 +484,11 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(rounds[0] == 4, "rejoin records latest round");
     }
 
-    function testJoinedRoundsAfterForceExitIsZero() external {
+    function testJoinedRoundsAfterForceClearJoinStateIsZero() external {
         _createAction(11);
         phase.setPhase(2);
         _join(11, 1);
-        _forceExit(11, 1);
+        _forceClearJoinState(11, 1);
         uint256[] memory memberIds = new uint256[](1);
         memberIds[0] = 1;
         uint256[] memory rounds = actionTarget.joinedRounds(address(token), 11, memberIds);

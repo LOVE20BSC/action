@@ -14,7 +14,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _qualifyGroupOwner(GROUP_ID);
 
         vm.expectEmit(true, true, true, true);
-        emit Joined(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        emit ServiceJoined(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
         _joinService(GROUP_ID);
 
         require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target joined");
@@ -157,7 +157,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         _atPhase(VERIFY_PHASE);
         vm.expectEmit(true, true, true, true);
-        emit Exited(address(token), SERVICE_ACTION_ID, GROUP_ID, VERIFY_PHASE - 1);
+        emit ServiceExited(address(token), SERVICE_ACTION_ID, GROUP_ID, VERIFY_PHASE - 1);
         _exitService(GROUP_ID);
 
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target cleared");

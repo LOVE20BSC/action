@@ -2,25 +2,26 @@
 pragma solidity =0.8.37;
 
 interface IGroupActionJoinEvents {
-    event Joined(
+    event GroupActionJoined(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed memberId,
         uint256 round,
-        uint256 amount,
+        uint256 groupId,
         uint256 providerId,
-        uint256 groupId
+        uint256 amount,
+        string[] verificationValues
     );
-    event Withdrawn(
+    event GroupActionWithdrawn(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed memberId,
         uint256 round,
-        uint256 amount,
+        uint256 groupId,
         uint256 providerId,
-        uint256 groupId
+        uint256 amount
     );
-    event Exited(
+    event GroupActionExited(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed memberId,
@@ -33,9 +34,18 @@ interface IGroupActionJoinEvents {
         uint256 indexed groupId,
         uint256 providerId,
         uint256 memberId,
-        uint256 amount
+        uint256 amount,
+        uint256 quotaTotal
     );
     event ProviderQuotaRemoved(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed groupId,
+        uint256 providerId,
+        uint256 memberId,
+        uint256 amount
+    );
+    event ProviderQuotaRefunded(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed groupId,
@@ -52,8 +62,8 @@ interface IGroupActionJoinErrors {
     error ActionMaxJoinAmountExceeded(uint256 memberId, uint256 actual, uint256 limit);
     error GroupMaxJoinAmountExceeded(uint256 memberId, uint256 actual, uint256 limit);
     error GroupCapacityExceeded(uint256 groupId, uint256 actual, uint256 limit);
-    error GroupAccountsFull(uint256 groupId, uint256 count, uint256 max);
-    error BelowMinJoinAmount(uint256 actual, uint256 min);
+    error GroupAccountsFull(uint256 groupId, uint256 count, uint256 maxCount);
+    error BelowMinJoinAmount(uint256 actual, uint256 minAmount);
     error WithdrawAmountExceeded(uint256 amount, uint256 joined);
     error ProviderWithdrawAmountExceeded(uint256 amount, uint256 invested);
     error QuotaArrayLengthMismatch(uint256 memberIdsLength, uint256 amountsLength);
@@ -61,6 +71,8 @@ interface IGroupActionJoinErrors {
     error ZeroQuotaAmount(uint256 memberId);
     error QuotaNotGranted(uint256 groupId, uint256 providerId, uint256 memberId);
     error InsufficientProviderQuota(uint256 providerId, uint256 required, uint256 available);
+    error TooManyVerificationValues(uint256 count, uint256 maxCount);
+    error VerificationValueTooLong(uint256 index, uint256 length, uint256 maxLength);
 }
 
 interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {

@@ -64,6 +64,14 @@ contract MockGroupActionVote {
 }
 
 contract MockGroupActionExecutorActionTarget {
+    event JoinStateCleared(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed memberId,
+        uint256 round,
+        bool forced
+    );
+
     // tokenAddress => actionId => memberId => joined
     mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _joined;
     // tokenAddress => actionId => round => reward amount
@@ -74,6 +82,8 @@ contract MockGroupActionExecutorActionTarget {
     uint256 public mintReturnAmount;
     uint256 public registerCalls;
     uint256 public clearCalls;
+    bool public emitClearEvent;
+    uint256 public clearRound;
     uint256 public mintRewardCalls;
     address public lastRegisterTokenAddress;
     uint256 public lastRegisterActionId;
@@ -101,6 +111,11 @@ contract MockGroupActionExecutorActionTarget {
         mintReturnAmount = mintReturnAmount_;
     }
 
+    function setEmitClearEvent(bool enabled, uint256 round) external {
+        emitClearEvent = enabled;
+        clearRound = round;
+    }
+
     function isJoined(address tokenAddress, uint256 actionId, uint256 memberId) external view returns (bool) {
         return _joined[tokenAddress][actionId][memberId];
     }
@@ -116,6 +131,9 @@ contract MockGroupActionExecutorActionTarget {
     function clearJoinState(address tokenAddress, uint256 actionId, uint256 memberId) external {
         clearCalls++;
         _joined[tokenAddress][actionId][memberId] = false;
+        if (emitClearEvent) {
+            emit JoinStateCleared(tokenAddress, actionId, memberId, clearRound, false);
+        }
     }
 
     function actionReward(

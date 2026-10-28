@@ -29,6 +29,14 @@ library GroupActionVerify {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    struct OriginSubmission {
+        address tokenAddress;
+        uint256 actionId;
+        uint256 groupId;
+        uint256 verifierId;
+        uint256 startIndex;
+    }
+
     modifier onlyMemberOwner(
         GroupActionStorage.Layout storage s,
         uint256 memberId
@@ -39,7 +47,6 @@ library GroupActionVerify {
         _;
     }
 
-    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function submitOriginScores(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
@@ -49,66 +56,17 @@ library GroupActionVerify {
         uint256 startIndex,
         uint256[] calldata originScores
     ) external onlyMemberOwner(s, verifierId) {
-        if (originScores.length == 0) {
-            revert IGroupActionVerifyErrors.OriginScoresEmpty();
-        }
-        if (originScores.length > GroupActionStorage.MAX_VERIFICATION_BATCH) {
-            revert IGroupActionVerifyErrors.VerificationBatchTooLarge(
-                originScores.length, GroupActionStorage.MAX_VERIFICATION_BATCH
-            );
-        }
-
-        uint256 round = _currentVerifyRound(s);
-
-        uint256 lockedVerifier = s.lockedVerifierId[tokenAddress][actionId][round];
-        if (lockedVerifier != 0) {
-            if (lockedVerifier != verifierId) {
-                revert IGroupActionVerifyErrors.VerifierAlreadyLocked(tokenAddress, actionId, round);
-            }
-        } else {
-            _requireOpenCandidate(s, tokenAddress, actionId, round, verifierId);
-        }
-
-        uint256 memberCount = s.memberIdsByGroupId[tokenAddress][actionId][groupId].countByRound(round);
-        uint256 verifiedCount = s.verifiedMemberCount[tokenAddress][actionId][round][groupId];
-        if (memberCount != 0 && verifiedCount == memberCount) {
-            revert IGroupActionVerifyErrors.GroupVerificationAlreadyComplete(groupId, round);
-        }
-        if (startIndex != verifiedCount) {
-            revert IGroupActionVerifyErrors.StartIndexMismatch(verifiedCount, startIndex);
-        }
-        if (startIndex + originScores.length > memberCount) {
-            revert IGroupActionVerifyErrors.ScoreCountExceeded(startIndex, originScores.length, memberCount);
-        }
-        for (uint256 i = 0; i < originScores.length; i++) {
-            if (originScores[i] > GroupActionStorage.MAX_ORIGIN_SCORE) {
-                revert IGroupActionVerifyErrors.ScoreLimitExceeded(
-                    i, originScores[i], GroupActionStorage.MAX_ORIGIN_SCORE
-                );
-            }
-        }
-
-        if (lockedVerifier == 0) {
-            s.lockedVerifierId[tokenAddress][actionId][round] = verifierId;
-            emit IGroupActionVerifyEvents.VerifierLocked({
+        _submitOriginScores(
+            s,
+            OriginSubmission({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
-                round: round,
-                memberId: verifierId
-            });
-        }
-
-        _scoreBatch(s, tokenAddress, actionId, round, groupId, verifiedCount, memberCount, originScores);
-
-        emit IGroupActionVerifyEvents.OriginScoresSubmitted({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            groupId: groupId,
-            round: round,
-            verifierId: verifierId,
-            startIndex: startIndex,
-            scores: originScores
-        });
+                groupId: groupId,
+                verifierId: verifierId,
+                startIndex: startIndex
+            }),
+            originScores
+        );
     }
 
     function originScore(
@@ -214,13 +172,9 @@ library GroupActionVerify {
             });
         }
 
-        emit IGroupActionVerifyEvents.VerifierApplicationSubmitted({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            memberId: memberId,
-            round: round,
-            applicationId: applicationId
-        });
+        _emitVerifierApplicationSubmitted(
+            tokenAddress, actionId, memberId, round, applicationId, previousApplicationId, description
+        );
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -418,6 +372,8 @@ library GroupActionVerify {
         }
         s.votesByApplicationId[tokenAddress][actionId][round][applicationId] += votes;
         _upsertRank(s, tokenAddress, actionId, round, applicationId);
+
+        _emitApplicationVoteRecorded(s, tokenAddress, actionId, applicationId, round, candidateMemberId, votes);
     }
 
     function _scoreBatch(
@@ -663,5 +619,137 @@ library GroupActionVerify {
                 ? s.verificationValueHistory[tokenAddress][actionId][memberId][i].latestValue()
                 : s.verificationValueHistory[tokenAddress][actionId][memberId][i].value(round);
         }
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _submitOriginScores(
+        GroupActionStorage.Layout storage s,
+        OriginSubmission memory submission,
+        uint256[] calldata originScores
+    ) private {
+        if (originScores.length == 0) {
+            revert IGroupActionVerifyErrors.OriginScoresEmpty();
+        }
+        if (originScores.length > GroupActionStorage.MAX_VERIFICATION_BATCH) {
+            revert IGroupActionVerifyErrors.VerificationBatchTooLarge(
+                originScores.length, GroupActionStorage.MAX_VERIFICATION_BATCH
+            );
+        }
+
+        uint256 round = _currentVerifyRound(s);
+        {
+            uint256 lockedVerifier = s.lockedVerifierId[submission.tokenAddress][submission.actionId][round];
+            if (lockedVerifier != 0) {
+                if (lockedVerifier != submission.verifierId) {
+                    revert IGroupActionVerifyErrors.VerifierAlreadyLocked(
+                        submission.tokenAddress, submission.actionId, round
+                    );
+                }
+            } else {
+                _requireOpenCandidate(s, submission.tokenAddress, submission.actionId, round, submission.verifierId);
+            }
+
+            uint256 memberCount = s.memberIdsByGroupId[submission.tokenAddress][submission.actionId][submission.groupId]
+                .countByRound(round);
+            uint256 verifiedCount =
+                s.verifiedMemberCount[submission.tokenAddress][submission.actionId][round][submission.groupId];
+            if (memberCount != 0 && verifiedCount == memberCount) {
+                revert IGroupActionVerifyErrors.GroupVerificationAlreadyComplete(submission.groupId, round);
+            }
+            if (submission.startIndex != verifiedCount) {
+                revert IGroupActionVerifyErrors.StartIndexMismatch(verifiedCount, submission.startIndex);
+            }
+            if (submission.startIndex + originScores.length > memberCount) {
+                revert IGroupActionVerifyErrors.ScoreCountExceeded(
+                    submission.startIndex, originScores.length, memberCount
+                );
+            }
+            for (uint256 i = 0; i < originScores.length; i++) {
+                if (originScores[i] > GroupActionStorage.MAX_ORIGIN_SCORE) {
+                    revert IGroupActionVerifyErrors.ScoreLimitExceeded(
+                        i, originScores[i], GroupActionStorage.MAX_ORIGIN_SCORE
+                    );
+                }
+            }
+
+            if (lockedVerifier == 0) {
+                s.lockedVerifierId[submission.tokenAddress][submission.actionId][round] = submission.verifierId;
+                emit IGroupActionVerifyEvents.VerifierLocked({
+                    tokenAddress: submission.tokenAddress,
+                    actionId: submission.actionId,
+                    memberId: submission.verifierId,
+                    round: round
+                });
+            }
+
+            _scoreBatch(
+                s,
+                submission.tokenAddress,
+                submission.actionId,
+                round,
+                submission.groupId,
+                verifiedCount,
+                memberCount,
+                originScores
+            );
+        }
+
+        uint256 roundTotalFinalScore = s.totalFinalScore[submission.tokenAddress][submission.actionId][round];
+        uint256 roundVerifiedGroupCount = s.verifiedGroupCount[submission.tokenAddress][submission.actionId][round];
+        bool roundIsVerified = s.roundVerified[submission.tokenAddress][submission.actionId][round];
+
+        emit IGroupActionVerifyEvents.OriginScoresSubmitted({
+            tokenAddress: submission.tokenAddress,
+            actionId: submission.actionId,
+            groupId: submission.groupId,
+            round: round,
+            verifierId: submission.verifierId,
+            startIndex: submission.startIndex,
+            totalFinalScore: roundTotalFinalScore,
+            verifiedGroupCount: roundVerifiedGroupCount,
+            roundVerified: roundIsVerified,
+            scores: originScores
+        });
+    }
+
+    function _emitVerifierApplicationSubmitted(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId,
+        uint256 round,
+        uint256 applicationId,
+        uint256 previousApplicationId,
+        string calldata description
+    ) private {
+        emit IGroupActionVerifyEvents.VerifierApplicationSubmitted({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: round,
+            applicationId: applicationId,
+            previousApplicationId: previousApplicationId,
+            hasPreviousApplication: previousApplicationId != 0,
+            description: description
+        });
+    }
+
+    function _emitApplicationVoteRecorded(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 applicationId,
+        uint256 round,
+        uint256 candidateMemberId,
+        uint256 votesAdded
+    ) private {
+        emit IGroupActionVerifyEvents.ApplicationVoteRecorded({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            applicationId: applicationId,
+            round: round,
+            candidateMemberId: candidateMemberId,
+            votesAdded: votesAdded,
+            totalVotes: s.votesByApplicationId[tokenAddress][actionId][round][applicationId]
+        });
     }
 }

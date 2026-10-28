@@ -105,8 +105,8 @@ abstract contract ActionTargetTestBase {
         actionTarget.clearJoinState(address(token), actionId, memberId);
     }
 
-    function _forceExit(uint256 actionId, uint256 memberId) internal {
+    function _forceClearJoinState(uint256 actionId, uint256 memberId) internal {
         vm.prank(memberNFT.ownerOf(memberId));
-        actionTarget.forceExit(address(token), actionId, memberId);
+        actionTarget.forceClearJoinState(address(token), actionId, memberId);
     }
 }
