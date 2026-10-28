@@ -62,7 +62,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
@@ -194,7 +194,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(60e18), VERIFIER_ID);
@@ -402,7 +402,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
 
@@ -471,9 +471,9 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
     function testSettlementRevertsWithoutJoinOrWeights() external {
         _standardScenario();
 
-        // Joined through the candidate branch but neither owner nor verifier.
+        // Joined through the verifier branch but is neither the group owner nor the locked verifier.
         _atPhase(JOIN_PHASE);
-        _qualifyCandidate(MEMBER1_ID);
+        _qualifyVerifier(MEMBER1_ID);
         vm.prank(MEMBER1);
         executor.join(address(token), SERVICE_ACTION_ID, MEMBER1_ID);
         _atPhase(MINT_PHASE);
@@ -637,7 +637,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
@@ -670,7 +670,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         // Two groups in the action: this group earns 2 of the 3 total.

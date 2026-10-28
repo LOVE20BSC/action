@@ -268,7 +268,7 @@ contract GroupActionEventsTest is
     /// `GroupDeactivated` 是可逆状态迁移，不是终态：停用后可再次激活并重置 deactivatedRound。
     function testGroupDeactivatedIsReversible() external {
         _submitApplication();
-        _castCandidateVotes();
+        _castVerifierVotes();
         _atPhase(3);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
         _activateGroup();
@@ -306,7 +306,7 @@ contract GroupActionEventsTest is
 
     function testGroupLifecycleEvents() external {
         _submitApplication();
-        _castCandidateVotes();
+        _castVerifierVotes();
         _atPhase(3);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
 
@@ -354,7 +354,7 @@ contract GroupActionEventsTest is
         emit VerifierApplicationSubmitted(address(token), ACTION_ID, VERIFIER_ID, 2, 1, 0, false, "verifier");
         _submitApplication();
 
-        _castCandidateVotes();
+        _castVerifierVotes();
         _atPhase(3);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
         _activateGroup();
@@ -383,9 +383,10 @@ contract GroupActionEventsTest is
     function testApplicationVoteRecordedEmitsFromTheExecutor() external {
         _submitApplication();
         vm.recordLogs();
-        _castVotesFor(VERIFIER_ID, 100e18);
+        _castVotesFrom(MEMBER2_ID, VERIFIER_ID, 100e18);
         GroupActionExecutorVm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("ApplicationVoteRecorded(address,uint256,uint256,uint256,uint256,uint256,uint256)");
+        bytes32 topic =
+            keccak256("ApplicationVoteRecorded(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(executor) || logs[i].topics.length == 0) continue;
@@ -402,20 +403,31 @@ contract GroupActionEventsTest is
         _atPhase(4);
 
         vm.expectEmit(true, true, true, true);
-        emit ApplicationVoteRecorded(address(token), ACTION_ID, 4, 1, VERIFIER_ID, 60e18, 60e18);
-        _castVotesForAt(VERIFIER_ID, 60e18, 4);
+        emit ApplicationVoteRecorded(address(token), ACTION_ID, MEMBER2_ID, 4, 1, VERIFIER_ID, 60e18, 60e18);
+        _castVotesFromAt(MEMBER2_ID, VERIFIER_ID, 60e18, 4);
     }
 
     function testApplicationVoteRecordedEvent() external {
         _submitApplication();
 
+        // Distinct integers for every uint256 field so a swapped argument cannot pass: voter 4,
+        // round 2, application 1, verifier 6, votes 100e18 / 60e18.
         vm.expectEmit(true, true, true, true);
-        emit ApplicationVoteRecorded(address(token), ACTION_ID, CREATION_PHASE, 1, VERIFIER_ID, 100e18, 100e18);
-        _castVotesFor(VERIFIER_ID, 100e18);
+        emit ApplicationVoteRecorded(
+            address(token), ACTION_ID, PROVIDER_ID, CREATION_PHASE, 1, VERIFIER_ID, 100e18, 100e18
+        );
+        _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 100e18);
 
         vm.expectEmit(true, true, true, true);
-        emit ApplicationVoteRecorded(address(token), ACTION_ID, CREATION_PHASE, 1, VERIFIER_ID, 60e18, 160e18);
-        _castVotesFor(VERIFIER_ID, 60e18);
+        emit ApplicationVoteRecorded(
+            address(token), ACTION_ID, PROVIDER_ID, CREATION_PHASE, 1, VERIFIER_ID, 60e18, 160e18
+        );
+        _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 60e18);
+
+        (uint256[] memory voterIds, uint256[] memory votes, ) =
+            executor.applicationVoters(address(token), ACTION_ID, CREATION_PHASE, 1, 0, 10, false);
+        require(voterIds.length == 1 && voterIds[0] == PROVIDER_ID, "the event names the voter the roster holds");
+        require(votes[0] == 160e18, "the roster agrees with the emitted cumulative total");
     }
 
     function testVerifierApplicationCancelEvent() external {
@@ -659,7 +671,7 @@ contract GroupActionEventsTest is
     /// 边界成功值：1024 字节 description 恰好等于上限时接受。
     function testGroupActivatedAcceptsMaxDescription() external {
         _submitApplication();
-        _castCandidateVotes();
+        _castVerifierVotes();
         _atPhase(3);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
 

@@ -241,7 +241,7 @@ abstract contract GroupServiceTestBase {
         groupAction.setHasActiveGroups(address(token), memberId, true);
     }
 
-    function _qualifyCandidate(uint256 memberId) internal {
+    function _qualifyVerifier(uint256 memberId) internal {
         groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, memberId, 1, 0);
     }
 
@@ -319,11 +319,11 @@ abstract contract GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        // The community action set exists before the joins: the candidate
+        // The community action set exists before the joins: the verifier
         // qualification reads it inside the join.
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);

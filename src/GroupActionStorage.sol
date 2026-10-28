@@ -143,18 +143,18 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) lockedVerifierId;
         // tokenAddress => actionId => latest application id
         mapping(address => mapping(uint256 => uint256)) applicationIdCounter;
-        // tokenAddress => actionId => applicationId => applicant member id
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationMemberId;
+        // tokenAddress => actionId => applicationId => the verifier holding it
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationVerifierId;
         // tokenAddress => actionId => applicationId => application description
         mapping(address => mapping(uint256 => mapping(uint256 => string))) applicationDescription;
-        // tokenAddress => actionId => memberId => round => application the member stood with
+        // tokenAddress => actionId => verifierId => round => application the verifier stood with
         // Load-bearing: every per-round lookup resolves through this history, because a round's rank
         // holds that round's application id. Reading `currentApplicationId` instead answers a later
         // round's application and silently rejects whoever replaced or cancelled after the vote round.
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) applicationIdHistory;
         // tokenAddress => actionId => round => applicationId => votes cast in that round
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) votesByApplicationId;
-        // tokenAddress => actionId => memberId => current application id (0 = none)
+        // tokenAddress => actionId => verifierId => current application id (0 = none)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) currentApplicationId;
         // tokenAddress => actionId => active application ids
         mapping(address => mapping(uint256 => Uint256Set.Storage)) activeApplicationIds;
@@ -170,6 +170,15 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberMintedReward;
         // tokenAddress => actionId => round => memberId => burned amount
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberBurnedReward;
+
+        // tokenAddress => actionId => round => applicationId => voter ids, in first-vote order
+        // Load-bearing: append-only, never removed — a round's tally stops growing when its vote
+        // phase closes — so `reverse` is exactly the reverse of first-vote order (no swap-and-pop).
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))))
+            voterIdsByApplicationId;
+        // tokenAddress => actionId => round => applicationId => voterId => votes that voter cast
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))))
+            votesByApplicationIdByVoterId;
     }
 
     function joinRound(Layout storage s) internal view returns (uint256) {

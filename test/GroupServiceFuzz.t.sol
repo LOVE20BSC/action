@@ -159,8 +159,8 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyGroupOwner(GROUP_OWNER_B_ID);
-        _qualifyCandidate(VERIFIER_ID);
-        _qualifyCandidate(MEMBER1_ID);
+        _qualifyVerifier(VERIFIER_ID);
+        _qualifyVerifier(MEMBER1_ID);
         _joinService(GROUP_ID);
         _joinService(GROUP_OWNER_B_ID);
         _joinService(VERIFIER_ID);

@@ -69,7 +69,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _qualifyGroupOwner(GROUP_OWNER_B_ID);
         _joinService(VERIFIER_ID);
         _joinService(GROUP_OWNER_B_ID);

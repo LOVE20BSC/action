@@ -53,7 +53,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         _submitApplication();
         require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
 
-        _castCandidateVotes();
+        _castVerifierVotes();
         _atPhase(3);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
         _activateGroup();

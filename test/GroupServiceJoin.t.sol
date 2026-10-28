@@ -22,17 +22,17 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         require(executor.joinedAmountTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "join token");
     }
 
-    function testJoinCandidateBranchViaVerifierApplication() external {
+    function testJoinVerifierBranchViaVerifierApplication() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
         _atPhase(JOIN_PHASE);
         // The member owns no group; qualification comes from an open verifier
         // application inside the service round's community action set.
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
 
         _joinService(VERIFIER_ID);
-        require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, VERIFIER_ID), "candidate joined");
+        require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, VERIFIER_ID), "verifier joined");
     }
 
     function testJoinReadsTheApplicationAtTheJoinedRound() external {

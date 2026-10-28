@@ -37,6 +37,18 @@ library GroupActionVerify {
         uint256 startIndex;
     }
 
+    // Load-bearing: the emission keeps its own struct because eight separate arguments overflow the
+    // stack once the event reads the post-write tally.
+    struct VoteRecord {
+        address tokenAddress;
+        uint256 actionId;
+        uint256 applicationId;
+        uint256 round;
+        uint256 voterId;
+        uint256 verifierId;
+        uint256 votesAdded;
+    }
+
     modifier onlyMemberOwner(
         GroupActionStorage.Layout storage s,
         uint256 memberId
@@ -138,12 +150,12 @@ library GroupActionVerify {
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
+        uint256 verifierId,
         string calldata description
-    ) external onlyMemberOwner(s, memberId) returns (uint256 applicationId) {
+    ) external onlyMemberOwner(s, verifierId) returns (uint256 applicationId) {
         uint256 round = IPhase(s.phaseAddress).currentPhase();
-        if (IStake(s.stakeAddress).validGovVotes(tokenAddress, round, memberId) == 0) {
-            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, memberId);
+        if (IStake(s.stakeAddress).validGovVotes(tokenAddress, round, verifierId) == 0) {
+            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
         }
         uint256 descriptionLength = bytes(description).length;
         if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
@@ -155,9 +167,9 @@ library GroupActionVerify {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }
 
-        uint256 previousApplicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
-        applicationId = _replaceApplication(s, tokenAddress, actionId, memberId, round);
-        s.applicationMemberId[tokenAddress][actionId][applicationId] = memberId;
+        uint256 previousApplicationId = s.currentApplicationId[tokenAddress][actionId][verifierId];
+        applicationId = _replaceApplication(s, tokenAddress, actionId, verifierId, round);
+        s.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
         s.applicationDescription[tokenAddress][actionId][applicationId] = description;
 
         uint256 stakeAmount = previousApplicationId == 0 ? s.verifierStakeAmount[tokenAddress][actionId] : 0;
@@ -166,14 +178,14 @@ library GroupActionVerify {
             emit IGroupActionVerifyEvents.VerifierStakeDeposited({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
-                memberId: memberId,
+                verifierId: verifierId,
                 round: round,
                 amount: stakeAmount
             });
         }
 
         _emitVerifierApplicationSubmitted(
-            tokenAddress, actionId, memberId, round, applicationId, previousApplicationId, description
+            tokenAddress, actionId, verifierId, round, applicationId, previousApplicationId, description
         );
     }
 
@@ -182,27 +194,27 @@ library GroupActionVerify {
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId
-    ) external onlyMemberOwner(s, memberId) {
+        uint256 verifierId
+    ) external onlyMemberOwner(s, verifierId) {
         uint256 round = IPhase(s.phaseAddress).currentPhase();
-        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
+        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][verifierId];
         if (applicationId == 0) {
-            revert IGroupActionVerifyErrors.NoActiveApplication(memberId);
+            revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         }
 
         s.activeApplicationIds[tokenAddress][actionId].remove(applicationId);
         _removeFromRank(s, tokenAddress, actionId, round, applicationId);
-        s.currentApplicationId[tokenAddress][actionId][memberId] = 0;
-        s.applicationIdHistory[tokenAddress][actionId][memberId].record(round, 0);
+        s.currentApplicationId[tokenAddress][actionId][verifierId] = 0;
+        s.applicationIdHistory[tokenAddress][actionId][verifierId].record(round, 0);
 
         // Load-bearing: staked is equivalent to holding a current application.
         uint256 stakeAmount = s.verifierStakeAmount[tokenAddress][actionId];
         if (stakeAmount != 0) {
-            IERC20(tokenAddress).safeTransfer(IMemberNFT(s.memberNFTAddress).ownerOf(memberId), stakeAmount);
+            IERC20(tokenAddress).safeTransfer(IMemberNFT(s.memberNFTAddress).ownerOf(verifierId), stakeAmount);
             emit IGroupActionVerifyEvents.VerifierStakeRefunded({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
-                memberId: memberId,
+                verifierId: verifierId,
                 round: round,
                 amount: stakeAmount
             });
@@ -211,7 +223,7 @@ library GroupActionVerify {
         emit IGroupActionVerifyEvents.VerifierApplicationCancelled({
             tokenAddress: tokenAddress,
             actionId: actionId,
-            memberId: memberId,
+            verifierId: verifierId,
             round: round,
             applicationId: applicationId
         });
@@ -221,9 +233,9 @@ library GroupActionVerify {
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId
+        uint256 verifierId
     ) external view returns (uint256) {
-        if (s.currentApplicationId[tokenAddress][actionId][memberId] == 0) {
+        if (s.currentApplicationId[tokenAddress][actionId][verifierId] == 0) {
             return 0;
         }
         return s.verifierStakeAmount[tokenAddress][actionId];
@@ -234,15 +246,15 @@ library GroupActionVerify {
         address tokenAddress,
         uint256 actionId,
         uint256 round,
-        uint256 memberId
+        uint256 verifierId
     ) external view returns (VerifierApplication memory application) {
-        uint256 applicationId = s.applicationIdHistory[tokenAddress][actionId][memberId].value(round);
+        uint256 applicationId = s.applicationIdHistory[tokenAddress][actionId][verifierId].value(round);
         if (applicationId == 0) {
-            return VerifierApplication({applicationId: 0, memberId: 0, description: ""});
+            return VerifierApplication({applicationId: 0, verifierId: 0, description: ""});
         }
         return VerifierApplication({
             applicationId: applicationId,
-            memberId: s.applicationMemberId[tokenAddress][actionId][applicationId],
+            verifierId: s.applicationVerifierId[tokenAddress][actionId][applicationId],
             description: s.applicationDescription[tokenAddress][actionId][applicationId]
         });
     }
@@ -262,7 +274,7 @@ library GroupActionVerify {
             uint256 applicationId = applicationIds[i];
             applications[i] = VerifierApplication({
                 applicationId: applicationId,
-                memberId: s.applicationMemberId[tokenAddress][actionId][applicationId],
+                verifierId: s.applicationVerifierId[tokenAddress][actionId][applicationId],
                 description: s.applicationDescription[tokenAddress][actionId][applicationId]
             });
         }
@@ -295,9 +307,39 @@ library GroupActionVerify {
         votes = new uint256[](rankedApplicationIds.length);
         for (uint256 i = 0; i < rankedApplicationIds.length; i++) {
             uint256 applicationId = rankedApplicationIds[i];
-            verifierIds[i] = s.applicationMemberId[tokenAddress][actionId][applicationId];
+            verifierIds[i] = s.applicationVerifierId[tokenAddress][actionId][applicationId];
             votes[i] = s.votesByApplicationId[tokenAddress][actionId][round][applicationId];
         }
+    }
+
+    function applicationVoters(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 applicationId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory voterIds, uint256[] memory votes, uint256 total) {
+        return _applicationVoters(s, tokenAddress, actionId, round, applicationId, offset, limit, reverse);
+    }
+
+    function applicationVotersByVerifierId(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 verifierId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory voterIds, uint256[] memory votes, uint256 total) {
+        uint256 applicationId = s.applicationIdHistory[tokenAddress][actionId][verifierId].value(round);
+        if (applicationId == 0) {
+            return (new uint256[](0), new uint256[](0), 0);
+        }
+        return _applicationVoters(s, tokenAddress, actionId, round, applicationId, offset, limit, reverse);
     }
 
     function verificationSchema(
@@ -348,8 +390,9 @@ library GroupActionVerify {
         address tokenAddress,
         uint256 actionId,
         uint256 round,
-        bytes[] calldata targetData,
-        uint256 votes
+        uint256 voterId,
+        uint256 votes,
+        bytes[] calldata targetData
     ) external {
         if (targetData.length == 0 || targetData.length == 1) {
             return;
@@ -361,19 +404,32 @@ library GroupActionVerify {
             revert IGroupActionExecutorErrors.InvalidTargetDataShape(1, targetData[1].length);
         }
 
-        uint256 candidateMemberId = abi.decode(targetData[1], (uint256));
-        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][candidateMemberId];
+        uint256 verifierId = abi.decode(targetData[1], (uint256));
+        uint256 applicationId = s.currentApplicationId[tokenAddress][actionId][verifierId];
         if (applicationId == 0) {
-            revert IGroupActionVerifyErrors.NoActiveApplication(candidateMemberId);
+            revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         }
 
         if (votes == 0) {
             return;
         }
         s.votesByApplicationId[tokenAddress][actionId][round][applicationId] += votes;
+        s.voterIdsByApplicationId[tokenAddress][actionId][round][applicationId].add(voterId);
+        s.votesByApplicationIdByVoterId[tokenAddress][actionId][round][applicationId][voterId] += votes;
         _upsertRank(s, tokenAddress, actionId, round, applicationId);
 
-        _emitApplicationVoteRecorded(s, tokenAddress, actionId, applicationId, round, candidateMemberId, votes);
+        _emitApplicationVoteRecorded(
+            s,
+            VoteRecord({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                applicationId: applicationId,
+                round: round,
+                voterId: voterId,
+                verifierId: verifierId,
+                votesAdded: votes
+            })
+        );
     }
 
     function _scoreBatch(
@@ -486,7 +542,7 @@ library GroupActionVerify {
         return round;
     }
 
-    function _requireOpenCandidate(
+    function _requireOpenVerifier(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
@@ -505,7 +561,7 @@ library GroupActionVerify {
             }
         }
         if (rank == rankedApplicationIds.length) {
-            revert IGroupActionVerifyErrors.CandidateNotRanked(verifierId, round);
+            revert IGroupActionVerifyErrors.VerifierNotRanked(verifierId, round);
         }
         if (rank == 0) {
             return;
@@ -515,7 +571,7 @@ library GroupActionVerify {
         uint256 openOffset =
             Math.mulDiv(phaseBlocks, s.splits[splitIndex], GroupActionStorage.PRECISION, Math.Rounding.Ceil);
         if (block.number < startBlock + openOffset) {
-            revert IGroupActionVerifyErrors.CandidateNotOpen(verifierId, round);
+            revert IGroupActionVerifyErrors.VerifierNotOpen(verifierId, round);
         }
     }
 
@@ -523,19 +579,19 @@ library GroupActionVerify {
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
+        uint256 verifierId,
         uint256 round
     ) internal returns (uint256 applicationId) {
-        uint256 previousApplicationId = s.currentApplicationId[tokenAddress][actionId][memberId];
+        uint256 previousApplicationId = s.currentApplicationId[tokenAddress][actionId][verifierId];
         if (previousApplicationId != 0) {
             s.activeApplicationIds[tokenAddress][actionId].remove(previousApplicationId);
             _removeFromRank(s, tokenAddress, actionId, round, previousApplicationId);
         }
 
         applicationId = ++s.applicationIdCounter[tokenAddress][actionId];
-        s.currentApplicationId[tokenAddress][actionId][memberId] = applicationId;
+        s.currentApplicationId[tokenAddress][actionId][verifierId] = applicationId;
         s.activeApplicationIds[tokenAddress][actionId].add(applicationId);
-        s.applicationIdHistory[tokenAddress][actionId][memberId].record(round, applicationId);
+        s.applicationIdHistory[tokenAddress][actionId][verifierId].record(round, applicationId);
     }
 
     function _upsertRank(
@@ -605,6 +661,25 @@ library GroupActionVerify {
         rankedApplicationIds.pop();
     }
 
+    function _applicationVoters(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 applicationId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) private view returns (uint256[] memory voterIds, uint256[] memory votes, uint256 total) {
+        Uint256Set.Storage storage voterSet =
+            s.voterIdsByApplicationId[tokenAddress][actionId][round][applicationId];
+        (voterIds, total) = voterSet.values(offset, limit, reverse);
+        votes = new uint256[](voterIds.length);
+        for (uint256 i = 0; i < voterIds.length; i++) {
+            votes[i] = s.votesByApplicationIdByVoterId[tokenAddress][actionId][round][applicationId][voterIds[i]];
+        }
+    }
+
     function _verificationValues(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
@@ -648,7 +723,7 @@ library GroupActionVerify {
                     );
                 }
             } else {
-                _requireOpenCandidate(s, submission.tokenAddress, submission.actionId, round, submission.verifierId);
+                _requireOpenVerifier(s, submission.tokenAddress, submission.actionId, round, submission.verifierId);
             }
 
             uint256 memberCount = s.memberIdsByGroupId[submission.tokenAddress][submission.actionId][submission.groupId]
@@ -679,7 +754,7 @@ library GroupActionVerify {
                 emit IGroupActionVerifyEvents.VerifierLocked({
                     tokenAddress: submission.tokenAddress,
                     actionId: submission.actionId,
-                    memberId: submission.verifierId,
+                    verifierId: submission.verifierId,
                     round: round
                 });
             }
@@ -714,7 +789,7 @@ library GroupActionVerify {
     function _emitVerifierApplicationSubmitted(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
+        uint256 verifierId,
         uint256 round,
         uint256 applicationId,
         uint256 previousApplicationId,
@@ -723,7 +798,7 @@ library GroupActionVerify {
         emit IGroupActionVerifyEvents.VerifierApplicationSubmitted({
             tokenAddress: tokenAddress,
             actionId: actionId,
-            memberId: memberId,
+            verifierId: verifierId,
             round: round,
             applicationId: applicationId,
             previousApplicationId: previousApplicationId,
@@ -734,21 +809,19 @@ library GroupActionVerify {
 
     function _emitApplicationVoteRecorded(
         GroupActionStorage.Layout storage s,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 applicationId,
-        uint256 round,
-        uint256 candidateMemberId,
-        uint256 votesAdded
+        VoteRecord memory record
     ) private {
+        uint256 totalVotes =
+            s.votesByApplicationId[record.tokenAddress][record.actionId][record.round][record.applicationId];
         emit IGroupActionVerifyEvents.ApplicationVoteRecorded({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            applicationId: applicationId,
-            round: round,
-            candidateMemberId: candidateMemberId,
-            votesAdded: votesAdded,
-            totalVotes: s.votesByApplicationId[tokenAddress][actionId][round][applicationId]
+            tokenAddress: record.tokenAddress,
+            actionId: record.actionId,
+            voterId: record.voterId,
+            round: record.round,
+            applicationId: record.applicationId,
+            verifierId: record.verifierId,
+            votesAdded: record.votesAdded,
+            totalVotes: totalVotes
         });
     }
 }

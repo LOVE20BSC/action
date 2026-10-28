@@ -17,7 +17,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _submitApplication();
         _castVotesFor(VERIFIER_ID, 100e18);
         (uint256[] memory verifierIds, uint256[] memory votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
-        require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID && votes[0] == 100e18, "single candidate");
+        require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID && votes[0] == 100e18, "single verifier");
 
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
         stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
@@ -27,14 +27,14 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _castVotesFor(VERIFIER2_ID, 150e18);
 
         (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
-        require(verifierIds.length == 2, "two candidates");
+        require(verifierIds.length == 2, "two verifiers");
         require(verifierIds[0] == VERIFIER2_ID && verifierIds[1] == VERIFIER_ID, "votes descending");
         require(votes[0] == 150e18 && votes[1] == 100e18, "ranked votes");
 
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2b");
         (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
-        require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "replaced candidate leaves the rank");
+        require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "replaced verifier leaves the rank");
         uint256[] memory replacedIds = new uint256[](1);
         replacedIds[0] = VERIFIER2_ID;
         uint256[] memory replacedVotes = executor.votesByVerifierIds(address(token), ACTION_ID, 2, replacedIds);
@@ -48,7 +48,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         (verifierIds, ) = executor.topVerifiers(address(token), ACTION_ID, 2);
-        require(verifierIds.length == 0, "cancelled candidate leaves the rank");
+        require(verifierIds.length == 0, "cancelled verifier leaves the rank");
 
         (VerifierApplication[] memory applications, uint256 total) =
             executor.verifierApplications(address(token), ACTION_ID, 0, 10, false);
@@ -63,7 +63,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(currentVotes[0] == 0 && currentVotes[1] == 0, "no votes on current applications");
     }
 
-    function testUnrankedCandidateRejected() external {
+    function testUnrankedVerifierRejected() external {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
         stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
@@ -81,7 +81,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _atPhase(4);
         vm.prank(VERIFIER2);
         vm.expectRevert(
-            abi.encodeWithSelector(IGroupActionVerifyErrors.CandidateNotRanked.selector, VERIFIER2_ID, uint256(2))
+            abi.encodeWithSelector(IGroupActionVerifyErrors.VerifierNotRanked.selector, VERIFIER2_ID, uint256(2))
         );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER2_ID, GROUP_ID, 0, _scores(100));
     }
@@ -106,14 +106,14 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         // splits = [5e17] => the second rank opens 500 blocks into the verify phase.
         vm.prank(VERIFIER);
         vm.expectRevert(
-            abi.encodeWithSelector(IGroupActionVerifyErrors.CandidateNotOpen.selector, VERIFIER_ID, uint256(2))
+            abi.encodeWithSelector(IGroupActionVerifyErrors.VerifierNotOpen.selector, VERIFIER_ID, uint256(2))
         );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _scores(100));
 
         vm.roll(4 * PHASE_BLOCKS + 499);
         vm.prank(VERIFIER);
         vm.expectRevert(
-            abi.encodeWithSelector(IGroupActionVerifyErrors.CandidateNotOpen.selector, VERIFIER_ID, uint256(2))
+            abi.encodeWithSelector(IGroupActionVerifyErrors.VerifierNotOpen.selector, VERIFIER_ID, uint256(2))
         );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _scores(100));
 
@@ -257,7 +257,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         votedData[1] = abi.encode(VERIFIER_ID);
 
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, votedData);
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
         executor.onProposalSubmitted(address(token), ACTION_ID, 0, votedData);
 
@@ -265,18 +265,18 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, VERIFIER_ID)
         );
-        executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, votedData);
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
 
         _submitApplication();
         // An application stands for its creation round and every round after it, so a vote for a later
         // round is accepted; a vote for a round before it existed is not reachable in practice, and the
-        // missing-candidate guard above already covers the only real rejection.
-        bytes[] memory zeroCandidate = new bytes[](2);
-        zeroCandidate[0] = votedData[0];
-        zeroCandidate[1] = abi.encode(uint256(0));
+        // missing-verifier guard above already covers the only real rejection.
+        bytes[] memory zeroVerifier = new bytes[](2);
+        zeroVerifier[0] = votedData[0];
+        zeroVerifier[1] = abi.encode(uint256(0));
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, uint256(0)));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, zeroCandidate);
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, zeroVerifier);
 
         bytes[] memory three = new bytes[](3);
         three[0] = votedData[0];
@@ -284,19 +284,21 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         three[2] = votedData[1];
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TargetDataLengthMismatch.selector, 2, 3));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, three);
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, three);
 
         vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 1, new bytes[](0));
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, new bytes[](0));
 
         vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, 0, 0, votedData);
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 0, votedData);
         (uint256[] memory verifierIds, ) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 0, "zero votes rank nothing");
+        (, , uint256 rosterTotal) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
+        require(rosterTotal == 0, "zero votes name no voter");
 
         _castVotesFor(VERIFIER_ID, 5e18);
         (verifierIds, ) = executor.topVerifiers(address(token), ACTION_ID, 2);
-        require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "vote ranks the candidate");
+        require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "vote ranks the verifier");
     }
 
     function testRankCapacityAndReplacement() external {
@@ -320,7 +322,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _castVotesFor(VERIFIER2_ID, 200e18);
         _castVotesFor(thirdId, 150e18);
         (uint256[] memory verifierIds, uint256[] memory votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
-        require(verifierIds.length == 2 && verifierIds[1] == thirdId, "third candidate replaces the last");
+        require(verifierIds.length == 2 && verifierIds[1] == thirdId, "third verifier replaces the last");
         require(votes[0] == 200e18 && votes[1] == 150e18, "replacement votes");
 
         _castVotesFor(VERIFIER_ID, 50e18);
@@ -654,6 +656,94 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "action 1 intact");
         require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == 0, "action 2 cleared");
         require(token.balanceOf(address(executor)) == VERIFIER_STAKE, "only action 2 refunded");
+    }
+
+    function testApplicationVotersKeepOneRowPerVoter() external {
+        _submitApplication();
+        _castVotesFrom(MEMBER2_ID, VERIFIER_ID, 30e18);
+        _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 20e18);
+        _castVotesFrom(MEMBER2_ID, VERIFIER_ID, 10e18);
+
+        (uint256[] memory voterIds, uint256[] memory votes, uint256 total) =
+            executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
+        require(total == 2, "one row per voter");
+        require(voterIds[0] == MEMBER2_ID && voterIds[1] == PROVIDER_ID, "first-vote order");
+        require(votes[0] == 40e18 && votes[1] == 20e18, "repeat votes accumulate on the voter row");
+
+        (uint256[] memory topIds, uint256[] memory topVotes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        require(topIds.length == 1 && topVotes[0] == votes[0] + votes[1], "the roster folds into the tally");
+
+        (voterIds, votes, ) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, true);
+        require(voterIds[0] == PROVIDER_ID && voterIds[1] == MEMBER2_ID, "reverse is first-vote reverse");
+        require(votes[1] == 40e18, "votes follow their voter");
+
+        (voterIds, votes, total) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 2, 10, false);
+        require(voterIds.length == 0 && votes.length == 0 && total == 2, "out of range returns the true total");
+
+        (, , total) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 0, false);
+        require(total == 2, "limit 0 is the count entry");
+
+        (, , total) = executor.applicationVoters(address(token), ACTION_ID, 2, 99, 0, 10, false);
+        require(total == 0, "an unknown application has no roster");
+    }
+
+    function testApplicationVotersByVerifierIdFollowTheRound() external {
+        _submitApplication();
+        _castVotesFrom(MEMBER2_ID, VERIFIER_ID, 100e18);
+
+        _atPhase(4);
+        _castVotesFromAt(PROVIDER_ID, VERIFIER_ID, 60e18, 4);
+
+        (uint256[] memory voterIds, uint256[] memory votes, uint256 total) = executor.applicationVotersByVerifierId(
+            address(token), ACTION_ID, 2, VERIFIER_ID, 0, 10, false
+        );
+        require(total == 1 && voterIds[0] == MEMBER2_ID && votes[0] == 100e18, "round 2 keeps its own voters");
+
+        (voterIds, votes, total) = executor.applicationVotersByVerifierId(
+            address(token), ACTION_ID, 4, VERIFIER_ID, 0, 10, false
+        );
+        require(total == 1 && voterIds[0] == PROVIDER_ID && votes[0] == 60e18, "round 4 keeps only round-4 votes");
+
+        _atPhase(5);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "round 5");
+        (voterIds, votes, total) = executor.applicationVotersByVerifierId(
+            address(token), ACTION_ID, 5, VERIFIER_ID, 0, 10, false
+        );
+        require(total == 0 && voterIds.length == 0 && votes.length == 0, "a fresh application starts empty");
+
+        (, , total) = executor.applicationVotersByVerifierId(
+            address(token), ACTION_ID, 4, VERIFIER_ID, 0, 10, false
+        );
+        require(total == 1, "the round that saw the earlier application keeps its roster");
+
+        (, , total) = executor.applicationVotersByVerifierId(
+            address(token), ACTION_ID, 2, MEMBER1_ID, 0, 10, false
+        );
+        require(total == 0, "a member without an application has no roster");
+    }
+
+    function testApplicationVoterRostersStayPerVerifier() external {
+        _submitApplication();
+        memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
+        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
+        vm.prank(VERIFIER2);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
+
+        _castVotesFrom(MEMBER2_ID, VERIFIER_ID, 70e18);
+        _castVotesFrom(MEMBER2_ID, VERIFIER2_ID, 90e18);
+        _castVotesFrom(PROVIDER_ID, VERIFIER2_ID, 10e18);
+
+        (uint256[] memory voterIds, uint256[] memory votes, uint256 total) =
+            executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
+        require(total == 1 && voterIds[0] == MEMBER2_ID && votes[0] == 70e18, "verifier one keeps its own roster");
+
+        (voterIds, votes, total) = executor.applicationVoters(address(token), ACTION_ID, 2, 2, 0, 10, false);
+        require(total == 2 && votes[0] == 90e18 && votes[1] == 10e18, "verifier two keeps both voters");
+
+        (uint256[] memory topIds, uint256[] memory topVotes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        require(topIds[0] == VERIFIER2_ID && topVotes[0] == 100e18, "the split roster does not disturb the ranking");
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

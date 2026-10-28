@@ -139,7 +139,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     }
 
     function testCreateRejectsUnregisteredJoinToken() external {
-        address[6] memory candidates = [
+        address[6] memory joinTokens = [
             address(0xdead),
             address(lpBaseToken),
             address(new MockUniswapV2Pair(address(token), address(lpBaseToken))),
@@ -147,13 +147,13 @@ contract LpExecutorTest is LpExecutorTestBase {
             address(new MockRevertingPair()),
             address(new MockRevertingPairToken1(address(token)))
         ];
-        for (uint256 i = 0; i < candidates.length; i++) {
+        for (uint256 i = 0; i < joinTokens.length; i++) {
             bytes[] memory targetData = _cloneTargetData();
-            targetData[1] = abi.encode(candidates[i]);
+            targetData[1] = abi.encode(joinTokens[i]);
             vm.prank(address(actionTarget));
             vm.expectRevert(
                 abi.encodeWithSelector(
-                    ILpExecutorErrors.InvalidJoinTokenFactory.selector, candidates[i], address(factory)
+                    ILpExecutorErrors.InvalidJoinTokenFactory.selector, joinTokens[i], address(factory)
                 )
             );
             lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);

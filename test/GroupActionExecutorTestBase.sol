@@ -175,20 +175,28 @@ abstract contract GroupActionExecutorTestBase {
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "verifier");
     }
 
-    function _castCandidateVotes() internal {
+    function _castVerifierVotes() internal {
         _castVotesFor(VERIFIER_ID, 100e18);
     }
 
-    function _castVotesFor(uint256 candidateMemberId, uint256 votes) internal {
-        _castVotesForAt(candidateMemberId, votes, CREATION_PHASE);
+    function _castVotesFor(uint256 verifierId, uint256 votes) internal {
+        _castVotesFromAt(MEMBER1_ID, verifierId, votes, CREATION_PHASE);
     }
 
-    function _castVotesForAt(uint256 candidateMemberId, uint256 votes, uint256 round) internal {
+    function _castVotesForAt(uint256 verifierId, uint256 votes, uint256 round) internal {
+        _castVotesFromAt(MEMBER1_ID, verifierId, votes, round);
+    }
+
+    function _castVotesFrom(uint256 voterId, uint256 verifierId, uint256 votes) internal {
+        _castVotesFromAt(voterId, verifierId, votes, CREATION_PHASE);
+    }
+
+    function _castVotesFromAt(uint256 voterId, uint256 verifierId, uint256 votes, uint256 round) internal {
         bytes[] memory targetData = new bytes[](2);
         targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(candidateMemberId);
+        targetData[1] = abi.encode(verifierId);
         vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), round, ACTION_ID, 0, votes, targetData);
+        executor.onProposalVoted(address(token), round, ACTION_ID, voterId, votes, targetData);
     }
 
     function _activateGroup() internal {
@@ -310,7 +318,7 @@ abstract contract GroupActionExecutorTestBase {
     ///      group active; ends at phase 3.
     function _openJoinPhase() internal {
         _submitApplication();
-        _castCandidateVotes();
+        _castVerifierVotes();
         _atPhase(3);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
         _activateGroup();

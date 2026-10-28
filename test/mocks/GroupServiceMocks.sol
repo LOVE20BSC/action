@@ -392,7 +392,7 @@ contract MockGroupServiceGroupActionExecutor {
             applicationId = 0;
         }
         application = VerifierApplication({
-            applicationId: applicationId, memberId: applicationId == 0 ? 0 : memberId, description: ""
+            applicationId: applicationId, verifierId: applicationId == 0 ? 0 : memberId, description: ""
         });
     }
 

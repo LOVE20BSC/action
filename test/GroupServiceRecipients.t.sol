@@ -498,7 +498,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
-        _qualifyCandidate(VERIFIER_ID);
+        _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);

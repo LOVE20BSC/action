@@ -130,11 +130,11 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         address tokenAddress,
         uint256 round,
         uint256 actionId,
-        uint256,
+        uint256 voterId,
         uint256 votes,
         bytes[] calldata targetData
     ) external override onlyActionTarget {
-        GroupActionVerify.onProposalVoted(s, tokenAddress, actionId, round, targetData, votes);
+        GroupActionVerify.onProposalVoted(s, tokenAddress, actionId, round, voterId, votes, targetData);
     }
 
     function isGroupMember(uint256 groupId, uint256 memberId) external view returns (bool) {
@@ -396,32 +396,36 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     function submitVerifierApplication(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
+        uint256 verifierId,
         string calldata description
     ) external nonReentrant returns (uint256 applicationId) {
-        return GroupActionVerify.submitVerifierApplication(s, tokenAddress, actionId, memberId, description);
+        return GroupActionVerify.submitVerifierApplication(s, tokenAddress, actionId, verifierId, description);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
-    function cancelVerifierApplication(address tokenAddress, uint256 actionId, uint256 memberId) external nonReentrant {
-        GroupActionVerify.cancelVerifierApplication(s, tokenAddress, actionId, memberId);
+    function cancelVerifierApplication(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 verifierId
+    ) external nonReentrant {
+        GroupActionVerify.cancelVerifierApplication(s, tokenAddress, actionId, verifierId);
     }
 
     function verifierStake(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId
+        uint256 verifierId
     ) external view returns (uint256) {
-        return GroupActionVerify.verifierStake(s, tokenAddress, actionId, memberId);
+        return GroupActionVerify.verifierStake(s, tokenAddress, actionId, verifierId);
     }
 
     function verifierApplication(
         address tokenAddress,
         uint256 actionId,
         uint256 round,
-        uint256 memberId
+        uint256 verifierId
     ) external view returns (VerifierApplication memory application) {
-        return GroupActionVerify.verifierApplication(s, tokenAddress, actionId, round, memberId);
+        return GroupActionVerify.verifierApplication(s, tokenAddress, actionId, round, verifierId);
     }
 
     function verifierApplications(
@@ -449,6 +453,33 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round
     ) external view returns (uint256[] memory verifierIds, uint256[] memory votes) {
         return GroupActionVerify.topVerifiers(s, tokenAddress, actionId, round);
+    }
+
+    function applicationVoters(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 applicationId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory voterIds, uint256[] memory votes, uint256 total) {
+        return
+            GroupActionVerify.applicationVoters(s, tokenAddress, actionId, round, applicationId, offset, limit, reverse);
+    }
+
+    function applicationVotersByVerifierId(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 verifierId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory voterIds, uint256[] memory votes, uint256 total) {
+        return GroupActionVerify.applicationVotersByVerifierId(
+            s, tokenAddress, actionId, round, verifierId, offset, limit, reverse
+        );
     }
 
     function verificationSchema(
