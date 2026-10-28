@@ -385,7 +385,7 @@ library GroupActionVerify {
         uint256 verifiedCount,
         uint256 memberCount,
         uint256[] calldata originScores
-    ) internal {
+    ) internal returns (bool groupVerified) {
         (uint256[] memory memberIds, ) =
             _pageMembers(s, tokenAddress, actionId, round, groupId, verifiedCount, originScores.length);
         uint256 groupFinal = s.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
@@ -399,7 +399,7 @@ library GroupActionVerify {
         s.totalFinalScore[tokenAddress][actionId][round] = totalFinal;
         uint256 newVerifiedCount = verifiedCount + originScores.length;
         s.verifiedMemberCount[tokenAddress][actionId][round][groupId] = newVerifiedCount;
-        _markGroupVerified(s, tokenAddress, actionId, round, newVerifiedCount, memberCount);
+        return _markGroupVerified(s, tokenAddress, actionId, round, newVerifiedCount, memberCount);
     }
 
     function _markGroupVerified(
@@ -409,9 +409,9 @@ library GroupActionVerify {
         uint256 round,
         uint256 verifiedCount,
         uint256 memberCount
-    ) internal {
+    ) internal returns (bool groupVerified) {
         if (verifiedCount != memberCount) {
-            return;
+            return false;
         }
         // Load-bearing: a round only ever becomes verified through this branch, and `isRoundVerified`
         // no longer re-derives it. A missed write leaves the round unsettled forever with no revert.
@@ -419,6 +419,7 @@ library GroupActionVerify {
         if (verifiedGroups == s.groupIdsByRound[tokenAddress][actionId].countByRound(round)) {
             s.roundVerified[tokenAddress][actionId][round] = true;
         }
+        return true;
     }
 
     function _scoreMember(
@@ -637,6 +638,7 @@ library GroupActionVerify {
         }
 
         uint256 round = _currentVerifyRound(s);
+        bool groupVerified;
         {
             uint256 lockedVerifier = s.lockedVerifierId[submission.tokenAddress][submission.actionId][round];
             if (lockedVerifier != 0) {
@@ -682,7 +684,7 @@ library GroupActionVerify {
                 });
             }
 
-            _scoreBatch(
+            groupVerified = _scoreBatch(
                 s,
                 submission.tokenAddress,
                 submission.actionId,
@@ -694,10 +696,6 @@ library GroupActionVerify {
             );
         }
 
-        uint256 roundTotalFinalScore = s.totalFinalScore[submission.tokenAddress][submission.actionId][round];
-        uint256 roundVerifiedGroupCount = s.verifiedGroupCount[submission.tokenAddress][submission.actionId][round];
-        bool roundIsVerified = s.roundVerified[submission.tokenAddress][submission.actionId][round];
-
         emit IGroupActionVerifyEvents.OriginScoresSubmitted({
             tokenAddress: submission.tokenAddress,
             actionId: submission.actionId,
@@ -705,9 +703,10 @@ library GroupActionVerify {
             round: round,
             verifierId: submission.verifierId,
             startIndex: submission.startIndex,
-            totalFinalScore: roundTotalFinalScore,
-            verifiedGroupCount: roundVerifiedGroupCount,
-            roundVerified: roundIsVerified,
+            totalFinalScore: s.totalFinalScore[submission.tokenAddress][submission.actionId][round],
+            verifiedGroupCount: s.verifiedGroupCount[submission.tokenAddress][submission.actionId][round],
+            roundVerified: s.roundVerified[submission.tokenAddress][submission.actionId][round],
+            groupVerified: groupVerified,
             scores: originScores
         });
     }

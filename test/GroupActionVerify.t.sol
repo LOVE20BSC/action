@@ -3,19 +3,20 @@ pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "../src/GroupActionStorage.sol";
 import {GroupActionVerify} from "../src/GroupActionVerify.sol";
-import {IGroupActionVerifyErrors} from "../src/interfaces/IGroupActionVerify.sol";
+import {IGroupActionVerifyErrors, IGroupActionVerifyEvents} from "../src/interfaces/IGroupActionVerify.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {MockGroupActionMemberNFT, MockGroupActionPhase} from "./mocks/GroupActionMocks.sol";
 
 interface GroupActionVerifyVm {
     function expectRevert(bytes calldata revertData) external;
+    function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
 }
 
 /// @dev Library-level suite: seeds the shared Layout directly and drives
 ///      GroupActionVerify through the real submission path with the verifier
 ///      pre-locked, bypassing only the election flow.
-contract GroupActionVerifyTest {
+contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     using RoundHistoryUint256 for RoundHistoryUint256.History;
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
 
@@ -200,6 +201,43 @@ contract GroupActionVerifyTest {
                 == s.groupIdsByRound[TOKEN][ACTION_ID].countByRound(ROUND),
             "counter reaches the group count"
         );
+    }
+
+    /// 群游标与整轮游标必须分别报值：GROUP_A 收尾时本群完成但整轮仍开（`groupVerified = true`、
+    /// `roundVerified = false`），GROUP_B 收尾时两者都为 true，两个布尔写反即失败。
+    function test_OriginScoresSubmittedSeparatesGroupAndRoundVerified() external {
+        _bindVerifier();
+        vm.expectEmit(true, true, true, true);
+        emit OriginScoresSubmitted(
+            TOKEN,
+            ACTION_ID,
+            GROUP_A,
+            ROUND,
+            VERIFIER_ID,
+            0,
+            MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
+            1,
+            false,
+            true,
+            _scores(100, 90, 80)
+        );
+        _submit(GROUP_A, 0, _scores(100, 90, 80));
+
+        vm.expectEmit(true, true, true, true);
+        emit OriginScoresSubmitted(
+            TOKEN,
+            ACTION_ID,
+            GROUP_B,
+            ROUND,
+            VERIFIER_ID,
+            0,
+            MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80 + 40e18 * 50,
+            2,
+            true,
+            true,
+            _scores(50)
+        );
+        _submit(GROUP_B, 0, _scores(50));
     }
 
     function test_SameRoundChurnKeepsFinalOrderVerifiable() external {

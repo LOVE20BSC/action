@@ -20,6 +20,7 @@ interface IGroupActionVerifyEvents {
         uint256 totalFinalScore,
         uint256 verifiedGroupCount,
         bool roundVerified,
+        bool groupVerified,
         uint256[] scores
     );
     event VerifierApplicationSubmitted(

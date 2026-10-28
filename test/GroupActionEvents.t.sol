@@ -371,7 +371,7 @@ contract GroupActionEventsTest is
         emit VerifierLocked(address(token), ACTION_ID, VERIFIER_ID, 2);
         vm.expectEmit(true, true, true, true);
         emit OriginScoresSubmitted(
-            address(token), ACTION_ID, GROUP_ID, 2, VERIFIER_ID, 0, expectedTotal, 1, true, scores
+            address(token), ACTION_ID, GROUP_ID, 2, VERIFIER_ID, 0, expectedTotal, 1, true, true, scores
         );
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, scores);
@@ -553,11 +553,13 @@ contract GroupActionEventsTest is
         executor.onProposalCreated(address(token), ACTION_2, data);
     }
 
-    /// 累计值：`OriginScoresSubmitted.totalFinalScore` 必须等于按日志顺序折叠的加权分。
+    /// 累计值：`OriginScoresSubmitted.totalFinalScore` 必须等于按日志顺序折叠的加权分；
+    /// 两个布尔必须各自取自本群游标与整轮游标——首批 false/false、末批 true/true。
     function testOriginScoresSubmittedTotalFinalScoreMatchesFold() external {
         _prepareRound();
         _atPhase(4);
 
+        vm.recordLogs();
         uint256[] memory firstBatch = new uint256[](1);
         firstBatch[0] = 10;
         vm.prank(VERIFIER);
@@ -565,25 +567,41 @@ contract GroupActionEventsTest is
 
         uint256[] memory secondBatch = new uint256[](1);
         secondBatch[0] = 20;
-        vm.recordLogs();
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, secondBatch);
 
         GroupActionExecutorVm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "OriginScoresSubmitted(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256[])"
+            "OriginScoresSubmitted(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,bool,uint256[])"
         );
-        bool found;
+        uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != topic) continue;
-            (, , uint256 startIndex, uint256 totalFinalScore,,,) = abi.decode(
-                logs[i].data, (uint256, uint256, uint256, uint256, uint256, bool, uint256[])
-            );
-            require(startIndex == 1, "second batch start index");
-            require(totalFinalScore == 100e18 * 10 + PROVIDER_QUOTA * 20, "totalFinalScore equals fold");
-            found = true;
+            (
+                ,
+                ,
+                uint256 startIndex,
+                uint256 totalFinalScore,
+                uint256 verifiedGroupCount,
+                bool roundVerified,
+                bool groupVerified,
+                uint256[] memory scores
+            ) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, uint256, bool, bool, uint256[]));
+            if (seen == 0) {
+                require(startIndex == 0, "first batch start index");
+                require(totalFinalScore == 100e18 * 10, "first batch total");
+                require(verifiedGroupCount == 0 && !roundVerified && !groupVerified, "first batch still open");
+                require(scores.length == 1 && scores[0] == 10, "first batch scores");
+            } else {
+                require(startIndex == 1, "second batch start index");
+                require(totalFinalScore == 100e18 * 10 + PROVIDER_QUOTA * 20, "totalFinalScore equals fold");
+                require(verifiedGroupCount == 1, "second batch counts the group");
+                require(roundVerified && groupVerified, "second batch closes group and round");
+                require(scores.length == 1 && scores[0] == 20, "second batch scores");
+            }
+            seen++;
         }
-        require(found, "missing OriginScoresSubmitted");
+        require(seen == 2, "missing OriginScoresSubmitted");
     }
 
     function _letter(uint256 index) private pure returns (string memory) {
