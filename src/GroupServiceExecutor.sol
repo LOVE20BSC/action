@@ -837,8 +837,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         });
         emit ServiceRewardsDistributed({
             serviceTokenAddress: tokenAddress,
-            round: round,
             serviceActionId: actionId,
+            round: round,
             actionTokenAddress: settlement.actionTokenAddress,
             memberId: memberId,
             verifierReward: settlement.verifierReward,

@@ -102,8 +102,8 @@ library GroupRecipients {
 
         emit IGroupRecipientsEvents.RecipientTableChanged({
             sourceTokenAddress: sourceTokenAddress,
-            round: round,
             sourceActionId: sourceActionId,
+            round: round,
             groupId: groupId,
             recipientIds: table.recipientIds,
             ratios: table.ratios,
@@ -336,16 +336,16 @@ library GroupRecipients {
         }
     }
     function _emitRecipientPaid(RecipientPaidArgs memory args) private {
-        emit IGroupServiceExecutorEvents.RecipientPaid(
-            args.serviceTokenAddress,
-            args.serviceActionId,
-            args.round,
-            args.groupId,
-            args.sourceTokenAddress,
-            args.sourceActionId,
-            args.recipientId,
-            args.amount
-        );
+        emit IGroupServiceExecutorEvents.RecipientPaid({
+            serviceTokenAddress: args.serviceTokenAddress,
+            serviceActionId: args.serviceActionId,
+            round: args.round,
+            groupId: args.groupId,
+            sourceTokenAddress: args.sourceTokenAddress,
+            sourceActionId: args.sourceActionId,
+            recipientId: args.recipientId,
+            amount: args.amount
+        });
     }
 
 }

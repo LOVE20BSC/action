@@ -493,14 +493,21 @@ contract MockGroupServiceToken {
     function mint(address to, uint256 amount) external {
         _totalSupply += amount;
         _balanceOf[to] += amount;
-        emit Transfer(address(0), to, amount);
+        emit Transfer({
+            from: address(0),
+            to: to,
+            value: amount
+        });
     }
 
     function burn(uint256 amount) external {
         _balanceOf[msg.sender] -= amount;
         _totalSupply -= amount;
         burnedTotal += amount;
-        emit TokenBurned(msg.sender, amount);
+        emit TokenBurned({
+            from: msg.sender,
+            amount: amount
+        });
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -514,7 +521,11 @@ contract MockGroupServiceToken {
     function transfer(address to, uint256 amount) external returns (bool) {
         _balanceOf[msg.sender] -= amount;
         _balanceOf[to] += amount;
-        emit Transfer(msg.sender, to, amount);
+        emit Transfer({
+            from: msg.sender,
+            to: to,
+            value: amount
+        });
         return true;
     }
 }

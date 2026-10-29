@@ -208,35 +208,35 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     function test_OriginScoresSubmittedSeparatesGroupAndRoundVerified() external {
         _bindVerifier();
         vm.expectEmit(true, true, true, true);
-        emit OriginScoresSubmitted(
-            TOKEN,
-            ACTION_ID,
-            GROUP_A,
-            ROUND,
-            VERIFIER_ID,
-            0,
-            MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
-            1,
-            false,
-            true,
-            _scores(100, 90, 80)
-        );
+        emit OriginScoresSubmitted({
+            tokenAddress: TOKEN,
+            actionId: ACTION_ID,
+            groupId: GROUP_A,
+            round: ROUND,
+            verifierId: VERIFIER_ID,
+            startIndex: 0,
+            totalFinalScore: MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
+            verifiedGroupCount: 1,
+            roundVerified: false,
+            groupVerified: true,
+            scores: _scores(100, 90, 80)
+        });
         _submit(GROUP_A, 0, _scores(100, 90, 80));
 
         vm.expectEmit(true, true, true, true);
-        emit OriginScoresSubmitted(
-            TOKEN,
-            ACTION_ID,
-            GROUP_B,
-            ROUND,
-            VERIFIER_ID,
-            0,
-            MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80 + 40e18 * 50,
-            2,
-            true,
-            true,
-            _scores(50)
-        );
+        emit OriginScoresSubmitted({
+            tokenAddress: TOKEN,
+            actionId: ACTION_ID,
+            groupId: GROUP_B,
+            round: ROUND,
+            verifierId: VERIFIER_ID,
+            startIndex: 0,
+            totalFinalScore: MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80 + 40e18 * 50,
+            verifiedGroupCount: 2,
+            roundVerified: true,
+            groupVerified: true,
+            scores: _scores(50)
+        });
         _submit(GROUP_B, 0, _scores(50));
     }
 

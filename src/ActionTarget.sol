@@ -457,8 +457,8 @@ contract ActionTarget is IActionTarget {
         emit ActionRegistered({
             tokenAddress: tokenAddress,
             actionId: proposalId,
-            executor: executor_,
-            round: createdRound
+            round: createdRound,
+            executor: executor_
         });
 
         IActionExecutor(executor_).onProposalCreated(

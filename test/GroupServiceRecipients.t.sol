@@ -15,18 +15,18 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         string[] memory remarks = new string[](1);
         remarks[0] = "";
         vm.expectEmit(true, true, true, true);
-        emit RecipientTableChanged(
-            address(token),
-            GROUP_ACTION_ID,
-            SERVICE_ROUND,
-            GROUP_ID,
-            _ids(MEMBER1_ID),
-            _ratios(PRECISION / 2),
-            remarks,
-            new uint256[](0),
-            new uint256[](0),
-            new string[](0)
-        );
+        emit RecipientTableChanged({
+            sourceTokenAddress: address(token),
+            sourceActionId: GROUP_ACTION_ID,
+            round: SERVICE_ROUND,
+            groupId: GROUP_ID,
+            recipientIds: _ids(MEMBER1_ID),
+            ratios: _ratios(PRECISION / 2),
+            remarks: remarks,
+            prevRecipientIds: new uint256[](0),
+            prevRatios: new uint256[](0),
+            prevRemarks: new string[](0)
+        });
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
 
         (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory storedRemarks) =
@@ -47,18 +47,18 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         string[] memory remarks = new string[](1);
         remarks[0] = "second";
         vm.expectEmit(true, true, true, true);
-        emit RecipientTableChanged(
-            address(token),
-            GROUP_ACTION_ID,
-            SERVICE_ROUND,
-            GROUP_ID,
-            _ids(MEMBER2_ID),
-            _ratios(PRECISION / 4),
-            remarks,
-            _ids(MEMBER1_ID),
-            _ratios(PRECISION / 2),
-            new string[](1)
-        );
+        emit RecipientTableChanged({
+            sourceTokenAddress: address(token),
+            sourceActionId: GROUP_ACTION_ID,
+            round: SERVICE_ROUND,
+            groupId: GROUP_ID,
+            recipientIds: _ids(MEMBER2_ID),
+            ratios: _ratios(PRECISION / 4),
+            remarks: remarks,
+            prevRecipientIds: _ids(MEMBER1_ID),
+            prevRatios: _ratios(PRECISION / 2),
+            prevRemarks: new string[](1)
+        });
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(PRECISION / 4), remarks);
     }
 

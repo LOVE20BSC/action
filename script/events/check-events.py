@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Generate or check this repo's ABI event manifest baseline and event families.
+"""Generate or check this repo's ABI event manifest baseline, event families, and emit style.
 
 Usage:
   python3 script/events/check-events.py [--update] [--no-build]
 
 Baseline: script/events/events-baseline.txt
 Families: script/events/event-families.txt  (one `EventName family` per line)
+Emit style: every non-`log_*` emit under src/, test/, script/ must use named
+arguments (`emit E({field: value})`, event-standards §6.11) with one field per
+line; zero-field events use `emit E()`.
 Only concrete contracts declared under src/ are included; interfaces, libraries,
 and abstract contracts are excluded. Requires forge on PATH unless --no-build is
 used with an existing out/ directory.
@@ -188,7 +191,138 @@ def check_families(events):
     return len(names)
 
 
+def mask_noncode(text):
+    out = list(text)
+    i, n, state = 0, len(text), None
+    while i < n:
+        c = text[i]
+        if state is None:
+            if c == "/" and i + 1 < n and text[i + 1] == "/":
+                state = "line"
+                out[i] = out[i + 1] = " "
+                i += 2
+                continue
+            if c == "/" and i + 1 < n and text[i + 1] == "*":
+                state = "block"
+                out[i] = out[i + 1] = " "
+                i += 2
+                continue
+            if c in "\"'":
+                state = c
+                out[i] = " "
+                i += 1
+                continue
+            i += 1
+            continue
+        if state == "line":
+            if c == "\n":
+                state = None
+                i += 1
+                continue
+            out[i] = " "
+            i += 1
+            continue
+        if state == "block":
+            if c == "*" and i + 1 < n and text[i + 1] == "/":
+                out[i] = out[i + 1] = " "
+                state = None
+                i += 2
+                continue
+            out[i] = " "
+            i += 1
+            continue
+        if c == "\\":
+            out[i] = " "
+            if i + 1 < n:
+                out[i + 1] = " "
+            i += 2
+            continue
+        if c == state:
+            state = None
+            out[i] = " "
+            i += 1
+            continue
+        out[i] = " "
+        i += 1
+    return "".join(out)
+
+
+EMIT_RE = re.compile(r"\bemit\s+([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\(")
+
+
+def kv_entry_lines(masked, text, brace):
+    depth = 0
+    end = brace
+    while end < len(masked):
+        if masked[end] == "{":
+            depth += 1
+        elif masked[end] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        end += 1
+    lines = []
+    seg = brace + 1
+    depth = 0
+    for i in range(seg, end + 1):
+        if i < end:
+            c = masked[i]
+            if c in "([{":
+                depth += 1
+                continue
+            if c in ")]}":
+                depth -= 1
+                continue
+            if c != "," or depth:
+                continue
+        entry = text[seg:i]
+        stripped = entry.lstrip()
+        if stripped:
+            lines.append(text.count("\n", 0, seg + len(entry) - len(stripped)) + 1)
+        seg = i + 1
+    return end, lines
+
+
+def check_emit_style():
+    problems = []
+    for root in ("src", "test", "script"):
+        base = REPO / root
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.sol")):
+            text = path.read_text()
+            masked = mask_noncode(text)
+            for match in EMIT_RE.finditer(masked):
+                name = match.group(1).rsplit(".", 1)[-1].strip()
+                if name.startswith("log_"):
+                    continue
+                k = match.end()
+                while k < len(masked) and masked[k].isspace():
+                    k += 1
+                if k < len(masked) and masked[k] == "{":
+                    line = text.count("\n", 0, match.start()) + 1
+                    end, lines = kv_entry_lines(masked, text, k)
+                    if not lines:
+                        problems.append(f"{path.relative_to(REPO)}:{line}: {name} (zero-field events use `emit E()`)")
+                        continue
+                    brace_line = text.count("\n", 0, k) + 1
+                    close_line = text.count("\n", 0, end) + 1
+                    ordered = brace_line < lines[0] and lines[-1] < close_line
+                    ordered = ordered and all(lines[i] > lines[i - 1] for i in range(1, len(lines)))
+                    if not ordered:
+                        problems.append(f"{path.relative_to(REPO)}:{line}: {name} (each field on its own line)")
+                    continue
+                # Zero-field events cannot be named; the only valid emit is `emit E()`.
+                if k < len(masked) and masked[k] == ")":
+                    continue
+                line = text.count("\n", 0, match.start()) + 1
+                problems.append(f"{path.relative_to(REPO)}:{line}: {name} (positional arguments)")
+    if problems:
+        sys.exit("emit style violations (event-standards §6.11):\n  " + "\n  ".join(problems))
+
+
 def main():
+    check_emit_style()
     lines = load_events()
     baseline = EVENTS_DIR / "events-baseline.txt"
     parsed = parse_baseline(lines)
@@ -197,7 +331,7 @@ def main():
         count = check_families(parsed)
         baseline.write_text("\n".join(lines) + "\n")
         print(f"wrote {len(lines)} events to {baseline}")
-        print(f"event families OK: {count} protocol events")
+        print(f"event families OK: {count} protocol events; emit style OK")
         return
 
     if not baseline.exists():
@@ -216,7 +350,7 @@ def main():
         sys.exit(1)
 
     check_families(parsed)
-    print(f"event manifest OK: {len(lines)} events; families OK")
+    print(f"event manifest OK: {len(lines)} events; families OK; emit style OK")
 
 
 if __name__ == "__main__":

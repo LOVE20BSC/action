@@ -9,9 +9,13 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
     function testLpActionCreatedEvent() external {
         _atPhase(CREATION_PHASE);
         vm.expectEmit(true, true, true, true);
-        emit LpActionCreated(
-            address(token), SECOND_ACTION_ID, address(joinToken), GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO
-        );
+        emit LpActionCreated({
+            tokenAddress: address(token),
+            actionId: SECOND_ACTION_ID,
+            joinTokenAddress: address(joinToken),
+            govRatioMultiplier: GOV_RATIO_MULTIPLIER,
+            minGovRatio: MIN_GOV_RATIO
+        });
         _createAction(SECOND_ACTION_ID);
     }
 
@@ -39,7 +43,13 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
     function testLpJoinedEvent() external {
         _atPhaseBlock(3, 3300);
         vm.expectEmit(true, true, true, true);
-        emit LpJoined(address(token), ACTION_ID, 1, 2, 100e18);
+        emit LpJoined({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: 1,
+            round: 2,
+            amount: 100e18
+        });
         _join(1, 100e18);
     }
 
@@ -67,7 +77,13 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
         _atPhaseBlock(3, 3300);
         _join(1, 100e18);
         vm.expectEmit(true, true, true, true);
-        emit LpWithdrawn(address(token), ACTION_ID, 1, 2, 40e18);
+        emit LpWithdrawn({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: 1,
+            round: 2,
+            amount: 40e18
+        });
         _withdraw(1, 40e18);
     }
 
@@ -178,7 +194,14 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
         _fundExecutor(PROPOSAL_REWARD);
 
         vm.expectEmit(true, true, true, true);
-        emit MemberRewardMinted(address(token), ACTION_ID, 1, 2, 200e18, 800e18);
+        emit MemberRewardMinted({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: 1,
+            round: 2,
+            mintAmount: 200e18,
+            burnAmount: 800e18
+        });
         vm.prank(MEMBER1);
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
     }

@@ -144,7 +144,14 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _settleService(GROUP_ID);
 
         vm.expectEmit(true, true, true, true);
-        emit MemberRewardMinted(address(token), SERVICE_ACTION_ID, VERIFIER_ID, SERVICE_ROUND, 450e18, 0);
+        emit MemberRewardMinted({
+            tokenAddress: address(token),
+            actionId: SERVICE_ACTION_ID,
+            memberId: VERIFIER_ID,
+            round: SERVICE_ROUND,
+            mintAmount: 450e18,
+            burnAmount: 0
+        });
         (uint256 mintAmount, uint256 burnAmount) = _settleService(VERIFIER_ID);
         require(mintAmount == 450e18 && burnAmount == 0, "verifier paid the whole verifier share");
 
@@ -164,7 +171,12 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _atPhase(VERIFY_PHASE);
 
         vm.expectEmit(true, true, true, true);
-        emit ServiceExited(address(token), SERVICE_ACTION_ID, GROUP_ID, VERIFY_PHASE - 1);
+        emit ServiceExited({
+            serviceTokenAddress: address(token),
+            serviceActionId: SERVICE_ACTION_ID,
+            memberId: GROUP_ID,
+            round: VERIFY_PHASE - 1
+        });
         _exitService(GROUP_ID);
     }
 

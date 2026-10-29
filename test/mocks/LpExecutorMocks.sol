@@ -198,7 +198,13 @@ contract MockLpActionTarget {
         lastClearMemberId = memberId;
         _joined[tokenAddress][actionId][memberId] = false;
         if (emitClearEvent) {
-            emit JoinStateCleared(tokenAddress, actionId, memberId, 0, false);
+            emit JoinStateCleared({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                memberId: memberId,
+                round: 0,
+                forced: false
+            });
         }
     }
 

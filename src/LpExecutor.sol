@@ -258,7 +258,12 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         if (isFullExit) {
             IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
-            emit LpExited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
+            emit LpExited({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                memberId: memberId,
+                round: joinRound
+            });
         }
     }
 
@@ -282,7 +287,12 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IActionTarget(actionTarget).clearJoinState(tokenAddress, actionId, memberId);
 
-        emit LpExited({tokenAddress: tokenAddress, actionId: actionId, memberId: memberId, round: joinRound});
+        emit LpExited({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            memberId: memberId,
+            round: joinRound
+        });
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)

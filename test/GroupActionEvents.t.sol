@@ -58,17 +58,17 @@ contract GroupActionEventsTest is
 
         vm.prank(address(actionTarget));
         vm.expectEmit(true, true, true, true);
-        emit GroupActionCreated(
-            address(token),
-            ACTION_2,
-            address(joinToken),
-            ACTIVATION_STAKE,
-            PRECISION,
-            0,
-            VERIFIER_STAKE,
-            keys,
-            descriptions
-        );
+        emit GroupActionCreated({
+            tokenAddress: address(token),
+            actionId: ACTION_2,
+            joinTokenAddress: address(joinToken),
+            activationStakeAmount: ACTIVATION_STAKE,
+            maxJoinAmountRatio: PRECISION,
+            activationMinGovRatio: 0,
+            verifierStakeAmount: VERIFIER_STAKE,
+            verificationKeys: keys,
+            verificationDescriptions: descriptions
+        });
         executor.onProposalCreated(address(token), ACTION_2, data);
     }
 
@@ -105,15 +105,39 @@ contract GroupActionEventsTest is
 
         vm.prank(PROVIDER);
         vm.expectEmit(true, true, true, true);
-        emit ProviderQuotaAdded(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, MEMBER2_ID, 10e18, 70e18);
+        emit ProviderQuotaAdded({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            groupId: GROUP_ID,
+            providerId: PROVIDER_ID,
+            memberId: MEMBER2_ID,
+            amount: 10e18,
+            quotaTotal: 70e18
+        });
         executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID), _ids(10e18));
 
         vm.expectEmit(true, true, true, true);
-        emit GroupActionJoined(address(token), ACTION_ID, MEMBER2_ID, 2, GROUP_ID, PROVIDER_ID, 60e18, _strings());
+        emit GroupActionJoined({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER2_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: PROVIDER_ID,
+            amount: 60e18,
+            verificationValues: _strings()
+        });
         _join(MEMBER2_ID, 60e18, PROVIDER_ID);
 
         vm.expectEmit(true, true, true, true);
-        emit ProviderQuotaRemoved(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, GROUP_OWNER_ID, 40e18);
+        emit ProviderQuotaRemoved({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            groupId: GROUP_ID,
+            providerId: PROVIDER_ID,
+            memberId: GROUP_OWNER_ID,
+            amount: 40e18
+        });
         _quotaRemove(PROVIDER_ID, GROUP_OWNER_ID);
     }
 
@@ -129,7 +153,16 @@ contract GroupActionEventsTest is
         string[] memory values = _strings("alice", "alice-gh");
         vm.prank(MEMBER1);
         vm.expectEmit(true, true, true, true);
-        emit GroupActionJoined(address(token), ACTION_ID, MEMBER1_ID, 2, GROUP_ID, 0, 100e18, values);
+        emit GroupActionJoined({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER1_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: 0,
+            amount: 100e18,
+            verificationValues: values
+        });
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 100e18, 0, values);
     }
 
@@ -147,7 +180,16 @@ contract GroupActionEventsTest is
 
         vm.prank(MEMBER1);
         vm.expectEmit(true, true, true, true);
-        emit GroupActionJoined(address(token), ACTION_ID, MEMBER1_ID, 2, GROUP_ID, 0, 100e18, _strings());
+        emit GroupActionJoined({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER1_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: 0,
+            amount: 100e18,
+            verificationValues: _strings()
+        });
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 100e18, 0, _strings());
 
         require(
@@ -221,16 +263,41 @@ contract GroupActionEventsTest is
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 150e18);
 
         vm.expectEmit(true, true, true, true);
-        emit GroupActionJoined(address(token), ACTION_ID, MEMBER1_ID, 2, GROUP_ID, 0, 100e18, _strings());
+        emit GroupActionJoined({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER1_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: 0,
+            amount: 100e18,
+            verificationValues: _strings()
+        });
         _join(MEMBER1_ID, 100e18, 0);
         _join(MEMBER2_ID, 150e18, PROVIDER_ID);
 
         vm.expectEmit(true, true, true, true);
-        emit GroupActionWithdrawn(address(token), ACTION_ID, MEMBER1_ID, 2, GROUP_ID, 0, 40e18);
+        emit GroupActionWithdrawn({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER1_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: 0,
+            amount: 40e18
+        });
         _withdraw(MEMBER1_ID, 40e18);
 
         vm.expectEmit(true, true, true, true);
-        emit GroupActionWithdrawn(address(token), ACTION_ID, MEMBER2_ID, 2, GROUP_ID, PROVIDER_ID, 50e18);
+        emit GroupActionWithdrawn({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER2_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: PROVIDER_ID,
+            amount: 50e18
+        });
         vm.prank(PROVIDER);
         executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
     }
@@ -311,7 +378,18 @@ contract GroupActionEventsTest is
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE * 5);
 
         vm.expectEmit(true, true, true, true);
-        emit GroupActivated(address(token), ACTION_ID, 2, GROUP_ID, ACTIVATION_STAKE, 0, 1e18, 0, 0, "group");
+        emit GroupActivated({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            stakeAmount: ACTIVATION_STAKE,
+            maxCapacity: 0,
+            minJoinAmount: 1e18,
+            maxJoinAmount: 0,
+            maxAccounts: 0,
+            description: "group"
+        });
         _activateGroup();
 
         _atPhase(4);
@@ -323,35 +401,56 @@ contract GroupActionEventsTest is
             maxAccounts: 3
         });
         vm.expectEmit(true, true, true, true);
-        emit GroupConfigChanged(
-            address(token),
-            ACTION_ID,
-            3,
-            GROUP_ID,
-            500e18,
-            2e18,
-            20e18,
-            3,
-            "v2",
-            0,
-            1e18,
-            0,
-            0,
-            "group"
-        );
+        emit GroupConfigChanged({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            round: 3,
+            groupId: GROUP_ID,
+            maxCapacity: 500e18,
+            minJoinAmount: 2e18,
+            maxJoinAmount: 20e18,
+            maxAccounts: 3,
+            description: "v2",
+            prevMaxCapacity: 0,
+            prevMinJoinAmount: 1e18,
+            prevMaxJoinAmount: 0,
+            prevMaxAccounts: 0,
+            prevDescription: "group"
+        });
         vm.prank(GROUP_OWNER);
         executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
 
         vm.expectEmit(true, true, true, true);
-        emit GroupDeactivated(address(token), ACTION_ID, 3, GROUP_ID, ACTIVATION_STAKE);
+        emit GroupDeactivated({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            round: 3,
+            groupId: GROUP_ID,
+            stakeAmount: ACTIVATION_STAKE
+        });
         _deactivateGroup(GROUP_ID);
     }
 
     function testVerificationEvents() external {
         vm.expectEmit(true, true, true, true);
-        emit VerifierStakeDeposited(address(token), ACTION_ID, VERIFIER_ID, 2, VERIFIER_STAKE);
+        emit VerifierStakeDeposited({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 2,
+            amount: VERIFIER_STAKE
+        });
         vm.expectEmit(true, true, true, true);
-        emit VerifierApplicationSubmitted(address(token), ACTION_ID, VERIFIER_ID, 2, 1, 0, false, "verifier");
+        emit VerifierApplicationSubmitted({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 2,
+            applicationId: 1,
+            previousApplicationId: 0,
+            hasPreviousApplication: false,
+            description: "verifier"
+        });
         _submitApplication();
 
         _castVerifierVotes();
@@ -368,11 +467,26 @@ contract GroupActionEventsTest is
         uint256[] memory scores = _scores(100, 60);
         uint256 expectedTotal = 100e18 * 100 + PROVIDER_QUOTA * 60;
         vm.expectEmit(true, true, true, true);
-        emit VerifierLocked(address(token), ACTION_ID, VERIFIER_ID, 2);
+        emit VerifierLocked({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 2
+        });
         vm.expectEmit(true, true, true, true);
-        emit OriginScoresSubmitted(
-            address(token), ACTION_ID, GROUP_ID, 2, VERIFIER_ID, 0, expectedTotal, 1, true, true, scores
-        );
+        emit OriginScoresSubmitted({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            groupId: GROUP_ID,
+            round: 2,
+            verifierId: VERIFIER_ID,
+            startIndex: 0,
+            totalFinalScore: expectedTotal,
+            verifiedGroupCount: 1,
+            roundVerified: true,
+            groupVerified: true,
+            scores: scores
+        });
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, scores);
 
@@ -403,7 +517,16 @@ contract GroupActionEventsTest is
         _atPhase(4);
 
         vm.expectEmit(true, true, true, true);
-        emit ApplicationVoteRecorded(address(token), ACTION_ID, MEMBER2_ID, 4, 1, VERIFIER_ID, 60e18, 60e18);
+        emit ApplicationVoteRecorded({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            voterId: MEMBER2_ID,
+            round: 4,
+            applicationId: 1,
+            verifierId: VERIFIER_ID,
+            votesAdded: 60e18,
+            totalVotes: 60e18
+        });
         _castVotesFromAt(MEMBER2_ID, VERIFIER_ID, 60e18, 4);
     }
 
@@ -413,15 +536,29 @@ contract GroupActionEventsTest is
         // Distinct integers for every uint256 field so a swapped argument cannot pass: voter 4,
         // round 2, application 1, verifier 6, votes 100e18 / 60e18.
         vm.expectEmit(true, true, true, true);
-        emit ApplicationVoteRecorded(
-            address(token), ACTION_ID, PROVIDER_ID, CREATION_PHASE, 1, VERIFIER_ID, 100e18, 100e18
-        );
+        emit ApplicationVoteRecorded({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            voterId: PROVIDER_ID,
+            round: CREATION_PHASE,
+            applicationId: 1,
+            verifierId: VERIFIER_ID,
+            votesAdded: 100e18,
+            totalVotes: 100e18
+        });
         _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 100e18);
 
         vm.expectEmit(true, true, true, true);
-        emit ApplicationVoteRecorded(
-            address(token), ACTION_ID, PROVIDER_ID, CREATION_PHASE, 1, VERIFIER_ID, 60e18, 160e18
-        );
+        emit ApplicationVoteRecorded({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            voterId: PROVIDER_ID,
+            round: CREATION_PHASE,
+            applicationId: 1,
+            verifierId: VERIFIER_ID,
+            votesAdded: 60e18,
+            totalVotes: 160e18
+        });
         _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 60e18);
 
         (uint256[] memory voterIds, uint256[] memory votes, ) =
@@ -434,9 +571,21 @@ contract GroupActionEventsTest is
         _submitApplication();
 
         vm.expectEmit(true, true, true, true);
-        emit VerifierStakeRefunded(address(token), ACTION_ID, VERIFIER_ID, 2, VERIFIER_STAKE);
+        emit VerifierStakeRefunded({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 2,
+            amount: VERIFIER_STAKE
+        });
         vm.expectEmit(true, true, true, true);
-        emit VerifierApplicationCancelled(address(token), ACTION_ID, VERIFIER_ID, 2, 1);
+        emit VerifierApplicationCancelled({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 2,
+            applicationId: 1
+        });
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
     }
@@ -446,9 +595,21 @@ contract GroupActionEventsTest is
         _atPhase(4);
 
         vm.expectEmit(true, true, true, true);
-        emit VerifierStakeRefunded(address(token), ACTION_ID, VERIFIER_ID, 4, VERIFIER_STAKE);
+        emit VerifierStakeRefunded({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 4,
+            amount: VERIFIER_STAKE
+        });
         vm.expectEmit(true, true, true, true);
-        emit VerifierApplicationCancelled(address(token), ACTION_ID, VERIFIER_ID, 4, 1);
+        emit VerifierApplicationCancelled({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 4,
+            applicationId: 1
+        });
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
     }
@@ -457,7 +618,16 @@ contract GroupActionEventsTest is
         _submitApplication();
 
         vm.expectEmit(true, true, true, true);
-        emit VerifierApplicationSubmitted(address(token), ACTION_ID, VERIFIER_ID, 2, 2, 1, true, "replaced");
+        emit VerifierApplicationSubmitted({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            verifierId: VERIFIER_ID,
+            round: 2,
+            applicationId: 2,
+            previousApplicationId: 1,
+            hasPreviousApplication: true,
+            description: "replaced"
+        });
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
     }
@@ -514,7 +684,14 @@ contract GroupActionEventsTest is
 
         uint256 expected1 = Math.mulDiv(PROPOSAL_REWARD, 100e18 * 100, 100e18 * 100 + PROVIDER_QUOTA * 60);
         vm.expectEmit(true, true, true, true);
-        emit MemberRewardMinted(address(token), ACTION_ID, MEMBER1_ID, 2, expected1, 0);
+        emit MemberRewardMinted({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER1_ID,
+            round: 2,
+            mintAmount: expected1,
+            burnAmount: 0
+        });
         _settle(MEMBER1_ID, 2);
     }
 
@@ -551,17 +728,17 @@ contract GroupActionEventsTest is
 
         vm.prank(address(actionTarget));
         vm.expectEmit(true, true, true, true);
-        emit GroupActionCreated(
-            address(token),
-            ACTION_2,
-            address(joinToken),
-            ACTIVATION_STAKE,
-            PRECISION,
-            0,
-            VERIFIER_STAKE,
-            keys,
-            descriptions
-        );
+        emit GroupActionCreated({
+            tokenAddress: address(token),
+            actionId: ACTION_2,
+            joinTokenAddress: address(joinToken),
+            activationStakeAmount: ACTIVATION_STAKE,
+            maxJoinAmountRatio: PRECISION,
+            activationMinGovRatio: 0,
+            verifierStakeAmount: VERIFIER_STAKE,
+            verificationKeys: keys,
+            verificationDescriptions: descriptions
+        });
         executor.onProposalCreated(address(token), ACTION_2, data);
     }
 
@@ -641,7 +818,16 @@ contract GroupActionEventsTest is
 
         vm.prank(MEMBER1);
         vm.expectEmit(true, true, true, true);
-        emit GroupActionJoined(address(token), ACTION_ID, MEMBER1_ID, 2, GROUP_ID, 0, 100e18, values);
+        emit GroupActionJoined({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER1_ID,
+            round: 2,
+            groupId: GROUP_ID,
+            providerId: 0,
+            amount: 100e18,
+            verificationValues: values
+        });
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 100e18, 0, values);
     }
 
