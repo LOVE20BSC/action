@@ -5,14 +5,33 @@ import {IActionExecutor} from "./IActionExecutor.sol";
 
 interface ILpExecutorErrors {
     error ZeroJoinTokenAddress();
-    error InvalidJoinTokenFactory(address joinToken, address factory);
+    error InvalidJoinTokenFactory(
+        address joinToken,
+        address factory
+    );
     error InvalidMinGovRatio(uint256 value);
-    error InsufficientGovRatio(uint256 required, uint256 actual);
-    error TargetDataLengthMismatch(uint256 expected, uint256 actual);
-    error InvalidTargetDataShape(uint256 index, uint256 length);
+    error InsufficientGovRatio(
+        uint256 required,
+        uint256 actual
+    );
+    error TargetDataLengthMismatch(
+        uint256 expected,
+        uint256 actual
+    );
+    error InvalidTargetDataShape(
+        uint256 index,
+        uint256 length
+    );
     error ZeroParticipationAmount();
-    error WithdrawAmountExceeded(uint256 amount, uint256 joined);
-    error NotJoined(address tokenAddress, uint256 actionId, uint256 memberId);
+    error WithdrawAmountExceeded(
+        uint256 amount,
+        uint256 joined
+    );
+    error NotJoined(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    );
 }
 
 interface ILpExecutorEvents {

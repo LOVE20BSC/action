@@ -36,22 +36,46 @@ interface IActionTargetErrors {
     error NotSubmit(address caller);
     error NotVote(address caller);
     error NotMemberOwner(uint256 memberId);
-    error UnboundProposal(address tokenAddress, uint256 proposalId);
-    error UnauthorizedExecutor(address tokenAddress, uint256 actionId);
+    error UnboundProposal(
+        address tokenAddress,
+        uint256 proposalId
+    );
+    error UnauthorizedExecutor(
+        address tokenAddress,
+        uint256 actionId
+    );
     error JoinNotOpen(
         address tokenAddress,
         uint256 actionId,
         uint256 currentRound,
         uint256 createdRound
     );
-    error ProposalNotVoted(address tokenAddress, uint256 proposalId);
-    error TargetDataLengthMismatch(uint256 expected, uint256 actual);
-    error InvalidTargetDataShape(uint256 index, uint256 length);
+    error ProposalNotVoted(
+        address tokenAddress,
+        uint256 proposalId
+    );
+    error TargetDataLengthMismatch(
+        uint256 expected,
+        uint256 actual
+    );
+    error InvalidTargetDataShape(
+        uint256 index,
+        uint256 length
+    );
     error ExecutorNotContract(address executor);
-    error ExecutorTargetMismatch(address expected, address actual);
+    error ExecutorTargetMismatch(
+        address expected,
+        address actual
+    );
     error ExecutorHandshakeFailed(address executor);
-    error TargetDataExecutorMismatch(address expected, address actual);
-    error AlreadyCreated(address tokenAddress, uint256 actionId);
+    error TargetDataExecutorMismatch(
+        address expected,
+        address actual
+    );
+    error AlreadyCreated(
+        address tokenAddress,
+        uint256 actionId
+    );
 }
 
 interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetErrors {

@@ -74,16 +74,46 @@ interface IGroupActionVerifyEvents {
 
 interface IGroupActionVerifyErrors {
     error OriginScoresEmpty();
-    error VerifierNotRanked(uint256 verifierId, uint256 round);
-    error VerifierNotOpen(uint256 verifierId, uint256 round);
-    error ScoreLimitExceeded(uint256 index, uint256 score, uint256 maxScore);
-    error GroupVerificationAlreadyComplete(uint256 groupId, uint256 round);
-    error VerificationBatchTooLarge(uint256 count, uint256 maxCount);
-    error StartIndexMismatch(uint256 expected, uint256 actual);
-    error ScoreCountExceeded(uint256 startIndex, uint256 count, uint256 memberCount);
-    error ZeroVerifyVotes(address tokenAddress, uint256 verifierId);
+    error VerifierNotRanked(
+        uint256 verifierId,
+        uint256 round
+    );
+    error VerifierNotOpen(
+        uint256 verifierId,
+        uint256 round
+    );
+    error ScoreLimitExceeded(
+        uint256 index,
+        uint256 score,
+        uint256 maxScore
+    );
+    error GroupVerificationAlreadyComplete(
+        uint256 groupId,
+        uint256 round
+    );
+    error VerificationBatchTooLarge(
+        uint256 count,
+        uint256 maxCount
+    );
+    error StartIndexMismatch(
+        uint256 expected,
+        uint256 actual
+    );
+    error ScoreCountExceeded(
+        uint256 startIndex,
+        uint256 count,
+        uint256 memberCount
+    );
+    error ZeroVerifyVotes(
+        address tokenAddress,
+        uint256 verifierId
+    );
     error NoActiveApplication(uint256 verifierId);
-    error VerifierAlreadyLocked(address tokenAddress, uint256 actionId, uint256 round);
+    error VerifierAlreadyLocked(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round
+    );
 }
 
 interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGroupActionVerifyErrors {

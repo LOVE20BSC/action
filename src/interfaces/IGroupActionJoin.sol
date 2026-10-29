@@ -57,22 +57,73 @@ interface IGroupActionJoinEvents {
 
 interface IGroupActionJoinErrors {
     error ZeroParticipationAmount();
-    error AlreadyInOtherGroup(uint256 memberId, uint256 existingGroupId, uint256 requestedGroupId);
-    error NotJoined(address tokenAddress, uint256 actionId, uint256 memberId);
-    error ActionMaxJoinAmountExceeded(uint256 memberId, uint256 actual, uint256 limit);
-    error GroupMaxJoinAmountExceeded(uint256 memberId, uint256 actual, uint256 limit);
-    error GroupCapacityExceeded(uint256 groupId, uint256 actual, uint256 limit);
-    error GroupAccountsFull(uint256 groupId, uint256 count, uint256 maxCount);
-    error BelowMinJoinAmount(uint256 actual, uint256 minAmount);
-    error WithdrawAmountExceeded(uint256 amount, uint256 joined);
-    error ProviderWithdrawAmountExceeded(uint256 amount, uint256 invested);
-    error QuotaArrayLengthMismatch(uint256 memberIdsLength, uint256 amountsLength);
+    error AlreadyInOtherGroup(
+        uint256 memberId,
+        uint256 existingGroupId,
+        uint256 requestedGroupId
+    );
+    error NotJoined(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    );
+    error ActionMaxJoinAmountExceeded(
+        uint256 memberId,
+        uint256 actual,
+        uint256 limit
+    );
+    error GroupMaxJoinAmountExceeded(
+        uint256 memberId,
+        uint256 actual,
+        uint256 limit
+    );
+    error GroupCapacityExceeded(
+        uint256 groupId,
+        uint256 actual,
+        uint256 limit
+    );
+    error GroupAccountsFull(
+        uint256 groupId,
+        uint256 count,
+        uint256 maxCount
+    );
+    error BelowMinJoinAmount(
+        uint256 actual,
+        uint256 minAmount
+    );
+    error WithdrawAmountExceeded(
+        uint256 amount,
+        uint256 joined
+    );
+    error ProviderWithdrawAmountExceeded(
+        uint256 amount,
+        uint256 invested
+    );
+    error QuotaArrayLengthMismatch(
+        uint256 memberIdsLength,
+        uint256 amountsLength
+    );
     error QuotaMemberIsProvider(uint256 providerId);
     error ZeroQuotaAmount(uint256 memberId);
-    error QuotaNotGranted(uint256 groupId, uint256 providerId, uint256 memberId);
-    error InsufficientProviderQuota(uint256 providerId, uint256 required, uint256 available);
-    error TooManyVerificationValues(uint256 count, uint256 maxCount);
-    error VerificationValueTooLong(uint256 index, uint256 length, uint256 maxLength);
+    error QuotaNotGranted(
+        uint256 groupId,
+        uint256 providerId,
+        uint256 memberId
+    );
+    error InsufficientProviderQuota(
+        uint256 providerId,
+        uint256 required,
+        uint256 available
+    );
+    error TooManyVerificationValues(
+        uint256 count,
+        uint256 maxCount
+    );
+    error VerificationValueTooLong(
+        uint256 index,
+        uint256 length,
+        uint256 maxLength
+    );
 }
 
 interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {

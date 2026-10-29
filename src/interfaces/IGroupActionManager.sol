@@ -52,14 +52,35 @@ interface IGroupActionManagerErrors {
     error GroupNotActive(uint256 groupId);
     error GroupNotExist(uint256 groupId);
     error InvalidMinJoinAmount(uint256 minAmount);
-    error InvalidMaxJoinAmount(uint256 minAmount, uint256 maxAmount);
-    error DeactivationLockedInActivatedRound(uint256 groupId, uint256 round);
+    error InvalidMaxJoinAmount(
+        uint256 minAmount,
+        uint256 maxAmount
+    );
+    error DeactivationLockedInActivatedRound(
+        uint256 groupId,
+        uint256 round
+    );
     error NotGroupOwner(uint256 groupId);
-    error InsufficientActivationMinGovRatio(uint256 groupId, uint256 required, uint256 actual);
+    error InsufficientActivationMinGovRatio(
+        uint256 groupId,
+        uint256 required,
+        uint256 actual
+    );
     error NoGovVotes(address tokenAddress);
-    error TooManyVerificationEntries(uint256 count, uint256 maxCount);
-    error VerificationKeyTooLong(uint256 index, uint256 length, uint256 maxLength);
-    error VerificationDescriptionTooLong(uint256 index, uint256 length, uint256 maxLength);
+    error TooManyVerificationEntries(
+        uint256 count,
+        uint256 maxCount
+    );
+    error VerificationKeyTooLong(
+        uint256 index,
+        uint256 length,
+        uint256 maxLength
+    );
+    error VerificationDescriptionTooLong(
+        uint256 index,
+        uint256 length,
+        uint256 maxLength
+    );
 }
 
 interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerErrors {

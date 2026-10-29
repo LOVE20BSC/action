@@ -116,7 +116,12 @@ contract MockGroupServiceMint {
 ///         (`currentRound > createdRound`), round snapshots keep history —
 ///         clearing only removes the current join round, never past rounds.
 contract MockGroupServiceActionTarget {
-    error JoinNotOpen(address tokenAddress, uint256 actionId, uint256 currentRound, uint256 createdRound);
+    error JoinNotOpen(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 currentRound,
+        uint256 createdRound
+    );
 
     address public phaseAddress;
     address public mintAddress;

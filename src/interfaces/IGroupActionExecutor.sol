@@ -25,10 +25,22 @@ interface IGroupActionExecutorErrors {
     error ZeroJoinTokenAddress();
     error InvalidMaxJoinAmountRatio(uint256 value);
     error InvalidActivationMinGovRatio(uint256 value);
-    error TargetDataLengthMismatch(uint256 expected, uint256 actual);
-    error InvalidTargetDataShape(uint256 index, uint256 length);
-    error VerificationInfoLengthMismatch(uint256 expected, uint256 actual);
-    error DescriptionTooLong(uint256 length, uint256 maxLength);
+    error TargetDataLengthMismatch(
+        uint256 expected,
+        uint256 actual
+    );
+    error InvalidTargetDataShape(
+        uint256 index,
+        uint256 length
+    );
+    error VerificationInfoLengthMismatch(
+        uint256 expected,
+        uint256 actual
+    );
+    error DescriptionTooLong(
+        uint256 length,
+        uint256 maxLength
+    );
 }
 
 interface IGroupActionExecutor is
