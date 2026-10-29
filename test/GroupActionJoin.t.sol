@@ -64,7 +64,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(memberIds[0] == MEMBER1_ID && memberIds[1] == MEMBER2_ID, "member set order");
     }
 
-    function testProviderQuotaAddRemoveRefundsOnlyUnused() external {
+    function testProviderQuotaRemoveTakesBackTheWholeGrant() external {
         _openJoinPhase();
         _fundJoinTokenFor(PROVIDER, 200e18);
 
@@ -73,29 +73,161 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
 
         _join(MEMBER2_ID, 150e18, PROVIDER_ID);
         require(joinToken.balanceOf(address(executor)) == 200e18, "join moves no tokens");
+        require(executor.isGroupMember(GROUP_ID, MEMBER2_ID), "member joined");
 
-        (uint256[] memory memberIds, uint256[] memory amounts, , uint256 total) =
-            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
-        require(total == 1 && memberIds[0] == MEMBER2_ID && amounts[0] == 50e18, "remaining quota enumerated");
+        (uint256[] memory memberIds, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && memberIds[0] == MEMBER2_ID, "grant enumerated");
+        require(quotaAmounts[0] == 200e18 && used[0] == 150e18, "granted and used tracked");
 
         uint256 providerBefore = joinToken.balanceOf(PROVIDER);
         _quotaRemove(PROVIDER_ID, MEMBER2_ID);
-        require(joinToken.balanceOf(PROVIDER) - providerBefore == 50e18, "only unused refunded");
-        require(joinToken.balanceOf(address(executor)) == 150e18, "invested part stays");
+        require(joinToken.balanceOf(PROVIDER) - providerBefore == 200e18, "whole grant refunded");
+        require(joinToken.balanceOf(address(executor)) == 0, "used part leaves with the grant");
+
+        (memberIds, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 0 && quotaAmounts.length == 0, "removed grant leaves the list");
+        require(!executor.isGroupMember(GROUP_ID, MEMBER2_ID), "without quota the member exits");
 
         vm.prank(PROVIDER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.QuotaNotGranted.selector, GROUP_ID, PROVIDER_ID, MEMBER2_ID));
         executor.providerQuotaRemove(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID));
+    }
+
+    function testProviderQuotaUsedAmountIsScopedToCurrentGroup() external {
+        _openJoinPhase();
+        memberNFT.setOwner(GROUP_B_ID, GROUP_OWNER);
+        _activateGroupWith(GROUP_B_ID, _defaultConfig());
+        _fundJoinTokenFor(PROVIDER, 200e18);
+
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 100e18);
+        _join(MEMBER2_ID, 60e18, PROVIDER_ID);
+        vm.prank(PROVIDER);
+        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, _ids(MEMBER2_ID), _ids(100e18));
 
         _exit(MEMBER2_ID);
-        require(joinToken.balanceOf(address(executor)) == 150e18, "restored quota stays inside");
-        (memberIds, amounts, , total) = executor.providerQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
-        require(total == 1 && memberIds[0] == MEMBER2_ID && amounts[0] == 150e18, "quota restored on exit");
+        _joinAt(GROUP_B_ID, MEMBER2_ID, 70e18, PROVIDER_ID);
 
-        providerBefore = joinToken.balanceOf(PROVIDER);
+        (uint256[] memory ids, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && ids[0] == MEMBER2_ID, "old group grant kept");
+        require(quotaAmounts[0] == 100e18 && used[0] == 0, "usage not attributed to the old group");
+
+        (ids, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && ids[0] == MEMBER2_ID, "new group grant listed");
+        require(quotaAmounts[0] == 100e18 && used[0] == 70e18, "usage attributed to the current group");
+
+        vm.prank(PROVIDER);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 60e18);
+
+        (ids, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && quotaAmounts[0] == 40e18 && used[0] == 0, "stale group grant shrinks by the withdrawn part");
+
+        (ids, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && ids[0] == MEMBER2_ID, "current group grant untouched");
+        require(quotaAmounts[0] == 100e18 && used[0] == 70e18, "current group usage untouched");
+
+        vm.prank(PROVIDER);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_B_ID, MEMBER2_ID, PROVIDER_ID, 30e18);
+
+        (ids, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && quotaAmounts[0] == 70e18 && used[0] == 70e18, "current group withdraw capped by availability");
+
+        (uint256 joinedRound, uint256 amount, , , ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        require(joinedRound == 2 && amount == 70e18, "withdraw leaves participation intact");
+    }
+
+    function testProviderQuotaRemoveReleasesGrantOfLeftGroup() external {
+        _openJoinPhase();
+        memberNFT.setOwner(GROUP_B_ID, GROUP_OWNER);
+        _activateGroupWith(GROUP_B_ID, _defaultConfig());
+        _fundJoinTokenFor(PROVIDER, 200e18);
+
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 100e18);
+        _join(MEMBER2_ID, 60e18, PROVIDER_ID);
+        vm.prank(PROVIDER);
+        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, _ids(MEMBER2_ID), _ids(100e18));
+        _exit(MEMBER2_ID);
+        _joinAt(GROUP_B_ID, MEMBER2_ID, 70e18, PROVIDER_ID);
+
+        uint256 providerBefore = joinToken.balanceOf(PROVIDER);
         _quotaRemove(PROVIDER_ID, MEMBER2_ID);
-        require(joinToken.balanceOf(PROVIDER) - providerBefore == 150e18, "restored quota leaves the contract");
-        require(joinToken.balanceOf(address(executor)) == 0, "contract emptied");
+        require(joinToken.balanceOf(PROVIDER) - providerBefore == 100e18, "stale grant refunded in full");
+
+        (uint256[] memory ids, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 0, "released stale grant leaves the list");
+
+        (ids, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && ids[0] == MEMBER2_ID, "current group grant untouched");
+        require(quotaAmounts[0] == 100e18 && used[0] == 70e18, "current group usage untouched");
+    }
+
+    function testProviderQuotaWithdrawIsPartialAndKeepsParticipation() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 100e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 100e18);
+        _join(MEMBER2_ID, 40e18, PROVIDER_ID);
+
+        vm.prank(PROVIDER);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 40e18);
+        (uint256[] memory ids, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && ids[0] == MEMBER2_ID, "partially withdrawn grant stays listed");
+        require(quotaAmounts[0] == 60e18 && used[0] == 40e18, "withdraw only takes the unused part");
+
+        vm.prank(PROVIDER);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 20e18);
+        (ids, quotaAmounts, used, total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && quotaAmounts[0] == 40e18 && used[0] == 40e18, "fully used grant stays listed");
+
+        vm.prank(PROVIDER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InsufficientProviderQuota.selector, PROVIDER_ID, 1, 0));
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 1);
+
+        (uint256 joinedRound, uint256 amount, , , ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        require(joinedRound == 2 && amount == 40e18, "withdraw leaves participation intact");
+    }
+
+    function testProviderQuotaWithdrawDropsAnUnusedRow() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 50e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 50e18);
+
+        vm.prank(PROVIDER);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
+        (, , , uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 0, "withdrawn unused grant leaves the list");
+    }
+
+    function testProviderQuotaAddAfterRemoveStartsFromZero() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 200e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 100e18);
+        _join(MEMBER2_ID, 60e18, PROVIDER_ID);
+
+        _quotaRemove(PROVIDER_ID, MEMBER2_ID);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 25e18);
+
+        (uint256[] memory ids, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && ids[0] == MEMBER2_ID, "regrant listed");
+        require(quotaAmounts[0] == 25e18 && used[0] == 0, "regrant starts from zero");
+
+        _join(MEMBER2_ID, 25e18, PROVIDER_ID);
+        vm.prank(MEMBER2);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionJoinErrors.InsufficientProviderQuota.selector, PROVIDER_ID, 1, 0)
+        );
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, 1, PROVIDER_ID, new string[](0));
     }
 
     function testJoinRejectsAmountAboveProviderQuota() external {
@@ -129,9 +261,10 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         (uint256 joinedRound, uint256 amount, , , ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
         require(joinedRound == 0 && amount == 0, "membership cleared");
 
-        (uint256[] memory memberIds, uint256[] memory amounts, , uint256 total) =
-            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
-        require(total == 1 && memberIds[0] == MEMBER2_ID && amounts[0] == 150e18, "invested restored as quota");
+        (uint256[] memory memberIds, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && memberIds[0] == MEMBER2_ID, "grant enumerated");
+        require(quotaAmounts[0] == 150e18 && used[0] == 0, "invested restored as quota");
 
         _join(MEMBER2_ID, 150e18, PROVIDER_ID);
         require(joinToken.balanceOf(address(executor)) == 150e18, "re-join moves no new tokens");
@@ -165,25 +298,25 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(actionTarget.clearCalls() == 1, "cleared once");
     }
 
-    function testProviderWithdrawReturnsInvestedAndUnlocksExit() external {
+    function testProviderQuotaWithdrawLeavesParticipationIntact() external {
         _openJoinPhase();
         _fundJoinTokenFor(PROVIDER, 150e18);
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 150e18);
-        _join(MEMBER2_ID, 150e18, PROVIDER_ID);
+        _join(MEMBER2_ID, 100e18, PROVIDER_ID);
 
         uint256 before = joinToken.balanceOf(PROVIDER);
         vm.prank(PROVIDER);
-        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
-        require(joinToken.balanceOf(PROVIDER) - before == 50e18, "partial provider withdraw paid");
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
+        require(joinToken.balanceOf(PROVIDER) - before == 50e18, "unused quota paid out");
         (uint256 joinedRound, uint256 amount, , , ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
-        require(joinedRound == 2 && amount == 100e18, "membership survives partial withdraw");
+        require(joinedRound == 2 && amount == 100e18, "participation untouched");
+        require(executor.isGroupMember(GROUP_ID, MEMBER2_ID), "member stays joined");
 
         before = joinToken.balanceOf(PROVIDER);
-        vm.prank(PROVIDER);
-        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 100e18);
-        require(joinToken.balanceOf(PROVIDER) - before == 100e18, "full provider withdraw paid");
+        _quotaRemove(PROVIDER_ID, MEMBER2_ID);
+        require(joinToken.balanceOf(PROVIDER) - before == 100e18, "revoke returns the used part");
         (joinedRound, amount, , , ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
-        require(joinedRound == 0 && amount == 0, "emptied member exits");
+        require(joinedRound == 0 && amount == 0, "revoke without quota exits");
     }
 
     function testJoinRejectsUnboundedVerificationValues() external {
@@ -292,11 +425,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(PROVIDER, 1e18);
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 1e18);
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroParticipationAmount.selector));
-        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 0);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroQuotaAmount.selector, MEMBER2_ID));
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 0);
     }
 
-    function testProviderWithdrawAmountExceeded() external {
+    function testProviderQuotaWithdrawAmountExceeded() external {
         _openJoinPhase();
         _fundJoinTokenFor(PROVIDER, 2e18);
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 2e18);
@@ -305,10 +438,10 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         vm.prank(PROVIDER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IGroupActionJoinErrors.ProviderWithdrawAmountExceeded.selector, 1e18 + 1, 1e18
+                IGroupActionJoinErrors.InsufficientProviderQuota.selector, PROVIDER_ID, 1e18 + 1, 1e18
             )
         );
-        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 1e18 + 1);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 1e18 + 1);
     }
 
     function testProviderQuotaReverts() external {
@@ -358,6 +491,6 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, PROVIDER_ID));
-        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 1e18);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 1e18);
     }
 }

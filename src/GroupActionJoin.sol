@@ -151,45 +151,45 @@ library GroupActionJoin {
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
-    function providerWithdraw(
+    function providerQuotaWithdraw(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
+        uint256 groupId,
         uint256 memberId,
         uint256 providerId,
         uint256 amount
     ) external onlyMemberOwner(s, providerId) {
         if (amount == 0) {
-            revert IGroupActionJoinErrors.ZeroParticipationAmount();
+            revert IGroupActionJoinErrors.ZeroQuotaAmount(memberId);
         }
-
-        uint256 round = s.currentJoinRound();
-        uint256 invested = s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
-        if (amount > invested) {
-            revert IGroupActionJoinErrors.ProviderWithdrawAmountExceeded(amount, invested);
+        if (groupId == 0) {
+            revert IGroupActionManagerErrors.GroupNotExist(0);
         }
-        uint256 groupId = s.groupHistory[tokenAddress][actionId][memberId].latestValue();
+        GroupActionManager.groupOwnerOrRevert(s, groupId);
 
-        _decreaseProviderAmount(s, tokenAddress, actionId, round, groupId, memberId, providerId, amount);
+        uint256 quota = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId];
+        uint256 available = quota - _quotaUsedAt(s, tokenAddress, actionId, groupId, providerId, memberId);
+        if (amount > available) {
+            revert IGroupActionJoinErrors.InsufficientProviderQuota(providerId, amount, available);
+        }
+        uint256 quotaAfter = quota - amount;
+        s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = quotaAfter;
+        if (quotaAfter == 0) {
+            s.quotaMemberIds[tokenAddress][actionId][groupId][providerId].remove(memberId);
+        }
 
         IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
-        emit IGroupActionJoinEvents.GroupActionWithdrawn({
+        emit IGroupActionJoinEvents.ProviderQuotaRemoved({
             tokenAddress: tokenAddress,
             actionId: actionId,
-            memberId: memberId,
-            round: round,
             groupId: groupId,
             providerId: providerId,
-            amount: amount
+            memberId: memberId,
+            amount: amount,
+            quotaTotal: quotaAfter
         });
-
-        if (
-            s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0
-                && s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0
-        ) {
-            _finalizeExit(s, tokenAddress, actionId, round, groupId, memberId);
-        }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -220,12 +220,12 @@ library GroupActionJoin {
             });
         }
 
-        _refundProviders(s, tokenAddress, actionId, round, groupId, memberId);
+        _restoreProviders(s, tokenAddress, actionId, round, groupId, memberId);
 
         _finalizeExit(s, tokenAddress, actionId, round, groupId, memberId);
     }
 
-    function _refundProviders(
+    function _restoreProviders(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
@@ -247,11 +247,8 @@ library GroupActionJoin {
                 continue;
             }
             _decreaseProviderAmount(s, tokenAddress, actionId, round, groupId, memberId, providerIds[i], invested);
-            s.quotaAmount[tokenAddress][actionId][groupId][providerIds[i]][memberId] += invested;
-            s.quotaMemberIds[tokenAddress][actionId][groupId][providerIds[i]].add(memberId);
-            s.quotaBlockNumber[tokenAddress][actionId][groupId][providerIds[i]][memberId] = block.number;
 
-            emit IGroupActionJoinEvents.ProviderQuotaRefunded({
+            emit IGroupActionJoinEvents.ProviderQuotaRestored({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
                 groupId: groupId,
@@ -375,7 +372,6 @@ library GroupActionJoin {
             uint256 quotaTotal = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] + amounts[i];
             s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = quotaTotal;
             s.quotaMemberIds[tokenAddress][actionId][groupId][providerId].add(memberId);
-            s.quotaBlockNumber[tokenAddress][actionId][groupId][providerId][memberId] = block.number;
             totalAmount += amounts[i];
 
             emit IGroupActionJoinEvents.ProviderQuotaAdded({
@@ -392,7 +388,7 @@ library GroupActionJoin {
         IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransferFrom(msg.sender, address(this), totalAmount);
     }
 
-    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
+    // forge-lint: disable-next-item(missing-events-access-control)
     function providerQuotaRemove(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
@@ -409,34 +405,80 @@ library GroupActionJoin {
             return;
         }
 
+        uint256 round = s.currentJoinRound();
         uint256 totalRefund = 0;
         for (uint256 i = 0; i < memberIds.length; i++) {
-            uint256 memberId = memberIds[i];
-            uint256 quota = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId];
-            if (quota == 0) {
-                revert IGroupActionJoinErrors.QuotaNotGranted(groupId, providerId, memberId);
-            }
+            totalRefund += _revokeQuota(s, tokenAddress, actionId, round, groupId, providerId, memberIds[i]);
+        }
 
-            s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = 0;
-            s.quotaMemberIds[tokenAddress][actionId][groupId][providerId].remove(memberId);
-            totalRefund += quota;
+        IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, totalRefund);
+    }
 
-            emit IGroupActionJoinEvents.ProviderQuotaRemoved({
+    function _revokeQuota(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 providerId,
+        uint256 memberId
+    ) private returns (uint256 refundable) {
+        uint256 used;
+        (refundable, used) = _removeQuota(s, tokenAddress, actionId, round, groupId, providerId, memberId);
+
+        if (used != 0) {
+            emit IGroupActionJoinEvents.GroupActionWithdrawn({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
+                memberId: memberId,
+                round: round,
                 groupId: groupId,
                 providerId: providerId,
-                memberId: memberId,
-                amount: quota
+                amount: used
             });
         }
 
-        if (totalRefund != 0) {
-            IERC20(s.joinTokenAddress[tokenAddress][actionId]).safeTransfer(msg.sender, totalRefund);
+        emit IGroupActionJoinEvents.ProviderQuotaRemoved({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            groupId: groupId,
+            providerId: providerId,
+            memberId: memberId,
+            amount: refundable,
+            quotaTotal: 0
+        });
+
+        if (
+            used != 0 && s.ownAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0
+                && s.providerAmountHistory[tokenAddress][actionId][memberId].latestValue() == 0
+        ) {
+            _finalizeExit(s, tokenAddress, actionId, round, groupId, memberId);
         }
     }
 
-    function providerQuota(
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _removeQuota(
+        GroupActionStorage.Layout storage s,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId,
+        uint256 providerId,
+        uint256 memberId
+    ) private returns (uint256 refundable, uint256 used) {
+        refundable = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId];
+        if (refundable == 0) {
+            revert IGroupActionJoinErrors.QuotaNotGranted(groupId, providerId, memberId);
+        }
+        used = _quotaUsedAt(s, tokenAddress, actionId, groupId, providerId, memberId);
+        if (used != 0) {
+            _decreaseProviderAmount(s, tokenAddress, actionId, round, groupId, memberId, providerId, used);
+        }
+        s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = 0;
+        s.quotaMemberIds[tokenAddress][actionId][groupId][providerId].remove(memberId);
+    }
+
+    function providerQuotas(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
@@ -450,41 +492,36 @@ library GroupActionJoin {
         view
         returns (
             uint256[] memory memberIds,
-            uint256[] memory amounts,
-            uint256[] memory blockNumbers,
+            uint256[] memory quotaAmounts,
+            uint256[] memory usedAmounts,
             uint256 total
         )
     {
         Uint256Set.Storage storage quotaSet = s.quotaMemberIds[tokenAddress][actionId][groupId][providerId];
         (memberIds, total) = quotaSet.values(offset, limit, reverse);
-        amounts = new uint256[](memberIds.length);
-        blockNumbers = new uint256[](memberIds.length);
+        quotaAmounts = new uint256[](memberIds.length);
+        usedAmounts = new uint256[](memberIds.length);
         for (uint256 i = 0; i < memberIds.length; i++) {
-            amounts[i] = _quotaAmountAt(s, tokenAddress, actionId, groupId, providerId, memberIds[i]);
-            blockNumbers[i] = _quotaBlockNumberAt(s, tokenAddress, actionId, groupId, providerId, memberIds[i]);
+            quotaAmounts[i] = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberIds[i]];
+            usedAmounts[i] = _quotaUsedAt(s, tokenAddress, actionId, groupId, providerId, memberIds[i]);
         }
     }
 
-    function _quotaAmountAt(
+    // Invested amounts are tracked without a group, while grants are per group: a member who
+    // left a group (their investment restored) and now uses the same provider elsewhere must
+    // not report that usage against the old group's grant.
+    function _quotaUsedAt(
         GroupActionStorage.Layout storage s,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId,
         uint256 memberId
-    ) internal view returns (uint256) {
-        return s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId];
-    }
-
-    function _quotaBlockNumberAt(
-        GroupActionStorage.Layout storage s,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 groupId,
-        uint256 providerId,
-        uint256 memberId
-    ) internal view returns (uint256) {
-        return s.quotaBlockNumber[tokenAddress][actionId][groupId][providerId][memberId];
+    ) private view returns (uint256) {
+        if (s.groupHistory[tokenAddress][actionId][memberId].latestValue() != groupId) {
+            return 0;
+        }
+        return s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
     }
 
     function providerAmountsByMemberId(
@@ -725,17 +762,13 @@ library GroupActionJoin {
         if (providerId == 0) {
             s.ownAmountHistory[tokenAddress][actionId][memberId].increase(round, amount);
         } else {
-            uint256 quota = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId];
-            if (amount > quota) {
-                revert IGroupActionJoinErrors.InsufficientProviderQuota(providerId, amount, quota);
-            }
-            quota -= amount;
-            s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] = quota;
-            if (quota == 0) {
-                s.quotaMemberIds[tokenAddress][actionId][groupId][providerId].remove(memberId);
+            uint256 invested = s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue();
+            uint256 available = s.quotaAmount[tokenAddress][actionId][groupId][providerId][memberId] - invested;
+            if (amount > available) {
+                revert IGroupActionJoinErrors.InsufficientProviderQuota(providerId, amount, available);
             }
 
-            if (s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].latestValue() == 0) {
+            if (invested == 0) {
                 s.providerIdsByMemberId[tokenAddress][actionId][memberId].add(round, providerId);
             }
             s.providerAmountByProviderId[tokenAddress][actionId][memberId][providerId].increase(round, amount);

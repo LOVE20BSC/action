@@ -28,6 +28,7 @@ contract GroupActionHandler {
     mapping(uint256 => uint256) public ownModel;
     mapping(uint256 => uint256) public providerModel;
     uint256 public quotaModel;
+    uint256 public grantModel;
 
     constructor(
         address executor_,
@@ -103,16 +104,19 @@ contract GroupActionHandler {
             )
         {
             quotaModel += amount;
+            grantModel += amount;
         } catch {}
     }
 
     function removeQuota() external {
-        if (quotaModel == 0) return;
+        if (grantModel == 0) return;
         uint256[] memory memberIds = new uint256[](1);
         memberIds[0] = MEMBER2_ID;
         vm.prank(provider);
         GroupActionExecutor(executor).providerQuotaRemove(token, ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds);
         quotaModel = 0;
+        grantModel = 0;
+        providerModel[MEMBER2_ID] = 0;
     }
 
     function withdrawOwn(uint256 seed) external {
@@ -139,13 +143,13 @@ contract GroupActionHandler {
         ownModel[memberId] = 0;
     }
 
-    function providerWithdraw(uint256 seed) external {
-        uint256 invested = providerModel[MEMBER2_ID];
-        if (invested == 0) return;
-        uint256 amount = (seed % invested) + 1;
+    function providerQuotaWithdraw(uint256 seed) external {
+        if (quotaModel == 0) return;
+        uint256 amount = (seed % quotaModel) + 1;
         vm.prank(provider);
-        GroupActionExecutor(executor).providerWithdraw(token, ACTION_ID, MEMBER2_ID, PROVIDER_ID, amount);
-        providerModel[MEMBER2_ID] -= amount;
+        GroupActionExecutor(executor).providerQuotaWithdraw(token, ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, amount);
+        quotaModel -= amount;
+        grantModel -= amount;
     }
 
     function _fund(address account, uint256 amount) internal {
@@ -218,6 +222,19 @@ contract GroupActionInvariantTest is GroupActionExecutorTestBase {
             require(total == 0, "no provider entries when uninvested");
         } else {
             require(total == 1 && providerIds[0] == PROVIDER_ID && amounts[0] == invested, "ledger matches model");
+        }
+    }
+
+    function invariant_ProviderGrantMatchesModel() public view {
+        (uint256[] memory memberIds, uint256[] memory quotaAmounts, uint256[] memory usedAmounts, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        uint256 grant = handler.grantModel();
+        if (grant == 0) {
+            require(total == 0, "no grant entries when ungranted");
+        } else {
+            require(total == 1 && memberIds[0] == MEMBER2_ID, "grant listed");
+            require(quotaAmounts[0] == grant, "grant matches model");
+            require(usedAmounts[0] == handler.providerModel(MEMBER2_ID), "used matches model");
         }
     }
 }

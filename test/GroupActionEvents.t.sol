@@ -136,7 +136,8 @@ contract GroupActionEventsTest is
             groupId: GROUP_ID,
             providerId: PROVIDER_ID,
             memberId: GROUP_OWNER_ID,
-            amount: 40e18
+            amount: 40e18,
+            quotaTotal: 0
         });
         _quotaRemove(PROVIDER_ID, GROUP_OWNER_ID);
     }
@@ -229,7 +230,7 @@ contract GroupActionEventsTest is
         vm.recordLogs();
         _exit(MEMBER2_ID);
         GroupActionExecutorVm.Log[] memory logs = vm.getRecordedLogs();
-        require(logs.length == 3, "own leg, provider refund, exited");
+        require(logs.length == 3, "own leg, provider restore, exited");
         require(
             logs[0].topics[0]
                 == keccak256("GroupActionWithdrawn(address,uint256,uint256,uint256,uint256,uint256,uint256)"),
@@ -240,14 +241,14 @@ contract GroupActionEventsTest is
         require(round == 2 && amount == 20e18 && providerId == 0 && groupId == GROUP_ID, "own leg fields");
         require(
             logs[1].topics[0]
-                == keccak256("ProviderQuotaRefunded(address,uint256,uint256,uint256,uint256,uint256)"),
-            "provider refund signature"
+                == keccak256("ProviderQuotaRestored(address,uint256,uint256,uint256,uint256,uint256)"),
+            "provider restore signature"
         );
-        (uint256 refundProviderId, uint256 refundMemberId, uint256 refundAmount) =
+        (uint256 restoredProviderId, uint256 restoredMemberId, uint256 restoredAmount) =
             abi.decode(logs[1].data, (uint256, uint256, uint256));
-        require(refundProviderId == PROVIDER_ID && refundMemberId == MEMBER2_ID, "provider refund parties");
-        require(refundAmount == 150e18, "provider refund amount");
-        require(logs[1].topics[3] == bytes32(GROUP_ID), "provider refund group topic");
+        require(restoredProviderId == PROVIDER_ID && restoredMemberId == MEMBER2_ID, "provider restore parties");
+        require(restoredAmount == 150e18, "provider restore amount");
+        require(logs[1].topics[3] == bytes32(GROUP_ID), "provider restore group topic");
         require(
             logs[2].topics[0] == keccak256("GroupActionExited(address,uint256,uint256,uint256,uint256)"),
             "exited signature"
@@ -256,7 +257,7 @@ contract GroupActionEventsTest is
         require(round == 2 && groupId == GROUP_ID, "exited fields");
     }
 
-    function testWithdrawAndProviderWithdrawEvents() external {
+    function testWithdrawAndProviderQuotaWithdrawEvents() external {
         _openJoinPhase();
         _fundJoinTokenFor(MEMBER1, 100e18);
         _fundJoinTokenFor(PROVIDER, 150e18);
@@ -274,7 +275,7 @@ contract GroupActionEventsTest is
             verificationValues: _strings()
         });
         _join(MEMBER1_ID, 100e18, 0);
-        _join(MEMBER2_ID, 150e18, PROVIDER_ID);
+        _join(MEMBER2_ID, 100e18, PROVIDER_ID);
 
         vm.expectEmit(true, true, true, true);
         emit GroupActionWithdrawn({
@@ -289,6 +290,26 @@ contract GroupActionEventsTest is
         _withdraw(MEMBER1_ID, 40e18);
 
         vm.expectEmit(true, true, true, true);
+        emit ProviderQuotaRemoved({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            groupId: GROUP_ID,
+            providerId: PROVIDER_ID,
+            memberId: MEMBER2_ID,
+            amount: 50e18,
+            quotaTotal: 100e18
+        });
+        vm.prank(PROVIDER);
+        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
+    }
+
+    function testProviderQuotaRemoveWithdrawsTheUsedPart() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 100e18);
+        _grantQuota(PROVIDER_ID, MEMBER2_ID, 100e18);
+        _join(MEMBER2_ID, 60e18, PROVIDER_ID);
+
+        vm.expectEmit(true, true, true, true);
         emit GroupActionWithdrawn({
             tokenAddress: address(token),
             actionId: ACTION_ID,
@@ -296,10 +317,27 @@ contract GroupActionEventsTest is
             round: 2,
             groupId: GROUP_ID,
             providerId: PROVIDER_ID,
-            amount: 50e18
+            amount: 60e18
         });
-        vm.prank(PROVIDER);
-        executor.providerWithdraw(address(token), ACTION_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
+        vm.expectEmit(true, true, true, true);
+        emit ProviderQuotaRemoved({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            groupId: GROUP_ID,
+            providerId: PROVIDER_ID,
+            memberId: MEMBER2_ID,
+            amount: 100e18,
+            quotaTotal: 0
+        });
+        vm.expectEmit(true, true, true, true);
+        emit GroupActionExited({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            memberId: MEMBER2_ID,
+            round: 2,
+            groupId: GROUP_ID
+        });
+        _quotaRemove(PROVIDER_ID, MEMBER2_ID);
     }
 
     /// E4：`GroupActionWithdrawn` → `JoinStateCleared` → `GroupActionExited`，终态标记最后发。

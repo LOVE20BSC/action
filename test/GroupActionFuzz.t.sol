@@ -147,22 +147,16 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         // Joins respect the group's 1e18 minimum, so the fuzzed usage stays at or above it.
         uint256 use = uint256(useSeed) % (grant - 1e18 + 1) + 1e18;
         _join(MEMBER2_ID, use, PROVIDER_ID);
-        uint256 remaining = grant - use;
 
-        (uint256[] memory memberIds, uint256[] memory amounts, , uint256 total) =
-            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
-        if (remaining == 0) {
-            require(total == 0, "exhausted quota leaves the set");
-        } else {
-            require(total == 1 && memberIds[0] == MEMBER2_ID && amounts[0] == remaining, "remainder reflected");
-        }
+        (uint256[] memory memberIds, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 1 && memberIds[0] == MEMBER2_ID, "grant stays listed");
+        require(quotaAmounts[0] == grant && used[0] == use, "quota and used reflected");
 
         uint256 providerBefore = joinToken.balanceOf(PROVIDER);
-        if (remaining != 0) {
-            _quotaRemove(PROVIDER_ID, MEMBER2_ID);
-            require(joinToken.balanceOf(PROVIDER) - providerBefore == remaining, "unused refunded");
-        }
-        require(joinToken.balanceOf(address(executor)) == use, "used part stays");
+        _quotaRemove(PROVIDER_ID, MEMBER2_ID);
+        require(joinToken.balanceOf(PROVIDER) - providerBefore == grant, "whole grant refunded");
+        require(joinToken.balanceOf(address(executor)) == 0, "used part leaves with the grant");
     }
 
     function testFuzzSetPageBounds(uint8 offsetSeed, uint8 limitSeed) external {

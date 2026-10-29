@@ -254,12 +254,15 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
             "sources sum to join amount"
         );
 
-        (uint256[] memory memberIds, uint256[] memory quotaAmounts, , uint256 quotaTotal) =
-            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
-        require(quotaTotal == 1 && memberIds[0] == MEMBER2_ID && quotaAmounts[0] == 80e18, "quota table");
-        (memberIds, quotaAmounts, , quotaTotal) =
-            executor.providerQuota(address(token), ACTION_ID, GROUP_ID, secondProviderId, 0, 10, false);
-        require(quotaTotal == 1 && memberIds[0] == MEMBER2_ID && quotaAmounts[0] == 20e18, "second quota table");
+        (uint256[] memory memberIds, uint256[] memory quotaAmounts, uint256[] memory used, uint256 quotaTotal) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(quotaTotal == 2, "fully used grant stays listed");
+        require(memberIds[0] == MEMBER2_ID && quotaAmounts[0] == 200e18 && used[0] == 120e18, "partially used row");
+        require(memberIds[1] == MEMBER1_ID && quotaAmounts[1] == 50e18 && used[1] == 50e18, "fully used row");
+        (memberIds, quotaAmounts, used, quotaTotal) =
+            executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, secondProviderId, 0, 10, false);
+        require(quotaTotal == 1 && memberIds[0] == MEMBER2_ID, "second quota table");
+        require(quotaAmounts[0] == 100e18 && used[0] == 80e18, "second grant tracked");
     }
 
     function testRoundGettersAndGuards() external {

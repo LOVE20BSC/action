@@ -97,12 +97,13 @@ library GroupActionStorage {
         // tokenAddress => actionId => total joined amount history
         mapping(address => mapping(uint256 => RoundHistoryUint256.History)) totalJoinedAmount;
 
-        // tokenAddress => actionId => groupId => providerId => member ids with quota
+        // tokenAddress => actionId => groupId => providerId => member ids with an outstanding grant
+        // (kept until the granted amount reaches zero)
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => Uint256Set.Storage)))) quotaMemberIds;
-        // tokenAddress => actionId => groupId => providerId => memberId => quota amount
+        // tokenAddress => actionId => groupId => providerId => memberId => granted quota amount
+        // Only provider actions change it; used quota is read from providerAmountByProviderId,
+        // so the available quota is granted - used.
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))) quotaAmount;
-        // tokenAddress => actionId => groupId => providerId => memberId => block number of the latest quota add
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))) quotaBlockNumber;
 
         // groupId => memberId => count of actions the member currently joins in the group
         mapping(uint256 => mapping(uint256 => uint256)) membershipCountByGroupIdByMemberId;

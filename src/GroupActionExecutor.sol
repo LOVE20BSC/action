@@ -160,14 +160,15 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
-    function providerWithdraw(
+    function providerQuotaWithdraw(
         address tokenAddress,
         uint256 actionId,
+        uint256 groupId,
         uint256 memberId,
         uint256 providerId,
         uint256 amount
     ) external nonReentrant {
-        GroupActionJoin.providerWithdraw(s, tokenAddress, actionId, memberId, providerId, amount);
+        GroupActionJoin.providerQuotaWithdraw(s, tokenAddress, actionId, groupId, memberId, providerId, amount);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -249,7 +250,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         GroupActionJoin.providerQuotaRemove(s, tokenAddress, actionId, groupId, providerId, memberIds);
     }
 
-    function providerQuota(
+    function providerQuotas(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -262,12 +263,12 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         view
         returns (
             uint256[] memory memberIds,
-            uint256[] memory amounts,
-            uint256[] memory blockNumbers,
+            uint256[] memory quotaAmounts,
+            uint256[] memory usedAmounts,
             uint256 total
         )
     {
-        return GroupActionJoin.providerQuota(s, tokenAddress, actionId, groupId, providerId, offset, limit, reverse);
+        return GroupActionJoin.providerQuotas(s, tokenAddress, actionId, groupId, providerId, offset, limit, reverse);
     }
 
     function providerAmountsByMemberId(

@@ -43,9 +43,10 @@ interface IGroupActionJoinEvents {
         uint256 indexed groupId,
         uint256 providerId,
         uint256 memberId,
-        uint256 amount
+        uint256 amount,
+        uint256 quotaTotal
     );
-    event ProviderQuotaRefunded(
+    event ProviderQuotaRestored(
         address indexed tokenAddress,
         uint256 indexed actionId,
         uint256 indexed groupId,
@@ -95,10 +96,6 @@ interface IGroupActionJoinErrors {
         uint256 amount,
         uint256 joined
     );
-    error ProviderWithdrawAmountExceeded(
-        uint256 amount,
-        uint256 invested
-    );
     error QuotaArrayLengthMismatch(
         uint256 memberIdsLength,
         uint256 amountsLength
@@ -144,9 +141,10 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         uint256 amount
     ) external;
 
-    function providerWithdraw(
+    function providerQuotaWithdraw(
         address tokenAddress,
         uint256 actionId,
+        uint256 groupId,
         uint256 memberId,
         uint256 providerId,
         uint256 amount
@@ -223,7 +221,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         uint256[] calldata memberIds
     ) external;
 
-    function providerQuota(
+    function providerQuotas(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -236,8 +234,8 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         view
         returns (
             uint256[] memory memberIds,
-            uint256[] memory amounts,
-            uint256[] memory blockNumbers,
+            uint256[] memory quotaAmounts,
+            uint256[] memory usedAmounts,
             uint256 total
         );
 

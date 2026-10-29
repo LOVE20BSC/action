@@ -21,7 +21,7 @@ ServiceJoined action.participation
 ServiceExited action.participation
 ProviderQuotaAdded action.quota
 ProviderQuotaRemoved action.quota
-ProviderQuotaRefunded action.quota
+ProviderQuotaRestored action.quota
 OriginScoresSubmitted action.verification
 VerifierApplicationSubmitted action.verification
 VerifierApplicationCancelled action.verification
