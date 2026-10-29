@@ -11,6 +11,8 @@ arguments (`emit E({field: value})`, event-standards §6.11) with one field per
 line; zero-field events use `emit E()`.
 Decl style: every event declaration under src/, test/, script/ must put `event E(`
 and `);` on their own lines with one parameter per line (event-standards §6.11).
+Emit keys: the key names and their order must equal one ABI declaration of that
+event, read from out/ (event-standards §6.1, §6.11).
 Only concrete contracts declared under src/ are included; interfaces, libraries,
 and abstract contracts are excluded. Requires forge on PATH unless --no-build is
 used with an existing out/ directory.
@@ -85,6 +87,7 @@ def load_events():
         sys.exit("missing out/; run forge build first")
 
     events = set()
+    params = {}
     for path in out.rglob("*.json"):
         if "build-info" in path.parts:
             continue
@@ -92,6 +95,13 @@ def load_events():
             data = json.loads(path.read_text())
         except Exception:
             continue
+        abi = data.get("abi") or []
+        for item in abi:
+            if item.get("type") != "event":
+                continue
+            params.setdefault(item["name"], set()).add(
+                tuple(i.get("name", "") for i in item.get("inputs", []))
+            )
         targets = ((data.get("metadata") or {}).get("settings") or {}).get(
             "compilationTarget"
         ) or {}
@@ -102,7 +112,7 @@ def load_events():
             continue
         if not is_concrete_contract(source, contract):
             continue
-        for item in data.get("abi") or []:
+        for item in abi:
             if item.get("type") != "event":
                 continue
             inputs = ",".join(
@@ -111,7 +121,7 @@ def load_events():
             )
             anonymous = " anonymous" if item.get("anonymous") else ""
             events.add(f"{contract}.{item['name']}({inputs}){anonymous}")
-    return sorted(events)
+    return sorted(events), params
 
 
 def split_params(body):
@@ -350,10 +360,58 @@ def check_emit_style():
         sys.exit("emit style violations (event-standards §6.11):\n  " + "\n  ".join(problems))
 
 
+def kv_keys(masked, text, brace):
+    """Key names of a kv emit, in written order."""
+    end, _ = bracket_entries(masked, text, brace, "{", "}")
+    keys, depth, seg = [], 0, brace + 1
+    for i in range(seg, end + 1):
+        if i < end:
+            c = masked[i]
+            if c in "([{":
+                depth += 1
+                continue
+            if c in ")]}":
+                depth -= 1
+                continue
+            if c != "," or depth:
+                continue
+        entry = text[seg:i].strip()
+        if entry:
+            keys.append(entry.split(":", 1)[0].strip())
+        seg = i + 1
+    return keys
+
+
+def check_emit_keys(event_params):
+    problems = []
+    for path, text, masked in sol_sources():
+        for match in EMIT_RE.finditer(masked):
+            name = match.group(1).rsplit(".", 1)[-1].strip()
+            if name.startswith("log_"):
+                continue
+            k = match.end()
+            while k < len(masked) and masked[k].isspace():
+                k += 1
+            if k >= len(masked) or masked[k] != "{":
+                continue
+            keys = kv_keys(masked, text, k)
+            if not keys:
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            candidates = event_params.get(name)
+            if not candidates:
+                problems.append(f"{path.relative_to(REPO)}:{line}: {name} (no ABI declaration)")
+            elif tuple(keys) not in candidates:
+                problems.append(f"{path.relative_to(REPO)}:{line}: {name} (keys {keys} not in ABI order)")
+    if problems:
+        sys.exit("emit key violations (event-standards §6.11):\n  " + "\n  ".join(problems))
+
+
 def main():
     check_decl_style()
     check_emit_style()
-    lines = load_events()
+    lines, event_params = load_events()
+    check_emit_keys(event_params)
     baseline = EVENTS_DIR / "events-baseline.txt"
     parsed = parse_baseline(lines)
 
@@ -361,7 +419,7 @@ def main():
         count = check_families(parsed)
         baseline.write_text("\n".join(lines) + "\n")
         print(f"wrote {len(lines)} events to {baseline}")
-        print(f"event families OK: {count} protocol events; declaration style OK; emit style OK")
+        print(f"event families OK: {count} protocol events; declaration style OK; emit style OK; emit keys OK")
         return
 
     if not baseline.exists():
@@ -380,7 +438,7 @@ def main():
         sys.exit(1)
 
     check_families(parsed)
-    print(f"event manifest OK: {len(lines)} events; families OK; declaration style OK; emit style OK")
+    print(f"event manifest OK: {len(lines)} events; families OK; declaration style OK; emit style OK; emit keys OK")
 
 
 if __name__ == "__main__":
