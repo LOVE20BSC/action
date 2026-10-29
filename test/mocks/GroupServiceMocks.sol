@@ -483,8 +483,15 @@ contract MockGroupServiceGroupActionExecutor {
 ///         calls on the owner overflow. `burn` always burns the caller's balance,
 ///         matching `LOVE20Token.burn`.
 contract MockGroupServiceToken {
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event TokenBurned(address indexed from, uint256 amount);
+    event Transfer(
+        address indexed from,
+        address indexed to,
+        uint256 value
+    );
+    event TokenBurned(
+        address indexed from,
+        uint256 amount
+    );
 
     uint256 internal _totalSupply;
     uint256 public burnedTotal;
