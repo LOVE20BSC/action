@@ -100,9 +100,9 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         }
         initialized = true;
 
-        address memberNFTAddress = IStake(stakeAddress).memberNFTAddress();
-        address phaseAddress = IStake(stakeAddress).phaseAddress();
-        address pairFactoryAddress = IStake(stakeAddress).pairFactoryAddress();
+        address memberNFTAddress = IStake(stakeAddress).MEMBER_NFT_ADDRESS();
+        address phaseAddress = IStake(stakeAddress).PHASE_ADDRESS();
+        address pairFactoryAddress = IStake(stakeAddress).PAIR_FACTORY_ADDRESS();
 
         actionTarget = actionTargetAddress;
         _memberNFT = memberNFTAddress;

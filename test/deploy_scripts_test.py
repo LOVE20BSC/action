@@ -170,13 +170,13 @@ def main():
         # cast 的数组返回逐元素带科学计数法标注；21_check.sh 的 strip_sci_notation 会归一化。
         getters("GROUP_ACTION_EXECUTOR", {"SPLITS()(uint256[])":
                 "[100000000000000000 [1e17], 400000000000000000 [4e17], 700000000000000000 [7e17]]"})
-        getters("STAKE", {"memberNFTAddress()(address)": "MEMBER_NFT_ADDRESS",
-                "phaseAddress()(address)": "PHASE_ADDRESS",
-                "voteAddress()(address)": "VOTE_ADDRESS",
-                "launchAddress()(address)": "LAUNCH_ADDRESS",
-                "pairFactoryAddress()(address)": "PAIR_FACTORY_ADDRESS",
-                "routerAddress()(address)": "PAIR_FACTORY_ADDRESS"})
-        getters("LAUNCH", {"pairFactoryAddress()(address)": "PAIR_FACTORY_ADDRESS"})
+        getters("STAKE", {"MEMBER_NFT_ADDRESS()(address)": "MEMBER_NFT_ADDRESS",
+                "PHASE_ADDRESS()(address)": "PHASE_ADDRESS",
+                "VOTE_ADDRESS()(address)": "VOTE_ADDRESS",
+                "LAUNCH_ADDRESS()(address)": "LAUNCH_ADDRESS",
+                "PAIR_FACTORY_ADDRESS()(address)": "PAIR_FACTORY_ADDRESS",
+                "ROUTER_ADDRESS()(address)": "PAIR_FACTORY_ADDRESS"})
+        getters("LAUNCH", {"PAIR_FACTORY_ADDRESS()(address)": "PAIR_FACTORY_ADDRESS"})
         code = {}
         for lib in libraries:
             executor = env[lib["executor"] + "_ADDRESS"].lower()
@@ -356,8 +356,8 @@ def main():
                 ("ACTION_TARGET", "submitAddress()(address)"), ("ACTION_TARGET", "memberNFTAddress()(address)"),
                 ("ACTION_TARGET", "phaseAddress()(address)"), ("LP_EXECUTOR", "actionTarget()(address)"),
                 ("GROUP_SERVICE_EXECUTOR", "initialized()(bool)"),
-                ("STAKE", "memberNFTAddress()(address)"),
-                ("LAUNCH", "pairFactoryAddress()(address)"),
+                ("STAKE", "MEMBER_NFT_ADDRESS()(address)"),
+                ("LAUNCH", "PAIR_FACTORY_ADDRESS()(address)"),
                 ("GROUP_ACTION_EXECUTOR", "SPLITS()(uint256[])")]:
             wrong_value = "0x" + "98" * 20 if signature.endswith("(address)") else "false" if signature.endswith("(bool)") else "[999]"
             run("21_check.sh", False, ("test",), BAD_CALL=env[contract + "_ADDRESS"].lower() + "/" + signature, BAD_VALUE=wrong_value)

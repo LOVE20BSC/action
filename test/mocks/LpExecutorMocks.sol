@@ -59,6 +59,18 @@ contract MockLpStake {
         pairFactoryAddress = pairFactoryAddress_;
     }
 
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
+
+    function PAIR_FACTORY_ADDRESS() external view returns (address) {
+        return pairFactoryAddress;
+    }
+
     function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
         _totalValidGovVotes[tokenAddress] = votes;
     }

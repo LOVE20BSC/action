@@ -373,11 +373,11 @@ library GroupActionManager {
         if (round == 0) {
             return 0;
         }
-        uint256 totalVotes = IVote(s.voteAddress).votesNum(tokenAddress, round);
+        uint256 totalVotes = IVote(s.voteAddress).totalVoteAmount(tokenAddress, round);
         if (totalVotes == 0) {
             return 0;
         }
-        uint256 actionVotes = IVote(s.voteAddress).votesNumByProposalId(tokenAddress, round, actionId);
+        uint256 actionVotes = IVote(s.voteAddress).voteAmountByProposalId(tokenAddress, round, actionId);
         if (actionVotes == 0) {
             return 0;
         }

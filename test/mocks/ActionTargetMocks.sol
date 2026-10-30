@@ -146,6 +146,22 @@ contract MockMint {
         _proposalMinted[tokenAddress][round][proposalId] = true;
         return mintAmount;
     }
+
+    function VOTE_ADDRESS() external view returns (address) {
+        return voteAddress;
+    }
+
+    function SUBMIT_ADDRESS() external view returns (address) {
+        return submitAddress;
+    }
+
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
 }
 
 contract MockToken {

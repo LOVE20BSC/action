@@ -61,6 +61,18 @@ contract MockGroupServiceStake {
         launchAddress = launchAddress_;
     }
 
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
+
+    function LAUNCH_ADDRESS() external view returns (address) {
+        return launchAddress;
+    }
+
     function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
         _totalValidGovVotes[tokenAddress] = votes;
     }
@@ -87,14 +99,14 @@ contract MockGroupServiceStake {
 
 /// @notice Launch mock: only the direct-parent relation is programmable.
 contract MockGroupServiceLaunch {
-    mapping(address => address) internal _parentTokenOf;
+    mapping(address => address) internal _parentTokenByTokenAddress;
 
     function setParentToken(address tokenAddress, address parentTokenAddress) external {
-        _parentTokenOf[tokenAddress] = parentTokenAddress;
+        _parentTokenByTokenAddress[tokenAddress] = parentTokenAddress;
     }
 
-    function parentTokenOf(address tokenAddress) external view returns (address) {
-        return _parentTokenOf[tokenAddress];
+    function parentToken(address tokenAddress) external view returns (address) {
+        return _parentTokenByTokenAddress[tokenAddress];
     }
 }
 

@@ -37,20 +37,20 @@ contract ServiceCoreRegressionTest is Test {
     function setUp() public {
         for (uint256 i = 1; i <= 6; i++) vm.etch(address(uint160(0xA000 + i)), hex"00");
         _phase(2);
-        _mock(STAKE, abi.encodeWithSignature("memberNFTAddress()"), abi.encode(NFT));
-        _mock(STAKE, abi.encodeWithSignature("phaseAddress()"), abi.encode(PHASE));
-        _mock(STAKE, abi.encodeWithSignature("voteAddress()"), abi.encode(VOTE));
-        _mock(STAKE, abi.encodeWithSignature("launchAddress()"), abi.encode(LAUNCH));
+        _mock(STAKE, abi.encodeWithSignature("MEMBER_NFT_ADDRESS()"), abi.encode(NFT));
+        _mock(STAKE, abi.encodeWithSignature("PHASE_ADDRESS()"), abi.encode(PHASE));
+        _mock(STAKE, abi.encodeWithSignature("VOTE_ADDRESS()"), abi.encode(VOTE));
+        _mock(STAKE, abi.encodeWithSignature("LAUNCH_ADDRESS()"), abi.encode(LAUNCH));
         _mock(STAKE, abi.encodeWithSignature("validGovVotes(address,uint256,uint256)"), abi.encode(uint256(1)));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 1), abi.encode(ALICE));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 2), abi.encode(BOB));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 3), abi.encode(ALICE));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 4), abi.encode(BOB));
-        _mock(VOTE, abi.encodeWithSignature("phaseAddress()"), abi.encode(PHASE));
-        _mock(VOTE, abi.encodeWithSignature("votesNum(address,uint256)"), abi.encode(uint256(100)));
-        _mock(VOTE, abi.encodeWithSignature("votesNumByProposalId(address,uint256,uint256)"), abi.encode(uint256(100)));
+        _mock(VOTE, abi.encodeWithSignature("PHASE_ADDRESS()"), abi.encode(PHASE));
+        _mock(VOTE, abi.encodeWithSignature("totalVoteAmount(address,uint256)"), abi.encode(uint256(100)));
+        _mock(VOTE, abi.encodeWithSignature("voteAmountByProposalId(address,uint256,uint256)"), abi.encode(uint256(100)));
         _mock(VOTE, abi.encodeWithSignature("isProposalIdVoted(address,uint256,uint256)"), abi.encode(true));
-        _mock(VOTE, abi.encodeWithSignature("stakedAmountOfVoters(address,uint256)"), abi.encode(uint256(1)));
+        _mock(VOTE, abi.encodeWithSignature("totalVoterBoost(address,uint256)"), abi.encode(uint256(1)));
         uint256[] memory ids = new uint256[](1);
         ids[0] = 1;
         _mock(VOTE, abi.encodeWithSignature("votedProposalIds(address,uint256,uint256,uint256,bool)"), abi.encode(ids, uint256(1)));
@@ -61,7 +61,7 @@ contract ServiceCoreRegressionTest is Test {
         _mock(SUBMIT, abi.encodeWithSignature("proposalTarget(address,uint256)"), abi.encode(address(target), TargetMode.Callback));
         parent = new LOVE20Token("Parent", "P", 100000, 1000000, address(this), address(mint), address(this));
         child = new LOVE20Token("Child", "C", 100000, 1000000, address(this), address(mint), address(parent));
-        _mock(LAUNCH, abi.encodeWithSignature("parentTokenOf(address)"), abi.encode(address(parent)));
+        _mock(LAUNCH, abi.encodeWithSignature("parentToken(address)"), abi.encode(address(parent)));
         group = new GroupActionExecutor();
         group.init(address(target), STAKE, new uint256[](0));
         service = new GroupServiceExecutor();

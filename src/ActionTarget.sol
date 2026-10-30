@@ -55,10 +55,10 @@ contract ActionTarget is IActionTarget {
         initialized = true;
 
         IMint mint = IMint(mintAddress_);
-        address voteAddress_ = mint.voteAddress();
-        address submitAddress_ = mint.submitAddress();
-        address memberNFTAddress_ = mint.memberNFTAddress();
-        address phaseAddress_ = mint.phaseAddress();
+        address voteAddress_ = mint.VOTE_ADDRESS();
+        address submitAddress_ = mint.SUBMIT_ADDRESS();
+        address memberNFTAddress_ = mint.MEMBER_NFT_ADDRESS();
+        address phaseAddress_ = mint.PHASE_ADDRESS();
 
         memberNFTAddress = memberNFTAddress_;
         submitAddress = submitAddress_;

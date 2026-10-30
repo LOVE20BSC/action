@@ -62,9 +62,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         s.initialized = true;
 
         IStake stake = IStake(stakeAddress);
-        address memberNFTAddress = stake.memberNFTAddress();
-        address phaseAddress = stake.phaseAddress();
-        address voteAddress = stake.voteAddress();
+        address memberNFTAddress = stake.MEMBER_NFT_ADDRESS();
+        address phaseAddress = stake.PHASE_ADDRESS();
+        address voteAddress = stake.VOTE_ADDRESS();
 
         s.actionTarget = actionTargetAddress;
         s.stakeAddress = stakeAddress;

@@ -60,38 +60,38 @@ contract DeployAction is Script {
 
         IMint mint = IMint(config.mint);
         IStake stake = IStake(config.stake);
-        address memberNFT = mint.memberNFTAddress();
-        address phase = mint.phaseAddress();
-        address vote = mint.voteAddress();
-        address submit = mint.submitAddress();
+        address memberNFT = mint.MEMBER_NFT_ADDRESS();
+        address phase = mint.PHASE_ADDRESS();
+        address vote = mint.VOTE_ADDRESS();
+        address submit = mint.SUBMIT_ADDRESS();
         require(memberNFT.code.length != 0, "Mint memberNFTAddress must be a deployed contract");
         require(phase.code.length != 0, "Mint phaseAddress must be a deployed contract");
         require(vote.code.length != 0, "Mint voteAddress must be a deployed contract");
         require(submit.code.length != 0, "Mint submitAddress must be a deployed contract");
 
         // Executor 的派生值不可回读，部署前用 Stake 的 getter 与 Mint 的派生图逐项对齐。
-        require(stake.memberNFTAddress() == memberNFT, "Stake memberNFTAddress mismatch");
-        require(stake.phaseAddress() == phase, "Stake phaseAddress mismatch");
-        require(stake.voteAddress() == vote, "Stake voteAddress mismatch");
-        address launch = stake.launchAddress();
+        require(stake.MEMBER_NFT_ADDRESS() == memberNFT, "Stake memberNFTAddress mismatch");
+        require(stake.PHASE_ADDRESS() == phase, "Stake phaseAddress mismatch");
+        require(stake.VOTE_ADDRESS() == vote, "Stake voteAddress mismatch");
+        address launch = stake.LAUNCH_ADDRESS();
         require(launch.code.length != 0, "Stake launchAddress must be a deployed contract");
-        require(launch == mint.launchAddress(), "Stake launchAddress mismatch");
+        require(launch == mint.LAUNCH_ADDRESS(), "Stake launchAddress mismatch");
         require(
-            stake.pairFactoryAddress().code.length != 0, "Stake pairFactoryAddress must be a deployed contract"
+            stake.PAIR_FACTORY_ADDRESS().code.length != 0, "Stake pairFactoryAddress must be a deployed contract"
         );
         require(
-            ILaunch(launch).pairFactoryAddress() == stake.pairFactoryAddress(),
+            ILaunch(launch).PAIR_FACTORY_ADDRESS() == stake.PAIR_FACTORY_ADDRESS(),
             "Stake pairFactoryAddress mismatch"
         );
-        require(stake.routerAddress().code.length != 0, "Stake routerAddress must be a deployed contract");
+        require(stake.ROUTER_ADDRESS().code.length != 0, "Stake routerAddress must be a deployed contract");
 
-        require(IVote(vote).stakeAddress() == config.stake, "Vote stakeAddress mismatch");
-        require(IVote(vote).submitAddress() == submit, "Vote submitAddress mismatch");
-        require(IVote(vote).memberNFTAddress() == memberNFT, "Vote memberNFTAddress mismatch");
-        require(IVote(vote).phaseAddress() == phase, "Vote phaseAddress mismatch");
-        require(ISubmit(submit).stakeAddress() == config.stake, "Submit stakeAddress mismatch");
-        require(ISubmit(submit).memberNFTAddress() == memberNFT, "Submit memberNFTAddress mismatch");
-        require(ISubmit(submit).phaseAddress() == phase, "Submit phaseAddress mismatch");
+        require(IVote(vote).STAKE_ADDRESS() == config.stake, "Vote stakeAddress mismatch");
+        require(IVote(vote).SUBMIT_ADDRESS() == submit, "Vote submitAddress mismatch");
+        require(IVote(vote).MEMBER_NFT_ADDRESS() == memberNFT, "Vote memberNFTAddress mismatch");
+        require(IVote(vote).PHASE_ADDRESS() == phase, "Vote phaseAddress mismatch");
+        require(ISubmit(submit).STAKE_ADDRESS() == config.stake, "Submit stakeAddress mismatch");
+        require(ISubmit(submit).MEMBER_NFT_ADDRESS() == memberNFT, "Submit memberNFTAddress mismatch");
+        require(ISubmit(submit).PHASE_ADDRESS() == phase, "Submit phaseAddress mismatch");
 
         uint256 previous = 0;
         for (uint256 i = 0; i < config.splits.length; i++) {
@@ -141,10 +141,10 @@ contract DeployAction is Script {
         IActionTarget actionTarget = IActionTarget(addrs.actionTarget);
         require(actionTarget.initialized(), "ActionTarget not initialized");
         require(actionTarget.mintAddress() == mintAddress, "ActionTarget mint mismatch");
-        require(actionTarget.voteAddress() == mint.voteAddress(), "ActionTarget vote mismatch");
-        require(actionTarget.submitAddress() == mint.submitAddress(), "ActionTarget submit mismatch");
-        require(actionTarget.memberNFTAddress() == mint.memberNFTAddress(), "ActionTarget member NFT mismatch");
-        require(actionTarget.phaseAddress() == mint.phaseAddress(), "ActionTarget phase mismatch");
+        require(actionTarget.voteAddress() == mint.VOTE_ADDRESS(), "ActionTarget vote mismatch");
+        require(actionTarget.submitAddress() == mint.SUBMIT_ADDRESS(), "ActionTarget submit mismatch");
+        require(actionTarget.memberNFTAddress() == mint.MEMBER_NFT_ADDRESS(), "ActionTarget member NFT mismatch");
+        require(actionTarget.phaseAddress() == mint.PHASE_ADDRESS(), "ActionTarget phase mismatch");
 
         LpExecutor lpExecutor = LpExecutor(addrs.lpExecutor);
         require(lpExecutor.initialized(), "LpExecutor not initialized");

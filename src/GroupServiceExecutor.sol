@@ -77,9 +77,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         s.initialized = true;
 
         IStake stake = IStake(stakeAddress);
-        address memberNFTAddress = stake.memberNFTAddress();
-        address phaseAddress = stake.phaseAddress();
-        address launchAddress = stake.launchAddress();
+        address memberNFTAddress = stake.MEMBER_NFT_ADDRESS();
+        address phaseAddress = stake.PHASE_ADDRESS();
+        address launchAddress = stake.LAUNCH_ADDRESS();
         address mintAddress = IActionTarget(actionTargetAddress).mintAddress();
 
         s.actionTarget = actionTargetAddress;
@@ -446,7 +446,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             revert InvalidRatioForPublicVerifier(ratioForPublicVerifier);
         }
         if (actionTokenAddress != tokenAddress) {
-            address parentTokenAddress = ILaunch(s.launchAddress).parentTokenOf(actionTokenAddress);
+            address parentTokenAddress = ILaunch(s.launchAddress).parentToken(actionTokenAddress);
             if (parentTokenAddress != tokenAddress) {
                 revert ActionTokenParentMismatch(actionTokenAddress, tokenAddress, parentTokenAddress);
             }

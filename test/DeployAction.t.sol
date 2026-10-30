@@ -35,6 +35,26 @@ contract MockMint {
     function setLaunchAddress(address launch_) external {
         launchAddress = launch_;
     }
+
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
+
+    function VOTE_ADDRESS() external view returns (address) {
+        return voteAddress;
+    }
+
+    function SUBMIT_ADDRESS() external view returns (address) {
+        return submitAddress;
+    }
+
+    function LAUNCH_ADDRESS() external view returns (address) {
+        return launchAddress;
+    }
 }
 
 contract MockLaunch {
@@ -42,6 +62,10 @@ contract MockLaunch {
 
     constructor(address pairFactory_) {
         pairFactoryAddress = pairFactory_;
+    }
+
+    function PAIR_FACTORY_ADDRESS() external view returns (address) {
+        return pairFactoryAddress;
     }
 }
 
@@ -68,6 +92,30 @@ contract MockStake {
         pairFactoryAddress = pairFactory_;
         routerAddress = router_;
     }
+
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
+
+    function VOTE_ADDRESS() external view returns (address) {
+        return voteAddress;
+    }
+
+    function LAUNCH_ADDRESS() external view returns (address) {
+        return launchAddress;
+    }
+
+    function PAIR_FACTORY_ADDRESS() external view returns (address) {
+        return pairFactoryAddress;
+    }
+
+    function ROUTER_ADDRESS() external view returns (address) {
+        return routerAddress;
+    }
 }
 
 contract MockVote {
@@ -82,6 +130,22 @@ contract MockVote {
         memberNFTAddress = memberNFT_;
         phaseAddress = phase_;
     }
+
+    function STAKE_ADDRESS() external view returns (address) {
+        return stakeAddress;
+    }
+
+    function SUBMIT_ADDRESS() external view returns (address) {
+        return submitAddress;
+    }
+
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
 }
 
 contract MockSubmit {
@@ -93,6 +157,18 @@ contract MockSubmit {
         stakeAddress = stake_;
         memberNFTAddress = memberNFT_;
         phaseAddress = phase_;
+    }
+
+    function STAKE_ADDRESS() external view returns (address) {
+        return stakeAddress;
+    }
+
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
     }
 }
 

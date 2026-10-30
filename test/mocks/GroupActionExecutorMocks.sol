@@ -25,6 +25,18 @@ contract MockGroupActionExecutorStake {
         voteAddress = voteAddress_;
     }
 
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
+
+    function VOTE_ADDRESS() external view returns (address) {
+        return voteAddress;
+    }
+
     function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
         _totalValidGovVotes[tokenAddress] = votes;
     }
@@ -50,25 +62,25 @@ contract MockGroupActionExecutorStake {
 }
 
 contract MockGroupActionVote {
-    // tokenAddress => round => total votes
-    mapping(address => mapping(uint256 => uint256)) internal _votesNum;
-    // tokenAddress => round => proposalId => votes
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _votesNumByProposalId;
+    // tokenAddress => round => totalVoteAmount
+    mapping(address => mapping(uint256 => uint256)) internal _totalVoteAmountByRound;
+    // tokenAddress => round => proposalId => voteAmount
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _voteAmountByProposalId;
 
     function setVotesNum(address tokenAddress, uint256 round, uint256 votes) external {
-        _votesNum[tokenAddress][round] = votes;
+        _totalVoteAmountByRound[tokenAddress][round] = votes;
     }
 
     function setVotesNumByProposalId(address tokenAddress, uint256 round, uint256 proposalId, uint256 votes) external {
-        _votesNumByProposalId[tokenAddress][round][proposalId] = votes;
+        _voteAmountByProposalId[tokenAddress][round][proposalId] = votes;
     }
 
-    function votesNum(address tokenAddress, uint256 round) external view returns (uint256) {
-        return _votesNum[tokenAddress][round];
+    function totalVoteAmount(address tokenAddress, uint256 round) external view returns (uint256) {
+        return _totalVoteAmountByRound[tokenAddress][round];
     }
 
-    function votesNumByProposalId(address tokenAddress, uint256 round, uint256 proposalId) external view returns (uint256) {
-        return _votesNumByProposalId[tokenAddress][round][proposalId];
+    function voteAmountByProposalId(address tokenAddress, uint256 round, uint256 proposalId) external view returns (uint256) {
+        return _voteAmountByProposalId[tokenAddress][round][proposalId];
     }
 }
 
