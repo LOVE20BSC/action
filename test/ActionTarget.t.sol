@@ -432,12 +432,12 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(3);
         _clear(11, 1);
         require(actionTarget.isJoinedByRound(address(token), 11, 1, 1), "joined as of round 1");
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 2) == false, "cleared as of round 2");
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 0) == false, "not joined before round 1");
+        require(actionTarget.isJoinedByRound(address(token), 11, 2, 1) == false, "cleared as of round 2");
+        require(actionTarget.isJoinedByRound(address(token), 11, 0, 1) == false, "not joined before round 1");
         phase.setPhase(4);
         _join(11, 1);
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 3), "rejoined as of round 3");
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 4) == false, "future round is not started");
+        require(actionTarget.isJoinedByRound(address(token), 11, 3, 1), "rejoined as of round 3");
+        require(actionTarget.isJoinedByRound(address(token), 11, 4, 1) == false, "future round is not started");
         require(actionTarget.isJoined(address(token), 11, 1), "currently joined");
     }
 

@@ -88,7 +88,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         require(first == SERVICE_REWARD, "verifier takes the whole reward");
 
         (uint256 projected,,) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
+            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
         require(projected == 0, "zero-rated action projects nothing");
 
         vm.prank(GROUP_OWNER_B);
@@ -101,6 +101,6 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
     }
 }

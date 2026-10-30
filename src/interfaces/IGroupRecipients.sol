@@ -74,14 +74,14 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total);
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
 
     function distribution(
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256 groupReward,
-        uint256 round
+        uint256 round,
+        uint256 groupReward
     )
         external
         view

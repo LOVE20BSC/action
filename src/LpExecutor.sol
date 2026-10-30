@@ -254,7 +254,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IERC20(_joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
-        _emitLpWithdrawn(tokenAddress, actionId, memberId, joinRound, amount);
+        _emitLpWithdrawn(tokenAddress, actionId, joinRound, memberId, amount);
 
         if (isFullExit) {
             IActionTarget(ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
@@ -283,7 +283,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IERC20(_joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, memberJoinedAmount);
 
-        _emitLpWithdrawn(tokenAddress, actionId, memberId, joinRound, memberJoinedAmount);
+        _emitLpWithdrawn(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
 
         IActionTarget(ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
 
@@ -314,8 +314,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     function _emitLpWithdrawn(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
         uint256 round,
+        uint256 memberId,
         uint256 amount
     ) private {
         emit LpWithdrawn({
@@ -409,8 +409,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     function memberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
         minted = _memberMinted[tokenAddress][actionId][round][memberId];
         if (minted) {
@@ -523,8 +523,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     function _mintMemberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound = _createdRoundByActionId[tokenAddress][actionId];
         if (createdRound == 0) {

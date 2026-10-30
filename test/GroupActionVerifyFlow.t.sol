@@ -235,7 +235,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         (string[] memory valueKeys, string[] memory values) =
             executor.verificationInfos(address(token), ACTION_2, MEMBER1_ID);
         require(valueKeys.length == 2 && keccak256(bytes(values[1])) == keccak256(bytes("sh")), "infos latest");
-        (valueKeys, values) = executor.verificationInfosByRound(address(token), ACTION_2, MEMBER1_ID, 2);
+        (valueKeys, values) = executor.verificationInfosByRound(address(token), ACTION_2, 2, MEMBER1_ID);
         require(values.length == 2 && keccak256(bytes(values[0])) == keccak256(bytes("alice")), "infos by round");
         require(
             bytes(executor.verificationValue(address(token), ACTION_2, MEMBER1_ID, "missing")).length == 0,

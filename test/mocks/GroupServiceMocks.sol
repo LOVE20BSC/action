@@ -208,18 +208,18 @@ contract MockGroupServiceActionTarget {
         if (currentRound <= createdRound) {
             revert JoinNotOpen(tokenAddress, actionId, currentRound, createdRound);
         }
-        _recordMembership(tokenAddress, actionId, memberId, currentRound - 1, true);
+        _recordMembership(tokenAddress, actionId, currentRound - 1, memberId, true);
     }
 
     function clearJoinState(address tokenAddress, uint256 actionId, uint256 memberId) external {
-        _recordMembership(tokenAddress, actionId, memberId, _joinRound(), false);
+        _recordMembership(tokenAddress, actionId, _joinRound(), memberId, false);
     }
 
     function isJoined(address tokenAddress, uint256 actionId, uint256 memberId) external view returns (bool) {
         return _joined[tokenAddress][actionId][memberId];
     }
 
-    function isJoinedByRound(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round)
+    function isJoinedByRound(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId)
         external
         view
         returns (bool)
@@ -227,7 +227,7 @@ contract MockGroupServiceActionTarget {
         if (round > _joinRound()) {
             return false;
         }
-        return _containsByRound(tokenAddress, actionId, memberId, round);
+        return _containsByRound(tokenAddress, actionId, round, memberId);
     }
 
     function actionReward(address tokenAddress, uint256 actionId, uint256 round)
@@ -276,7 +276,7 @@ contract MockGroupServiceActionTarget {
         return currentRound == 0 ? 0 : currentRound - 1;
     }
 
-    function _recordMembership(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round, bool present)
+    function _recordMembership(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId, bool present)
         internal
     {
         bytes32 key = keccak256(abi.encode(tokenAddress, actionId, memberId));
@@ -288,7 +288,7 @@ contract MockGroupServiceActionTarget {
         _joined[tokenAddress][actionId][memberId] = present;
     }
 
-    function _containsByRound(address tokenAddress, uint256 actionId, uint256 memberId, uint256 round)
+    function _containsByRound(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId)
         internal
         view
         returns (bool)

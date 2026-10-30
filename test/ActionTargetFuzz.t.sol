@@ -114,10 +114,10 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         } else {
             _join(11, 1);
             uint256 joinRound = atPhase - 1;
-            require(actionTarget.isJoinedByRound(address(token), 11, 1, joinRound), "snapshot at join round");
+            require(actionTarget.isJoinedByRound(address(token), 11, joinRound, 1), "snapshot at join round");
             if (joinRound > 0) {
                 require(
-                    actionTarget.isJoinedByRound(address(token), 11, 1, joinRound - 1) == false,
+                    actionTarget.isJoinedByRound(address(token), 11, joinRound - 1, 1) == false,
                     "no snapshot before join round"
                 );
             }

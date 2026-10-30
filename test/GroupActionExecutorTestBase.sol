@@ -293,9 +293,9 @@ abstract contract GroupActionExecutorTestBase {
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, scores);
     }
 
-    function _settle(uint256 memberId, uint256 round) internal returns (uint256 mintAmount, uint256 burnAmount) {
+    function _settle(uint256 round, uint256 memberId) internal returns (uint256 mintAmount, uint256 burnAmount) {
         vm.prank(_memberAddress(memberId));
-        return executor.mintMemberReward(address(token), ACTION_ID, memberId, round);
+        return executor.mintMemberReward(address(token), ACTION_ID, round, memberId);
     }
 
     function _fundExecutor(uint256 amount) internal {

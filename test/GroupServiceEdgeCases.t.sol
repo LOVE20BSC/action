@@ -29,7 +29,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
             uint256 projectedOwner,,
             uint256 projectedDistributed,
             uint256 projectedRemaining,
-        ) = executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(
             projectedVerifier == 0 && projectedOwner == 0 && projectedDistributed == 0 && projectedRemaining == 0,
             "owner projects nothing at the full verifier ratio"
@@ -45,7 +45,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
 
         (uint256 verifierMint, uint256 verifierBurn) = _settleService(VERIFIER_ID);
         require(verifierMint == SERVICE_REWARD, "verifier takes the whole reward");
@@ -68,11 +68,11 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER_B);
         executor.join(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
         require(
-            executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID) == false,
+            actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID) == false,
             "late join does not reach back to the creation round"
         );
         require(
-            executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_OWNER_B_ID),
+            actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_OWNER_B_ID),
             "late join holds from the joined round on"
         );
 
@@ -87,7 +87,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         require(ownerMint == 225e18, "half of the owner half on a divisor of 200");
 
         (uint256 verifierReward, uint256 ownerReward,, uint256 distributed, uint256 remaining, bool claimed) =
-            executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
         require(
             verifierReward == 0 && ownerReward == 0 && distributed == 0 && remaining == 0 && !claimed,
             "late joiner projects nothing for the original round"
@@ -103,7 +103,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
     }
 
     function testExitAfterJoinStillSettlesTheJoinedRound() external {
@@ -120,11 +120,11 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         require(
-            executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID),
+            actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID),
             "the joined round stays joined after the exit"
         );
         require(
-            !executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID),
+            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID),
             "the exit clears the later rounds"
         );
 
@@ -211,7 +211,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(actionTarget.mintRewardCalls() == 0, "no mint attempted without a reward");
 
 
@@ -229,14 +229,14 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         // round without guarding the phase first.
         _atPhase(VERIFY_PHASE);
         (uint256 verifierReward, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
-            executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(
             verifierReward == 0 && ownerReward == 0 && ownerDistributed == 0 && ownerRemaining == 0 && !claimed,
             "service reward projection is zero before the mint round"
         );
 
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(mintAmount == 0 && burnAmount == 0 && !minted, "base projection is zero before the mint round");
 
         // A never-created action is not settleable either.
@@ -246,7 +246,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
             uint256 strayDistributed,
             uint256 strayRemaining,
             bool strayClaimed
-        ) = executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID + 99, SERVICE_ROUND, GROUP_ID);
+        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID + 99, SERVICE_ROUND, GROUP_ID);
         require(
             strayVerifier == 0 && strayOwner == 0 && strayDistributed == 0 && strayRemaining == 0 && !strayClaimed,
             "uncreated action projects zeros"
@@ -281,13 +281,13 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
 
         // The revert rolled the whole call back: nothing is recorded and the
         // projection still derives the same reward, so the member can retry
         // once the mint can actually pay.
         (, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
-            executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(!claimed, "nothing recorded for the failed mint");
         require(ownerReward == SERVICE_REWARD / 2, "projection unchanged after the failed mint");
         require(ownerDistributed == 0 && ownerRemaining == ownerReward, "no split recorded either");
@@ -339,7 +339,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID, SERVICE_ROUND);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
     }
 
     function testBatchRollsBackWhenOneActionWasAlreadyMinted() external {
@@ -374,13 +374,13 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberRewards(address(token), actionIds, GROUP_ID, rounds);
+        executor.mintMemberRewards(address(token), actionIds, rounds, GROUP_ID);
         require(actionTarget.mintRewardCalls() == callsAfterFirst, "no mint from the failed batch");
 
         // The untouched action still settles on its own afterwards.
         vm.prank(GROUP_OWNER);
         (uint256[] memory mintAmounts,) =
-            executor.mintMemberRewards(address(token), _ids(SERVICE_ACTION_ID + 1), GROUP_ID, _ids(SERVICE_ROUND));
+            executor.mintMemberRewards(address(token), _ids(SERVICE_ACTION_ID + 1), _ids(SERVICE_ROUND), GROUP_ID);
         require(mintAmounts[0] == SERVICE_REWARD, "the rolled back action settles afterwards");
     }
 
@@ -394,7 +394,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
             uint256 ownerDistributed,
             uint256 ownerRemaining,
             bool ownerClaimed
-        ) = executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(!ownerClaimed, "not claimed before the mint");
         require(ownerVerifier == 0 && ownerReward == 450e18, "owner projection");
         require(
@@ -408,12 +408,12 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
             uint256 verifierDistributed,
             uint256 verifierRemaining,
             bool verifierClaimed
-        ) = executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
         require(!verifierClaimed && verifierVerifier == 450e18, "verifier projection");
         require(verifierOwner == 0 && verifierDistributed == 0 && verifierRemaining == 0, "verifier has no owner side");
 
         (uint256 projectedMint, uint256 projectedBurn, bool projectedMinted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         require(!projectedMinted && projectedMint == 450e18 && projectedBurn == 0, "ledger projection");
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);

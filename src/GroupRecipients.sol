@@ -142,7 +142,7 @@ library GroupRecipients {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return self.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, offset, limit, reverse);
     }
 
@@ -151,8 +151,8 @@ library GroupRecipients {
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256 groupReward,
-        uint256 round
+        uint256 round,
+        uint256 groupReward
     ) external view returns (Distribution memory distributionInfo) {
         distributionInfo.recipientIds = self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
         distributionInfo.ratios = self.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);

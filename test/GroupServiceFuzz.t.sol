@@ -70,7 +70,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         // The recorded owner split always keeps the owner budget intact: the
         // distributed and remaining halves sum back to the reference reward.
         (,, uint256 ownerBurned, uint256 ownerDistributed, uint256 ownerRemaining,) =
-            executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
         (uint256 expectedOwner,) =
             _expectedOwner(serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalValidGovVotes);
         require(

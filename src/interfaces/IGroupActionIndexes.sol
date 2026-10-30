@@ -16,7 +16,7 @@ interface IGroupActionIndexes {
         view
         returns (
             uint256[] memory groupIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function joinedGroupIdsByMemberId(
@@ -29,7 +29,7 @@ interface IGroupActionIndexes {
         view
         returns (
             uint256[] memory groupIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function joinedTokenAddressesByGroupIdByMemberId(
@@ -43,7 +43,7 @@ interface IGroupActionIndexes {
         view
         returns (
             address[] memory tokenAddresses,
-            uint256 total
+            uint256 totalCount
         );
 
     function joinedMemberIds(
@@ -55,7 +55,7 @@ interface IGroupActionIndexes {
         view
         returns (
             uint256[] memory memberIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function joinedMemberIdsByGroupId(
@@ -68,6 +68,6 @@ interface IGroupActionIndexes {
         view
         returns (
             uint256[] memory memberIds,
-            uint256 total
+            uint256 totalCount
         );
 }

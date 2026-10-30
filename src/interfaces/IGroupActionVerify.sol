@@ -208,7 +208,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         view
         returns (
             VerifierApplication[] memory applications,
-            uint256 total
+            uint256 totalCount
         );
 
     function votesByVerifierIds(
@@ -238,7 +238,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         returns (
             uint256[] memory voterIds,
             uint256[] memory voteAmounts,
-            uint256 total
+            uint256 totalCount
         );
 
     function applicationVotersByVerifierId(
@@ -255,6 +255,6 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         returns (
             uint256[] memory voterIds,
             uint256[] memory voteAmounts,
-            uint256 total
+            uint256 totalCount
         );
 }

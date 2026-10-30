@@ -156,7 +156,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         require(mintAmount == 450e18 && burnAmount == 0, "verifier paid the whole verifier share");
 
         (uint256 verifierReward, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
-            executor.serviceRewardByMember(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
         require(claimed, "verifier claimed");
         require(verifierReward == 450e18 && ownerReward == 0, "verifier roles");
         require(ownerDistributed == 0 && ownerRemaining == 0, "no owner share to split");

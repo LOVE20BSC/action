@@ -281,7 +281,7 @@ library GroupActionManager {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return self.activeGroupIdsByActionId[tokenAddress][actionId].values(offset, limit, reverse);
     }
 
@@ -331,7 +331,7 @@ library GroupActionManager {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (address[] memory tokenAddresses, uint256 total) {
+    ) external view returns (address[] memory tokenAddresses, uint256 totalCount) {
         return self.tokenAddressesByGroupId[groupId].values(offset, limit, reverse);
     }
 
@@ -342,7 +342,7 @@ library GroupActionManager {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return self.actionIdsByGroupId[tokenAddress][groupId].values(offset, limit, reverse);
     }
 
@@ -352,7 +352,7 @@ library GroupActionManager {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return self.activeActionIds[tokenAddress].values(offset, limit, reverse);
     }
 

@@ -59,7 +59,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(expected1 + expected2 == PROPOSAL_REWARD - 1, "dust sanity");
 
         (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
-            executor.memberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+            executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
         require(viewAmount == expected1 && viewBurn == 0 && !viewMinted, "member reward preview");
 
         require(
@@ -68,18 +68,18 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
 
         uint256 balanceBefore = token.balanceOf(MEMBER1);
-        (uint256 mint1, uint256 burn1) = _settle(MEMBER1_ID, 2);
+        (uint256 mint1, uint256 burn1) = _settle(2, MEMBER1_ID);
         require(mint1 == expected1 && burn1 == 0, "member 1 minted");
         require(token.balanceOf(MEMBER1) - balanceBefore == expected1, "member 1 paid");
 
         balanceBefore = token.balanceOf(MEMBER2);
-        (uint256 mint2, uint256 burn2) = _settle(MEMBER2_ID, 2);
+        (uint256 mint2, uint256 burn2) = _settle(2, MEMBER2_ID);
         require(mint2 == expected2 && burn2 == 0, "member 2 minted");
         require(token.balanceOf(MEMBER2) - balanceBefore == expected2, "member 2 paid");
 
         require(actionTarget.mintRewardCalls() == 1, "single reward pull");
         require(actionTarget.registerCalls() == 2, "join state registered");
-        (viewAmount, viewBurn, viewMinted) = executor.memberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        (viewAmount, viewBurn, viewMinted) = executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
         require(viewAmount == expected1 && viewBurn == 0 && viewMinted, "minted flag recorded");
     }
 
@@ -102,10 +102,10 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 2
             )
         );
-        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
 
         (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
-            executor.memberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+            executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
         require(viewAmount == 0 && viewBurn == 0 && !viewMinted, "unsettled round stays pending");
     }
 
@@ -137,7 +137,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 2
             )
         );
-        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
     }
 
     function testBatchMintMemberRewards() external {
@@ -157,7 +157,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         rounds[0] = 2;
         vm.prank(MEMBER1);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+            executor.mintMemberRewards(address(token), actionIds, rounds, MEMBER1_ID);
         require(mintAmounts[0] == expected1 && burnAmounts[0] == 0, "batch mint amount");
         require(token.balanceOf(MEMBER1) == expected1, "batch mint paid");
 
@@ -166,11 +166,11 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         mismatched[1] = ACTION_ID;
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
-        executor.mintMemberRewards(address(token), mismatched, MEMBER1_ID, rounds);
+        executor.mintMemberRewards(address(token), mismatched, rounds, MEMBER1_ID);
 
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
-        executor.mintMemberRewards(address(token), mismatched, MEMBER1_ID, rounds);
+        executor.mintMemberRewards(address(token), mismatched, rounds, MEMBER1_ID);
 
         vm.prank(MEMBER1);
         vm.expectRevert(
@@ -178,7 +178,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), ACTION_ID, MEMBER1_ID, 2
             )
         );
-        executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+        executor.mintMemberRewards(address(token), actionIds, rounds, MEMBER1_ID);
     }
 
     function testBatchSettlementLocalizesTheFailingElement() external {
@@ -201,9 +201,9 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
         );
-        executor.mintMemberRewards(address(token), actionIds, MEMBER1_ID, rounds);
+        executor.mintMemberRewards(address(token), actionIds, rounds, MEMBER1_ID);
 
-        (,, bool minted) = executor.memberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        (,, bool minted) = executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
         require(!minted, "earlier element rolled back");
         require(actionTarget.mintRewardCalls() == 0, "no action reward pulled");
     }
@@ -322,7 +322,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 2
             )
         );
-        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+        executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
     }
 
     function testMintRejectsAnUncreatedAction() external {
@@ -331,14 +331,14 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
         );
-        executor.mintMemberReward(address(token), ACTION_ID + 1, MEMBER1_ID, 2);
+        executor.mintMemberReward(address(token), ACTION_ID + 1, 2, MEMBER1_ID);
     }
 
     function testMintChecksOwnerBeforeActionExistence() external {
         _atPhase(4);
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
-        executor.mintMemberReward(address(token), ACTION_ID + 1, MEMBER1_ID, 2);
+        executor.mintMemberReward(address(token), ACTION_ID + 1, 2, MEMBER1_ID);
     }
 
     function testMintRoundGuards() external {
@@ -349,11 +349,11 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, 1, 2)
         );
-        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 1);
+        executor.mintMemberReward(address(token), ACTION_ID, 1, MEMBER1_ID);
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 3, 2));
-        executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 3);
+        executor.mintMemberReward(address(token), ACTION_ID, 3, MEMBER1_ID);
     }
 
     /// @dev The action is reusable: a later round re-submits it, the community votes again, members
@@ -401,7 +401,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _fundExecutor(PROPOSAL_REWARD);
         actionTarget.setActionReward(address(token), ACTION_ID, 5, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
-        (uint256 mintAmount, uint256 burnAmount) = _settle(MEMBER1_ID, 5);
+        (uint256 mintAmount, uint256 burnAmount) = _settle(5, MEMBER1_ID);
         require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "round 5 settles on its own weights");
     }
 

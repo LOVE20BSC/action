@@ -241,14 +241,14 @@ contract LpExecutorRealIntegrationTest {
 
         uint256 memberBefore = token.balanceOf(member1);
         vm.prank(member1);
-        (uint256 mintAmount, uint256 burnAmount) = lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
+        (uint256 mintAmount, uint256 burnAmount) = lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "split follows the cap");
         require(token.balanceOf(member1) - memberBefore == expectedMint, "member received the mint");
         require(token.balanceOf(address(lpExecutor)) == 0, "executor keeps no reward");
         require(mint.rewardMinted(address(token)) == expectedReward, "mint ledger matches the action reward");
 
         (uint256 recordedMint, uint256 recordedBurn, bool minted) =
-            lpExecutor.memberReward(address(token), proposalId, 1, round);
+            lpExecutor.memberReward(address(token), proposalId, round, 1);
         require(minted && recordedMint == mintAmount && recordedBurn == burnAmount, "settlement recorded");
         (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), proposalId, round, 1);
         require(
@@ -268,7 +268,7 @@ contract LpExecutorRealIntegrationTest {
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), proposalId, 1, round
             )
         );
-        lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
+        lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
     }
 
     function _expectedSplit(uint256 proposalReward) internal view returns (uint256 mintAmount, uint256 burnAmount) {
@@ -302,7 +302,7 @@ contract LpExecutorRealIntegrationTest {
                 IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), proposalId, 1, round
             )
         );
-        lpExecutor.mintMemberReward(address(token), proposalId, 1, round);
+        lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
 
         (expectedShare, minted) = mint.proposalRewardByProposalId(address(token), round, proposalId);
         require(!minted, "still unallocatable after the attempt");

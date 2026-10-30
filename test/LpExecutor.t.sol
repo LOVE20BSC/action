@@ -655,7 +655,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _fundExecutor(PROPOSAL_REWARD);
 
         uint256 memberBefore = token.balanceOf(MEMBER1);
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
 
         require(mintAmount == 200e18, "mint capped by gov ratio");
         require(burnAmount == 800e18, "theoretical minus mint burned");
@@ -667,7 +667,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(actionTarget.lastMintRound() == 2, "round forwarded");
 
         (uint256 recordedMint, uint256 recordedBurn, bool minted) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(minted && recordedMint == 200e18 && recordedBurn == 800e18, "settlement recorded");
         (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(ratioMinted && ratio == 1e17, "gov ratio snapshot at mint");
@@ -683,7 +683,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mint1, uint256 burn1) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
+        (uint256 mint1, uint256 burn1) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
         (uint256 mint2, uint256 burn2) = _mintMemberReward(SECOND_ACTION_ID, 2, 2);
 
         require(mint1 == 666666666666666666666 && burn1 == 0, "member 1 proportional share");
@@ -701,7 +701,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mint1, uint256 burn1) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
+        (uint256 mint1, uint256 burn1) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
         (uint256 mint2, uint256 burn2) = _mintMemberReward(SECOND_ACTION_ID, 2, 2);
 
         require(mint1 == 666666666666666666666 && burn1 == 0, "truncated ratio must not burn");
@@ -716,7 +716,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
         require(mintAmount == PROPOSAL_REWARD, "full theoretical reward");
         require(burnAmount == 0, "no burn with cap disabled");
         require(token.burnCalls() == 0, "burn not called");
@@ -731,7 +731,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _fundExecutor(PROPOSAL_REWARD);
 
         uint256 memberBefore = token.balanceOf(MEMBER1);
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(mintAmount == 0, "nothing minted");
         require(burnAmount == PROPOSAL_REWARD, "theoretical reward burned");
         require(token.balanceOf(MEMBER1) == memberBefore, "no transfer");
@@ -746,7 +746,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "lp ratio is the cap");
         require(token.burnCalls() == 0, "no burn");
     }
@@ -758,7 +758,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, 500e18, true);
         _fundExecutor(500e18);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(actionTarget.mintRewardCalls() == 0, "no pull after the action was minted");
         require(mintAmount == 100e18 && burnAmount == 400e18, "settled against the recorded amount");
     }
@@ -771,7 +771,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         actionTarget.setMintReturnAmount(700e18);
         _fundExecutor(700e18);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(actionTarget.mintRewardCalls() == 1, "pull executed");
         require(mintAmount == 140e18 && burnAmount == 560e18, "the pull return drives the split");
     }
@@ -789,9 +789,9 @@ contract LpExecutorTest is LpExecutorTestBase {
                 IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
             )
         );
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
         require(actionTarget.mintRewardCalls() == 0, "no pull without effective participation");
-        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(!minted, "not marked minted");
     }
 
@@ -826,7 +826,7 @@ contract LpExecutorTest is LpExecutorTestBase {
                 IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
             )
         );
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
         require(actionTarget.mintRewardCalls() == 0, "no pull with zero reward");
     }
 
@@ -836,7 +836,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), SECOND_ACTION_ID)
         );
-        lpExecutor.mintMemberReward(address(token), SECOND_ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), SECOND_ACTION_ID, 2, 1);
 
         _atPhase(3);
         vm.prank(MEMBER1);
@@ -845,34 +845,34 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 3, 1));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 3);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 3, 1);
 
         _atPhase(2);
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 2, 0));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
     }
 
     function testMintMemberRewardRequiresMemberOwner() external {
         _atPhase(4);
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
     }
 
     function testMintMemberRewardChecksOwnerBeforeRound() external {
         _atPhase(4);
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 9);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 9, 1);
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 9, 2));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 9);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 9, 1);
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, 0, 2));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 0);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 0, 1);
     }
 
     function testMintMemberRewardRejectsRepeat() external {
@@ -882,7 +882,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
         _fundExecutor(PROPOSAL_REWARD);
-        _mintMemberReward(1, 2);
+        _mintMemberReward(2, 1);
 
         uint256 memberBefore = token.balanceOf(MEMBER1);
         vm.prank(MEMBER1);
@@ -891,7 +891,7 @@ contract LpExecutorTest is LpExecutorTestBase {
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), ACTION_ID, 1, 2
             )
         );
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
         require(token.balanceOf(MEMBER1) == memberBefore, "no second transfer");
         require(actionTarget.mintRewardCalls() == 1, "no second pull");
     }
@@ -905,9 +905,9 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(MockLpActionTarget.MintActionRewardReverted.selector));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
 
-        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(minted == false, "settlement rolled back");
         require(token.burnCalls() == 0, "burn rolled back");
     }
@@ -922,9 +922,9 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(token)));
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
 
-        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(minted == false, "settlement rolled back");
         require(token.burnCalls() == 0, "burn rolled back");
         require(token.balanceOf(address(lpExecutor)) == PROPOSAL_REWARD, "reward retained by the executor");
@@ -938,8 +938,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(3, 500e18, true);
         _fundExecutor(1500e18);
 
-        (uint256 mint2, uint256 burn2) = _mintMemberReward(1, 2);
-        (uint256 mint3, uint256 burn3) = _mintMemberReward(1, 3);
+        (uint256 mint2, uint256 burn2) = _mintMemberReward(2, 1);
+        (uint256 mint3, uint256 burn3) = _mintMemberReward(3, 1);
         require(mint2 == 200e18 && burn2 == 800e18, "round 2 settlement");
         require(mint3 == 100e18 && burn3 == 400e18, "round 3 settlement");
         (uint256 ratio2, bool minted2) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
@@ -966,7 +966,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+            lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
 
         require(mintAmounts.length == 2 && burnAmounts.length == 2, "aligned lengths");
         require(mintAmounts[0] == 200e18 && burnAmounts[0] == 800e18, "capped action");
@@ -991,7 +991,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+            lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
         require(mintAmounts[0] == 200e18 && mintAmounts[1] == 100e18, "per round mints");
         require(burnAmounts[0] == 800e18 && burnAmounts[1] == 400e18, "per round burns");
     }
@@ -1005,20 +1005,20 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
-        lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+        lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
 
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
-        lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+        lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
     }
 
     function testMintMemberRewardsEmptyArraysDoNothing() external {
         uint256[] memory empty = new uint256[](0);
         vm.prank(MEMBER1);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            lpExecutor.mintMemberRewards(address(token), empty, 1, empty);
+            lpExecutor.mintMemberRewards(address(token), empty, empty, 1);
         require(mintAmounts.length == 0 && burnAmounts.length == 0, "empty result");
-        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(minted == false, "no state change");
     }
 
@@ -1029,7 +1029,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, PROPOSAL_REWARD, true);
         _setActionReward(3, 500e18, true);
         _fundExecutor(1500e18);
-        _mintMemberReward(1, 2);
+        _mintMemberReward(2, 1);
 
         uint256[] memory actionIds = new uint256[](2);
         actionIds[0] = ACTION_ID;
@@ -1044,9 +1044,9 @@ contract LpExecutorTest is LpExecutorTestBase {
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), ACTION_ID, 1, 2
             )
         );
-        lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+        lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
 
-        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 3);
+        (,, bool minted) = lpExecutor.memberReward(address(token), ACTION_ID, 3, 1);
         require(minted == false, "later element rolled back");
     }
 
@@ -1105,7 +1105,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
-        _mintMemberReward(1, 2);
+        _mintMemberReward(2, 1);
 
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(minted && ratio == 1e17, "recorded at mint");
@@ -1132,15 +1132,15 @@ contract LpExecutorTest is LpExecutorTestBase {
         _fundExecutor(PROPOSAL_REWARD);
 
         (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(mintedBefore == false, "not minted yet");
         require(pendingMint == 200e18 && pendingBurn == 800e18, "pending computation");
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(mintAmount == pendingMint && burnAmount == pendingBurn, "settlement matches the quote");
 
         (uint256 recordedMint, uint256 recordedBurn, bool mintedAfter) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(mintedAfter && recordedMint == mintAmount && recordedBurn == burnAmount, "recorded values");
     }
 
@@ -1152,25 +1152,25 @@ contract LpExecutorTest is LpExecutorTestBase {
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
             lpExecutor.memberReward(address(token), ACTION_ID, 1, 1);
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "before creation");
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 3);
+        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), ACTION_ID, 3, 1);
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "after mint round");
         (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 2);
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "non participant");
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 1, 2);
+        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 2, 1);
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "unbound action");
     }
 
     function testMemberRewardPendingReturnsZeroWithoutEffectiveParticipation() external {
         _atPhase(4);
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "round without participants");
 
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _withdraw(1, 100e18);
         _atPhase(4);
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(mintAmount == 0 && burnAmount == 0 && minted == false, "fully withdrawn round");
     }
 
@@ -1182,6 +1182,6 @@ contract LpExecutorTest is LpExecutorTestBase {
                 IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
             )
         );
-        _mintMemberReward(1, 2);
+        _mintMemberReward(2, 1);
     }
 }

@@ -26,7 +26,7 @@ interface IVerificationInfo {
     function verificationInfosByRound(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (string[] memory keys, string[] memory values);
 }

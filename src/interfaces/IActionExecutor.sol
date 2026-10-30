@@ -64,14 +64,14 @@ interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExec
     function mintMemberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external returns (uint256 mintAmount, uint256 burnAmount);
     function mintMemberRewards(
         address tokenAddress,
         uint256[] calldata actionIds,
-        uint256 memberId,
-        uint256[] calldata rounds
+        uint256[] calldata rounds,
+        uint256 memberId
     ) external returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts);
 
     function currentVoteRound() external view returns (uint256);
@@ -80,8 +80,8 @@ interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExec
     function memberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted);
     function joinedAmountByActionId(
         address tokenAddress,

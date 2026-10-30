@@ -730,7 +730,7 @@ contract GroupActionEventsTest is
             mintAmount: expected1,
             burnAmount: 0
         });
-        _settle(MEMBER1_ID, 2);
+        _settle(2, MEMBER1_ID);
     }
 
     function _scores(uint256 a, uint256 b) internal pure returns (uint256[] memory out) {
@@ -804,9 +804,7 @@ contract GroupActionEventsTest is
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != topic) continue;
-            (
-                ,
-                ,
+            (,,
                 uint256 startIndex,
                 uint256 totalFinalScore,
                 uint256 verifiedGroupCount,

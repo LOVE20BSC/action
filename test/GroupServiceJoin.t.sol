@@ -23,7 +23,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _joinService(GROUP_ID);
 
         require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target joined");
-        require(executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "round snapshot");
+        require(actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "round snapshot");
         require(executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "join token");
     }
 
@@ -172,7 +172,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target cleared");
         require(
-            !executor.joinInfo(address(token), SERVICE_ACTION_ID, VERIFY_PHASE - 1, GROUP_ID),
+            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, VERIFY_PHASE - 1, GROUP_ID),
             "current round snapshot cleared"
         );
     }
@@ -212,11 +212,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "current state cleared");
         require(
-            executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID),
+            actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID),
             "past round snapshot survives the exit"
         );
         require(
-            !executor.joinInfo(address(token), SERVICE_ACTION_ID, MINT_PHASE - 1, GROUP_ID),
+            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, MINT_PHASE - 1, GROUP_ID),
             "exit round snapshot is cleared"
         );
     }
@@ -228,10 +228,10 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
 
-        require(!executor.joinInfo(address(token), SERVICE_ACTION_ID, 0, GROUP_ID), "before join is empty");
-        require(executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "join round recorded");
+        require(!actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, 0, GROUP_ID), "before join is empty");
+        require(actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "join round recorded");
         require(
-            !executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID), "future round false"
+            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID), "future round false"
         );
     }
 

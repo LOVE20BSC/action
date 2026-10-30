@@ -206,8 +206,8 @@ contract ActionTarget is IActionTarget {
     function isJoinedByRound(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (bool) {
         if (round > _joinRound()) {
             return false;
@@ -241,8 +241,8 @@ contract ActionTarget is IActionTarget {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
-        (actionIds, total) = _actionIdsByMemberId[tokenAddress][memberId]
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        (actionIds, totalCount) = _actionIdsByMemberId[tokenAddress][memberId]
             .values(offset, limit, reverse);
     }
 
@@ -253,11 +253,11 @@ contract ActionTarget is IActionTarget {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         if (round > _joinRound()) {
             return (new uint256[](0), 0);
         }
-        (memberIds, total) = _memberIdsByActionId[tokenAddress][actionId]
+        (memberIds, totalCount) = _memberIdsByActionId[tokenAddress][actionId]
             .valuesByRound(round, offset, limit, reverse);
     }
 
@@ -299,8 +299,8 @@ contract ActionTarget is IActionTarget {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
-        (actionIds, total) = Pagination.paginate(
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        (actionIds, totalCount) = Pagination.paginate(
             _actionIdsByExecutor[tokenAddress][executor],
             offset,
             limit,
@@ -319,10 +319,10 @@ contract ActionTarget is IActionTarget {
         returns (
             uint256[] memory actionIds,
             address[] memory executors,
-            uint256 total
+            uint256 totalCount
         )
     {
-        (actionIds, total) = Pagination.paginate(
+        (actionIds, totalCount) = Pagination.paginate(
             _actionIds[tokenAddress],
             offset,
             limit,
@@ -350,7 +350,7 @@ contract ActionTarget is IActionTarget {
         returns (
             uint256[] memory actionIds,
             address[] memory executors,
-            uint256 total
+            uint256 totalCount
         )
     {
         (uint256[] memory boundIds, address[] memory boundExecutors, uint256 count) =
@@ -372,7 +372,7 @@ contract ActionTarget is IActionTarget {
                 i++;
             }
         }
-        total = count;
+        totalCount = count;
     }
 
     function _currentRound() internal view returns (uint256) {

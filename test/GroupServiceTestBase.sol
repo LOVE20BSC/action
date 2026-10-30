@@ -284,7 +284,7 @@ abstract contract GroupServiceTestBase {
         returns (uint256 mintAmount, uint256 burnAmount)
     {
         vm.prank(_memberAddress(memberId));
-        return executor.mintMemberReward(address(token), actionId, memberId, SERVICE_ROUND);
+        return executor.mintMemberReward(address(token), actionId, SERVICE_ROUND, memberId);
     }
 
     function _setRecipients(

@@ -203,7 +203,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
             burnAmount: 800e18
         });
         vm.prank(MEMBER1);
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
     }
 
     function testMintMemberRewardRevertsOnZeroSettlement() external {
@@ -219,7 +219,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
                 IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
             )
         );
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
     }
 
     function testPartialWithdrawEmitsOnlyWithdrawn() external {
@@ -244,7 +244,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
 
         vm.recordLogs();
         vm.prank(MEMBER1);
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
         LpExecutorVm.Log[] memory logs = vm.getRecordedLogs();
         require(logs.length == 1, "single event");
         require(
@@ -265,7 +265,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
 
         vm.recordLogs();
         vm.prank(MEMBER1);
-        lpExecutor.mintMemberReward(address(token), ACTION_ID, 1, 2);
+        lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
         LpExecutorVm.Log[] memory logs = vm.getRecordedLogs();
 
         require(logs.length == 1, "single event");

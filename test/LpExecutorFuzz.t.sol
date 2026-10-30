@@ -83,11 +83,11 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         (uint256 expectedMint, uint256 expectedBurn) =
             _referenceReward(reward, validVotes, totalValidGovVotes, multiplier);
         (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 1, 2);
+            lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 2, 1);
         require(mintedBefore == false, "not minted yet");
         require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending matches the reference");
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "split matches the reference");
         require(mintAmount + burnAmount == reward, "reward is conserved");
     }
@@ -113,6 +113,57 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         require(minted == false && ratio == validVotes * 1e18 / totalValidGovVotes, "floor division");
     }
 
+    function test_ZeroBoundaries(uint256 effectiveAmount, uint256 totalVotes, uint256 multiplier) external {
+        _atPhase(4);
+        _setActionReward(ACTION_ID, 2, PROPOSAL_REWARD, true);
+        (uint256 idleMint, uint256 idleBurn, bool idleMinted) =
+            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
+        require(!idleMinted && idleMint == 0 && idleBurn == 0, "zero total effective amount");
+
+        uint256 memberAmount = effectiveAmount % 1e24 + 1e18;
+        uint256 totalValidGovVotes = totalVotes % 1e24;
+        uint256 govRatioMultiplier = multiplier % 3e18;
+        uint256 validVotes = totalValidGovVotes == 0 ? 0 : totalValidGovVotes / 2;
+
+        _createActionWithConfig(SECOND_ACTION_ID, govRatioMultiplier, 0);
+        _atPhaseBlock(3, 3000);
+        _join(SECOND_ACTION_ID, 1, memberAmount);
+        _join(SECOND_ACTION_ID, 2, 1e18);
+        stake.setValidGovVotes(address(token), 1, validVotes);
+        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
+        _atPhase(4);
+        _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
+        _fundExecutor(PROPOSAL_REWARD);
+
+        uint256 totalEffectiveAmount = memberAmount + 1e18;
+        uint256 effectiveLpRatio = memberAmount * PRECISION / totalEffectiveAmount;
+        uint256 theoreticalReward = PROPOSAL_REWARD * memberAmount / totalEffectiveAmount;
+
+        uint256 expectedMint;
+        uint256 expectedBurn;
+        if (govRatioMultiplier == 0) {
+            expectedMint = theoreticalReward;
+        } else if (totalValidGovVotes == 0) {
+            expectedBurn = theoreticalReward;
+        } else {
+            uint256 govRatio = validVotes * PRECISION / totalValidGovVotes;
+            uint256 govRatioCap = govRatio * govRatioMultiplier / PRECISION;
+            uint256 cappedRatio = govRatioCap < effectiveLpRatio ? govRatioCap : effectiveLpRatio;
+            expectedMint =
+                cappedRatio == effectiveLpRatio ? theoreticalReward : PROPOSAL_REWARD * cappedRatio / PRECISION;
+            expectedBurn = theoreticalReward - expectedMint;
+        }
+
+        (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
+            lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 2, 1);
+        require(!mintedBefore, "not minted yet");
+        require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending zero boundary");
+
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
+        require(mintAmount == expectedMint && burnAmount == expectedBurn, "zero boundary split");
+        require(mintAmount + burnAmount == theoreticalReward, "reward is conserved");
+    }
+
     function testFuzzBatchLengthMismatch(uint8 actionLength, uint8 roundLength) external {
         uint256 actionIdsLength = uint256(actionLength) % 5;
         uint256 roundsLength = uint256(roundLength) % 5;
@@ -126,7 +177,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
                 IActionExecutorErrors.BatchLengthMismatch.selector, actionIdsLength, roundsLength
             )
         );
-        lpExecutor.mintMemberRewards(address(token), actionIds, 1, rounds);
+        lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
     }
 
     function _referenceReward(

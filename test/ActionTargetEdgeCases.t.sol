@@ -38,7 +38,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
 
         phase.setPhase(1);
         _join(11, 1);
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 0), "first snapshot at round zero");
+        require(actionTarget.isJoinedByRound(address(token), 11, 0, 1), "first snapshot at round zero");
     }
 
     function testSameRoundJoinAndClearOverwritesSnapshot() external {
@@ -66,7 +66,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 11, 3, 0, 10, false);
         require(total == 2 && memberIds[0] == 1 && memberIds[1] == 2, "round 3 snapshot");
         require(actionTarget.isJoinedByRound(address(token), 11, 2, 2) == false, "member 2 absent in round 2");
-        require(actionTarget.isJoinedByRound(address(token), 11, 2, 3), "member 2 present in round 3");
+        require(actionTarget.isJoinedByRound(address(token), 11, 3, 2), "member 2 present in round 3");
     }
 
     function testPaginationOffsetAtUint256Max() external {
@@ -150,7 +150,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         require(total == 1 && page[0] == 1, "join round readable");
         (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
         require(total == 0 && page.length == 0, "next round is not started");
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 2) == false, "flag matches boundary");
+        require(actionTarget.isJoinedByRound(address(token), 11, 2, 1) == false, "flag matches boundary");
     }
 
     function testCreateAcceptsMultipleBusinessItems() external {

@@ -124,7 +124,7 @@ contract ServiceCoreRegressionTest is Test {
     function testRegression_RealSourceBurnCannotOverpayServiceBudget() external {
         assertFalse(mint.isRewardPrepared(address(child), 2));
         vm.prank(ALICE);
-        (uint256 first,) = service.mintMemberReward(address(parent), 1, 1, 2);
+        (uint256 first,) = service.mintMemberReward(address(parent), 1, 2, 1);
         assertEq(first, 45000);
 
         // Burning the community token frees supply headroom, so the served action's live reward grows.

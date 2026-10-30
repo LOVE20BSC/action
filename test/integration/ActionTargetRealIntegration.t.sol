@@ -310,7 +310,7 @@ contract ActionTargetRealIntegrationTest {
         actionTarget.registerJoinState(address(token), proposalId, 1);
         require(actionTarget.isJoined(address(token), proposalId, 1), "joined");
         require(
-            actionTarget.isJoinedByRound(address(token), proposalId, 1, createdRound),
+            actionTarget.isJoinedByRound(address(token), proposalId, createdRound, 1),
             "snapshot lands on the first join round"
         );
         (uint256[] memory memberIds, uint256 total) =

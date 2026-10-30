@@ -166,7 +166,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
         require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "cap disabled skips the zero vote burn");
     }
 
@@ -177,7 +177,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(1, 2);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(mintAmount == 200e18 && burnAmount == 800e18, "creation round is mintable");
     }
 
@@ -187,11 +187,11 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
-        _mintMemberReward(1, 2);
+        _mintMemberReward(2, 1);
 
         _setActionReward(2, 999e18, true);
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 1, 2);
+            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
         require(minted && mintAmount == 200e18 && burnAmount == 800e18, "recorded settlement is stable");
     }
 

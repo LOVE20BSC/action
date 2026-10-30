@@ -133,7 +133,7 @@ contract LpExecutorHandler {
 
         vm.prank(_memberAddress(memberId));
         (uint256 mintAmount, uint256 burnAmount) =
-            LpExecutor(lpExecutor).mintMemberReward(token, ACTION_ID, memberId, 2);
+            LpExecutor(lpExecutor).mintMemberReward(token, ACTION_ID, 2, memberId);
         mintedModel[memberId] = true;
         mintedAmountModel[memberId] = mintAmount;
         burnedAmountModel[memberId] = burnAmount;
@@ -206,7 +206,7 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
     function invariant_MintRecordsMatchModel() public view {
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
             (uint256 mintAmount, uint256 burnAmount, bool minted) =
-                lpExecutor.memberReward(address(token), ACTION_ID, memberId, 2);
+                lpExecutor.memberReward(address(token), ACTION_ID, 2, memberId);
             if (handler.mintedModel(memberId)) {
                 require(minted, "minted flag matches model");
                 require(

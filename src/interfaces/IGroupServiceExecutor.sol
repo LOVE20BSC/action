@@ -111,7 +111,7 @@ interface IGroupServiceExecutor is
         uint256 serviceActionId
     ) external view returns (uint256);
 
-    function rewardByRecipient(
+    function rewardByRecipientId(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
@@ -136,7 +136,7 @@ interface IGroupServiceExecutor is
             uint256 ownerAmount
         );
 
-    function serviceRewardByMember(
+    function serviceRewardByMemberId(
         address serviceTokenAddress,
         uint256 serviceActionId,
         uint256 round,
@@ -162,10 +162,4 @@ interface IGroupServiceExecutor is
         uint256 serviceActionId,
         uint256 memberId
     ) external;
-    function joinInfo(
-        address serviceTokenAddress,
-        uint256 serviceActionId,
-        uint256 round,
-        uint256 memberId
-    ) external view returns (bool joined);
 }

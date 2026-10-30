@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
+import {JoinInfo} from "../src/interfaces/IGroupActionJoin.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionFuzzTest is GroupActionExecutorTestBase {
@@ -39,13 +40,14 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         _join(MEMBER1_ID, amount1, 0);
         _join(MEMBER1_ID, amount2, 0);
 
-        (uint256 joinedRound, uint256 amount, , uint256 ownAmount, ) =
-            executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
-        require(joinedRound == 2 && amount == amount1 + amount2 && ownAmount == amount1 + amount2, "appends");
+        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        uint256 amount = info.ownAmount + info.providerAmount;
+        require(info.joinedRound == 2 && amount == amount1 + amount2 && info.ownAmount == amount1 + amount2, "appends");
 
         _withdraw(MEMBER1_ID, amount2 + 1);
-        (, amount, , ownAmount, ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
-        require(amount == amount1 + amount2 - amount2 - 1 && ownAmount == amount, "partial withdraw");
+        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        amount = info.ownAmount + info.providerAmount;
+        require(amount == amount1 + amount2 - amount2 - 1 && info.ownAmount == amount, "partial withdraw");
         require(
             executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == amount,
             "group total tracks"
@@ -93,7 +95,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
                     2
                 )
             );
-            executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+            executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
             return;
         }
 
@@ -112,9 +114,9 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
                     2
                 )
             );
-            executor.mintMemberReward(address(token), ACTION_ID, MEMBER1_ID, 2);
+            executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
         } else {
-            (mint1,) = _settle(MEMBER1_ID, 2);
+            (mint1,) = _settle(2, MEMBER1_ID);
         }
 
         uint256 mint2;
@@ -129,9 +131,9 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
                     2
                 )
             );
-            executor.mintMemberReward(address(token), ACTION_ID, MEMBER2_ID, 2);
+            executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER2_ID);
         } else {
-            (mint2,) = _settle(MEMBER2_ID, 2);
+            (mint2,) = _settle(2, MEMBER2_ID);
         }
         require(mint1 == expected1 && mint2 == expected2, "split formula");
         require(mint1 + mint2 <= PROPOSAL_REWARD, "budget bound");

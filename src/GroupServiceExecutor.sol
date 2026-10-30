@@ -153,16 +153,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         });
     }
 
-    function joinInfo(
-        address serviceTokenAddress,
-        uint256 serviceActionId,
-        uint256 round,
-        uint256 memberId
-    ) external view returns (bool joined) {
-        return IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round);
-    }
-
-    function rewardByRecipient(
+    function rewardByRecipientId(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
@@ -250,7 +241,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return _totalGroupActionReward(_roundActions(sourceTokenAddress, round));
     }
 
-    function serviceRewardByMember(
+    function serviceRewardByMemberId(
         address serviceTokenAddress,
         uint256 serviceActionId,
         uint256 round,
@@ -299,8 +290,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function memberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
         if (_layout.memberMinted[tokenAddress][actionId][round][memberId]) {
             return (
@@ -361,7 +352,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return GroupRecipients.actionIdsWithRecipients(_layout, sourceTokenAddress, groupId, round, offset, limit, reverse);
     }
 
@@ -369,8 +360,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256 groupReward,
-        uint256 round
+        uint256 round,
+        uint256 groupReward
     )
         external
         view
@@ -382,7 +373,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         )
     {
         GroupRecipients.Distribution memory distributionInfo =
-            GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, groupReward, round);
+            GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, round, groupReward);
         return (distributionInfo.recipientIds, distributionInfo.ratios, distributionInfo.amounts, distributionInfo.ownerAmount);
     }
 
@@ -499,7 +490,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     ) internal view returns (GroupRecipients.Distribution memory) {
         (address sourceTokenAddress, uint256 slice) =
             _ownerSlice(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
-        return GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, slice, round);
+        return GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, round, slice);
     }
 
     function _ownerSlice(
@@ -527,7 +518,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 memberId
     ) internal view returns (Settlement memory settlement) {
         settlement.actionTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
-        if (!IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round)) {
+        if (!IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, round, memberId)) {
             return settlement;
         }
 
@@ -747,8 +738,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function _mintMemberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
         if (createdRound == 0) {

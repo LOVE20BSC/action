@@ -4,7 +4,7 @@ pragma solidity =0.8.37;
 import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
-import {IGroupActionJoinEvents, IGroupActionJoinErrors} from "./interfaces/IGroupActionJoin.sol";
+import {IGroupActionJoinEvents, IGroupActionJoinErrors, JoinInfo} from "./interfaces/IGroupActionJoin.sol";
 import {IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
@@ -79,12 +79,12 @@ library GroupActionJoin {
         uint256 round = self.currentJoinRound();
 
         if (joinedGroupId == 0) {
-            _registerMembership(self, tokenAddress, actionId, groupId, memberId, round);
+            _registerMembership(self, tokenAddress, actionId, round, groupId, memberId);
         }
         if (!IActionTarget(self.ACTION_TARGET_ADDRESS).isJoined(tokenAddress, actionId, memberId)) {
             IActionTarget(self.ACTION_TARGET_ADDRESS).registerJoinState(tokenAddress, actionId, memberId);
         }
-        _applyVerificationInfos(self, tokenAddress, actionId, memberId, verificationValues, round, joinedGroupId == 0);
+        _applyVerificationInfos(self, tokenAddress, actionId, round, memberId, verificationValues, joinedGroupId == 0);
         _increaseAmount(self, tokenAddress, actionId, round, groupId, memberId, amount, providerId);
 
         if (providerId == 0) {
@@ -265,25 +265,14 @@ library GroupActionJoin {
         uint256 actionId,
         uint256 round,
         uint256 memberId
-    )
-        external
-        view
-        returns (
-            uint256 joinedRound,
-            uint256 joinedAmount,
-            uint256 groupId,
-            uint256 ownAmount,
-            uint256 providerAmount
-        )
-    {
-        ownAmount = self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
-        providerAmount = self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
-        joinedAmount = ownAmount + providerAmount;
-        if (joinedAmount == 0) {
-            return (0, 0, 0, 0, 0);
+    ) external view returns (JoinInfo memory info) {
+        info.ownAmount = self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
+        info.providerAmount = self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
+        if (info.ownAmount + info.providerAmount == 0) {
+            return info;
         }
-        joinedRound = self.joinedRoundHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
-        groupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
+        info.joinedRound = self.joinedRoundHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
+        info.groupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
     }
 
     function joinedAmountByGroupId(
@@ -304,7 +293,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return self.groupIdsByRound[tokenAddress][actionId].valuesByRound(round, offset, limit, reverse);
     }
 
@@ -317,7 +306,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return self.memberIdsByGroupId[tokenAddress][actionId][groupId].valuesByRound(round, offset, limit, reverse);
     }
 
@@ -494,11 +483,11 @@ library GroupActionJoin {
             uint256[] memory memberIds,
             uint256[] memory quotaAmounts,
             uint256[] memory usedAmounts,
-            uint256 total
+            uint256 totalCount
         )
     {
         Uint256Set.Storage storage quotaSet = self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId];
-        (memberIds, total) = quotaSet.values(offset, limit, reverse);
+        (memberIds, totalCount) = quotaSet.values(offset, limit, reverse);
         quotaAmounts = new uint256[](memberIds.length);
         usedAmounts = new uint256[](memberIds.length);
         for (uint256 i = 0; i < memberIds.length; i++) {
@@ -539,10 +528,10 @@ library GroupActionJoin {
         returns (
             uint256[] memory providerIds,
             uint256[] memory amounts,
-            uint256 total
+            uint256 totalCount
         )
     {
-        (providerIds, total) =
+        (providerIds, totalCount) =
             _pageProviderIds(self, tokenAddress, actionId, round, memberId, offset, limit, reverse);
         amounts = new uint256[](providerIds.length);
         for (uint256 i = 0; i < providerIds.length; i++) {
@@ -580,7 +569,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return self.joinedGroupIds.values(offset, limit, reverse);
     }
 
@@ -590,7 +579,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return self.joinedGroupIdsByMemberId[memberId].values(offset, limit, reverse);
     }
 
@@ -601,7 +590,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (address[] memory tokenAddresses, uint256 total) {
+    ) external view returns (address[] memory tokenAddresses, uint256 totalCount) {
         return self.joinedTokenAddressesByGroupIdByMemberId[groupId][memberId].values(offset, limit, reverse);
     }
 
@@ -610,7 +599,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return self.joinedMemberIds.values(offset, limit, reverse);
     }
 
@@ -620,7 +609,7 @@ library GroupActionJoin {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return self.joinedMemberIdsByGroupId[groupId].values(offset, limit, reverse);
     }
 
@@ -694,9 +683,9 @@ library GroupActionJoin {
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
+        uint256 round,
         uint256 groupId,
-        uint256 memberId,
-        uint256 round
+        uint256 memberId
     ) internal {
         self.joinedRoundHistoryByMemberId[tokenAddress][actionId][memberId].record(round, round);
         self.groupHistoryByMemberId[tokenAddress][actionId][memberId].record(round, groupId);
@@ -720,9 +709,9 @@ library GroupActionJoin {
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
+        uint256 round,
         uint256 memberId,
         string[] calldata verificationValues,
-        uint256 round,
         bool isFirstJoin
     ) internal {
         string[] storage keys = self.verificationKeysByActionId[tokenAddress][actionId];

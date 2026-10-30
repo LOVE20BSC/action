@@ -136,7 +136,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         view
         returns (
             uint256[] memory groupIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function isGroupActive(
@@ -172,7 +172,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         view
         returns (
             address[] memory tokenAddresses,
-            uint256 total
+            uint256 totalCount
         );
 
     function actionIdsByGroupId(
@@ -186,7 +186,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         view
         returns (
             uint256[] memory actionIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function actionIdsWithActiveGroups(
@@ -199,7 +199,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         view
         returns (
             uint256[] memory actionIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function hasActiveGroups(

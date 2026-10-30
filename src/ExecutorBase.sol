@@ -19,19 +19,18 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
     function mintMemberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) public override nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
-        return _mintMemberReward(tokenAddress, actionId, memberId, round);
+        return _mintMemberReward(tokenAddress, actionId, round, memberId);
     }
 
     function mintMemberRewards(
         address tokenAddress,
         uint256[] calldata actionIds,
-        uint256 memberId,
-        uint256[] calldata rounds
-    )
-        external
+        uint256[] calldata rounds,
+        uint256 memberId
+    ) external
         override
         nonReentrant
         onlyMemberOwner(memberId)
@@ -45,7 +44,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
+            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], rounds[i], memberId);
         }
     }
 
@@ -84,7 +83,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
     function _mintMemberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) internal virtual returns (uint256 mintAmount, uint256 burnAmount);
 }

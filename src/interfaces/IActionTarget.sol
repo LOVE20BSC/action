@@ -117,8 +117,8 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     function isJoinedByRound(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (bool);
     function joinedRounds(
         address tokenAddress,
@@ -140,7 +140,7 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total);
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
     function memberIdsByActionId(
         address tokenAddress,
         uint256 actionId,
@@ -148,14 +148,14 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total);
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount);
     function actionIdsByExecutor(
         address tokenAddress,
         address executor,
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total);
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
     function actions(
         address tokenAddress,
         uint256 offset,
@@ -167,7 +167,7 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         returns (
             uint256[] memory actionIds,
             address[] memory executors,
-            uint256 total
+            uint256 totalCount
         );
     function votedActions(
         address tokenAddress,
@@ -181,6 +181,6 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         returns (
             uint256[] memory actionIds,
             address[] memory executors,
-            uint256 total
+            uint256 totalCount
         );
 }

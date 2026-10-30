@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+struct JoinInfo {
+    uint256 joinedRound;
+    uint256 groupId;
+    uint256 ownAmount;
+    uint256 providerAmount;
+}
+
 interface IGroupActionJoinEvents {
     event GroupActionJoined(
         address indexed tokenAddress,
@@ -155,16 +162,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         uint256 actionId,
         uint256 round,
         uint256 memberId
-    )
-        external
-        view
-        returns (
-            uint256 joinedRound,
-            uint256 joinedAmount,
-            uint256 groupId,
-            uint256 ownAmount,
-            uint256 providerAmount
-        );
+    ) external view returns (JoinInfo memory info);
 
     function joinedAmountByGroupId(
         address tokenAddress,
@@ -185,7 +183,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         view
         returns (
             uint256[] memory groupIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function memberIdsByGroupId(
@@ -201,7 +199,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         view
         returns (
             uint256[] memory memberIds,
-            uint256 total
+            uint256 totalCount
         );
 
     function addProviderQuota(
@@ -236,7 +234,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
             uint256[] memory memberIds,
             uint256[] memory quotaAmounts,
             uint256[] memory usedAmounts,
-            uint256 total
+            uint256 totalCount
         );
 
     function providerAmountsByMemberId(
@@ -253,6 +251,6 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         returns (
             uint256[] memory providerIds,
             uint256[] memory amounts,
-            uint256 total
+            uint256 totalCount
         );
 }

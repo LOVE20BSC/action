@@ -12,6 +12,7 @@ import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
 import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
+import {JoinInfo} from "./interfaces/IGroupActionJoin.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -184,17 +185,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 actionId,
         uint256 round,
         uint256 memberId
-    )
-        external
-        view
-        returns (
-            uint256 joinedRound,
-            uint256 joinedAmount,
-            uint256 groupId,
-            uint256 ownAmount,
-            uint256 providerAmount
-        )
-    {
+    ) external view returns (JoinInfo memory info) {
         return GroupActionJoin.joinInfo(_layout, tokenAddress, actionId, round, memberId);
     }
 
@@ -214,7 +205,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return GroupActionJoin.groupIdsByRound(_layout, tokenAddress, actionId, round, offset, limit, reverse);
     }
 
@@ -226,7 +217,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return GroupActionJoin.memberIdsByGroupId(_layout, tokenAddress, actionId, round, groupId, offset, limit, reverse);
     }
 
@@ -268,7 +259,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
             uint256[] memory memberIds,
             uint256[] memory quotaAmounts,
             uint256[] memory usedAmounts,
-            uint256 total
+            uint256 totalCount
         )
     {
         return GroupActionJoin.providerQuotas(_layout, tokenAddress, actionId, groupId, providerId, offset, limit, reverse);
@@ -288,7 +279,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         returns (
             uint256[] memory providerIds,
             uint256[] memory amounts,
-            uint256 total
+            uint256 totalCount
         )
     {
         return GroupActionJoin.providerAmountsByMemberId(_layout, tokenAddress, actionId, round, memberId, offset, limit, reverse);
@@ -298,7 +289,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return GroupActionJoin.joinedGroupIds(_layout, offset, limit, reverse);
     }
 
@@ -307,7 +298,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return GroupActionJoin.joinedGroupIdsByMemberId(_layout, memberId, offset, limit, reverse);
     }
 
@@ -317,7 +308,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (address[] memory tokenAddresses, uint256 total) {
+    ) external view returns (address[] memory tokenAddresses, uint256 totalCount) {
         return GroupActionJoin.joinedTokenAddressesByGroupIdByMemberId(_layout, groupId, memberId, offset, limit, reverse);
     }
 
@@ -325,7 +316,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return GroupActionJoin.joinedMemberIds(_layout, offset, limit, reverse);
     }
 
@@ -334,7 +325,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory memberIds, uint256 total) {
+    ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return GroupActionJoin.joinedMemberIdsByGroupId(_layout, groupId, offset, limit, reverse);
     }
 
@@ -438,7 +429,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (VerifierApplication[] memory applications, uint256 total) {
+    ) external view returns (VerifierApplication[] memory applications, uint256 totalCount) {
         return GroupActionVerify.verifierApplications(_layout, tokenAddress, actionId, offset, limit, reverse);
     }
 
@@ -467,7 +458,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory voterIds, uint256[] memory voteAmounts, uint256 total) {
+    ) external view returns (uint256[] memory voterIds, uint256[] memory voteAmounts, uint256 totalCount) {
         return
             GroupActionVerify.applicationVoters(_layout, tokenAddress, actionId, round, applicationId, offset, limit, reverse);
     }
@@ -480,7 +471,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory voterIds, uint256[] memory voteAmounts, uint256 total) {
+    ) external view returns (uint256[] memory voterIds, uint256[] memory voteAmounts, uint256 totalCount) {
         return GroupActionVerify.applicationVotersByVerifierId(
             _layout, tokenAddress, actionId, round, verifierId, offset, limit, reverse
         );
@@ -513,10 +504,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     function verificationInfosByRound(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (string[] memory keys, string[] memory values) {
-        return GroupActionVerify.verificationInfosByRound(_layout, tokenAddress, actionId, memberId, round);
+        return GroupActionVerify.verificationInfosByRound(_layout, tokenAddress, actionId, round, memberId);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -576,7 +567,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory groupIds, uint256 total) {
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         return GroupActionManager.activeGroupIds(_layout, tokenAddress, actionId, offset, limit, reverse);
     }
 
@@ -605,7 +596,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (address[] memory tokenAddresses, uint256 total) {
+    ) external view returns (address[] memory tokenAddresses, uint256 totalCount) {
         return GroupActionManager.tokenAddressesByGroupId(_layout, groupId, offset, limit, reverse);
     }
 
@@ -615,7 +606,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return GroupActionManager.actionIdsByGroupId(_layout, tokenAddress, groupId, offset, limit, reverse);
     }
 
@@ -624,7 +615,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 total) {
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return GroupActionManager.actionIdsWithActiveGroups(_layout, tokenAddress, offset, limit, reverse);
     }
 
@@ -662,8 +653,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     function memberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
         minted = _layout.memberMinted[tokenAddress][actionId][round][memberId];
         if (minted) {
@@ -734,8 +725,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     function _mintMemberReward(
         address tokenAddress,
         uint256 actionId,
-        uint256 memberId,
-        uint256 round
+        uint256 round,
+        uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
         if (createdRound == 0) {
