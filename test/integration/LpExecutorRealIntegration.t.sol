@@ -201,14 +201,14 @@ contract LpExecutorRealIntegrationTest {
         uint256 round = phase.currentPhase();
         uint256 proposalId = _createLpProposal(member1, 1);
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), proposalId) == address(lpPair),
+            lpExecutor.joinTokenAddress(address(token), proposalId) == address(lpPair),
             "join token configured"
         );
         require(
-            lpExecutor.GOV_RATIO_MULTIPLIER(address(token), proposalId) == GOV_RATIO_MULTIPLIER,
+            lpExecutor.govRatioMultiplier(address(token), proposalId) == GOV_RATIO_MULTIPLIER,
             "multiplier configured"
         );
-        require(lpExecutor.MIN_GOV_RATIO(address(token), proposalId) == MIN_GOV_RATIO, "min ratio configured");
+        require(lpExecutor.minGovRatio(address(token), proposalId) == MIN_GOV_RATIO, "min ratio configured");
 
         _voteOne(member1, 1, proposalId, MEMBER1_VOTES);
 
@@ -227,7 +227,7 @@ contract LpExecutorRealIntegrationTest {
 
     function _assertJoinLedger(uint256 proposalId, uint256 round) internal view {
         require(actionTarget.isJoined(address(token), proposalId, 1), "action target joined");
-        require(lpExecutor.joinedAmount(address(token), proposalId, round) == LP_JOIN_AMOUNT, "join ledger");
+        require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == LP_JOIN_AMOUNT, "join ledger");
         (uint256 deduction,,) = lpExecutor.deduction(address(token), proposalId, round, 1);
         require(deduction == 0, "joined at the phase start");
         require(lpPair.balanceOf(address(lpExecutor)) == LP_JOIN_AMOUNT, "lp escrowed");
@@ -325,14 +325,14 @@ contract LpExecutorRealIntegrationTest {
         require(lpPair.balanceOf(member1) - memberBefore == LP_JOIN_AMOUNT / 4, "partial withdraw returned");
         require(actionTarget.isJoined(address(token), proposalId, 1), "partial withdraw keeps the join state");
         require(
-            lpExecutor.joinedAmount(address(token), proposalId, round) == LP_JOIN_AMOUNT - LP_JOIN_AMOUNT / 4,
+            lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == LP_JOIN_AMOUNT - LP_JOIN_AMOUNT / 4,
             "balance reduced"
         );
 
         vm.prank(member1);
         lpExecutor.withdraw(address(token), proposalId, 1, LP_JOIN_AMOUNT - LP_JOIN_AMOUNT / 4);
         require(actionTarget.isJoined(address(token), proposalId, 1) == false, "full withdraw auto exits");
-        require(lpExecutor.joinedAmount(address(token), proposalId, round) == 0, "ledger cleared");
+        require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == 0, "ledger cleared");
 
         vm.prank(member1);
         lpExecutor.join(address(token), proposalId, 1, LP_JOIN_AMOUNT / 2);
@@ -373,8 +373,8 @@ contract LpExecutorRealIntegrationTest {
         lpExecutor.join(address(token), proposalId, 1, LP_JOIN_AMOUNT);
 
         require(lpPair.balanceOf(member1) == lpBefore, "lp not moved");
-        require(lpExecutor.joinedAmount(address(token), proposalId, round) == 0, "join ledger rolled back");
-        require(lpExecutor.totalDeduction(address(token), proposalId, round) == 0, "deduction rolled back");
+        require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == 0, "join ledger rolled back");
+        require(lpExecutor.deductionByRound(address(token), proposalId, round) == 0, "deduction rolled back");
     }
 
     function testRealIntegration_AdmissionRejects() external {

@@ -131,7 +131,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         uint256 memberId,
         uint256 amount,
         uint256 providerId,
-        string[] calldata verificationInfos
+        string[] calldata verificationValues
     ) external;
 
     function withdraw(
@@ -141,7 +141,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         uint256 amount
     ) external;
 
-    function providerQuotaWithdraw(
+    function withdrawProviderQuota(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -160,20 +160,20 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         view
         returns (
             uint256 joinedRound,
-            uint256 amount,
+            uint256 joinedAmount,
             uint256 groupId,
             uint256 ownAmount,
             uint256 providerAmount
         );
 
-    function totalJoinedAmountByGroupId(
+    function joinedAmountByGroupId(
         address tokenAddress,
         uint256 actionId,
         uint256 round,
         uint256 groupId
     ) external view returns (uint256);
 
-    function groupIds(
+    function groupIdsByRound(
         address tokenAddress,
         uint256 actionId,
         uint256 round,
@@ -204,7 +204,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
             uint256 total
         );
 
-    function providerQuotaAdd(
+    function addProviderQuota(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -213,7 +213,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
         uint256[] calldata amounts
     ) external;
 
-    function providerQuotaRemove(
+    function removeProviderQuota(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,

@@ -159,13 +159,13 @@ def main():
             for signature, value in fields.items():
                 calls[env[contract + "_ADDRESS"].lower() + "/" + signature] = env.get(value, value)
 
-        getters("ACTION_TARGET", {"initialized()(bool)": "true", "mintAddress()(address)": "MINT_ADDRESS",
-                "voteAddress()(address)": "VOTE_ADDRESS", "submitAddress()(address)": "SUBMIT_ADDRESS",
-                "memberNFTAddress()(address)": "MEMBER_NFT_ADDRESS", "phaseAddress()(address)": "PHASE_ADDRESS"})
+        getters("ACTION_TARGET", {"initialized()(bool)": "true", "MINT_ADDRESS()(address)": "MINT_ADDRESS",
+                "VOTE_ADDRESS()(address)": "VOTE_ADDRESS", "SUBMIT_ADDRESS()(address)": "SUBMIT_ADDRESS",
+                "MEMBER_NFT_ADDRESS()(address)": "MEMBER_NFT_ADDRESS", "PHASE_ADDRESS()(address)": "PHASE_ADDRESS"})
         for name in ("LP_EXECUTOR", "GROUP_ACTION_EXECUTOR", "GROUP_SERVICE_EXECUTOR"):
-            getters(name, {"initialized()(bool)": "true", "actionTarget()(address)": "ACTION_TARGET_ADDRESS"})
+            getters(name, {"initialized()(bool)": "true", "ACTION_TARGET_ADDRESS()(address)": "ACTION_TARGET_ADDRESS"})
         getters("GROUP_SERVICE_EXECUTOR", {
-            "groupActionExecutorAddress()(address)": "GROUP_ACTION_EXECUTOR_ADDRESS"
+            "GROUP_ACTION_EXECUTOR_ADDRESS()(address)": "GROUP_ACTION_EXECUTOR_ADDRESS"
         })
         # cast 的数组返回逐元素带科学计数法标注；21_check.sh 的 strip_sci_notation 会归一化。
         getters("GROUP_ACTION_EXECUTOR", {"SPLITS()(uint256[])":
@@ -352,9 +352,9 @@ def main():
         params_path.write_text("GROUP_ACTION_SPLITS=\n")
         run("21_check.sh", args=("test",), MOCK_EMPTY_SPLITS="1")
         params_path.write_text(params_text)
-        for contract, signature in [("ACTION_TARGET", "mintAddress()(address)"), ("ACTION_TARGET", "voteAddress()(address)"),
-                ("ACTION_TARGET", "submitAddress()(address)"), ("ACTION_TARGET", "memberNFTAddress()(address)"),
-                ("ACTION_TARGET", "phaseAddress()(address)"), ("LP_EXECUTOR", "actionTarget()(address)"),
+        for contract, signature in [("ACTION_TARGET", "MINT_ADDRESS()(address)"), ("ACTION_TARGET", "VOTE_ADDRESS()(address)"),
+                ("ACTION_TARGET", "SUBMIT_ADDRESS()(address)"), ("ACTION_TARGET", "MEMBER_NFT_ADDRESS()(address)"),
+                ("ACTION_TARGET", "PHASE_ADDRESS()(address)"), ("LP_EXECUTOR", "ACTION_TARGET_ADDRESS()(address)"),
                 ("GROUP_SERVICE_EXECUTOR", "initialized()(bool)"),
                 ("STAKE", "MEMBER_NFT_ADDRESS()(address)"),
                 ("LAUNCH", "PAIR_FACTORY_ADDRESS()(address)"),
@@ -376,7 +376,7 @@ def main():
         saved.write_text("# previous deployment\n")
         for extra in ({"RPC_CHAIN": "56"}, {"DEPLOY_FAIL": "1"}, {"OMIT_ADDRESS": "ACTION_TARGET_ADDRESS"},
                       {"STALE_BROADCAST": "1"},
-                      {"BAD_CALL": env["ACTION_TARGET_ADDRESS"] + "/mintAddress()(address)"}):
+                      {"BAD_CALL": env["ACTION_TARGET_ADDRESS"] + "/MINT_ADDRESS()(address)"}):
             result, _ = run("one_click_deploy.sh", False, ("test",), **extra)
             assert saved.read_text() == "# previous deployment\n"
             output = result.stdout + result.stderr

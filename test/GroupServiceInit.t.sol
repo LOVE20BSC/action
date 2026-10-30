@@ -9,8 +9,8 @@ import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 
 contract GroupServiceInitTest is GroupServiceTestBase {
     function testInitStoresAddressesAndDerivesDependencies() external view {
-        require(executor.actionTarget() == address(actionTarget), "action target stored");
-        require(executor.groupActionExecutorAddress() == address(groupAction), "group action executor stored");
+        require(executor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target stored");
+        require(executor.GROUP_ACTION_EXECUTOR_ADDRESS() == address(groupAction), "group action executor stored");
         require(executor.initialized(), "initialized");
         // Derived dependencies are read back through the round getters: they
         // only answer when phaseAddress is wired.
@@ -64,11 +64,15 @@ contract GroupServiceInitTest is GroupServiceTestBase {
         _createServiceAction(SERVICE_ACTION_ID, 3e18, PRECISION / 4);
 
         require(
-            executor.ACTION_TOKEN_ADDRESS(address(token), SERVICE_ACTION_ID) == address(token), "action token bound"
+            executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "action token bound"
         );
-        require(executor.GOV_RATIO_MULTIPLIER(address(token), SERVICE_ACTION_ID) == 3e18, "multiplier bound");
         require(
-            executor.RATIO_FOR_PUBLIC_VERIFIER(address(token), SERVICE_ACTION_ID) == PRECISION / 4,
+            executor.joinTokenAddress(address(token), SERVICE_ACTION_ID) == address(token),
+            "joined amount token bound"
+        );
+        require(executor.govRatioMultiplier(address(token), SERVICE_ACTION_ID) == 3e18, "multiplier bound");
+        require(
+            executor.publicVerifierRatio(address(token), SERVICE_ACTION_ID) == PRECISION / 4,
             "verifier ratio bound"
         );
 
@@ -79,14 +83,14 @@ contract GroupServiceInitTest is GroupServiceTestBase {
         // The service token is the community token's direct parent.
         _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 0, PRECISION);
         require(
-            executor.ACTION_TOKEN_ADDRESS(address(token), SERVICE_ACTION_ID) == address(childToken),
+            executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(childToken),
             "child community token bound"
         );
 
         _atPhase(3);
         _createServiceActionOn(address(token), address(token), SERVICE_ACTION_ID + 1, 0, PRECISION);
         require(
-            executor.ACTION_TOKEN_ADDRESS(address(token), SERVICE_ACTION_ID + 1) == address(token), "same token bound"
+            executor.actionTokenAddress(address(token), SERVICE_ACTION_ID + 1) == address(token), "same token bound"
         );
     }
 

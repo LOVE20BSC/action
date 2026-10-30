@@ -256,7 +256,7 @@ abstract contract GroupActionExecutorTestBase {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         vm.prank(_memberAddress(providerId));
-        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, providerId, memberIds, amounts);
+        executor.addProviderQuota(address(token), ACTION_ID, GROUP_ID, providerId, memberIds, amounts);
     }
 
     function _join(uint256 memberId, uint256 amount, uint256 providerId) internal {
@@ -280,7 +280,7 @@ abstract contract GroupActionExecutorTestBase {
 
     function _quotaRemove(uint256 providerId, uint256 memberId) internal {
         vm.prank(_memberAddress(providerId));
-        executor.providerQuotaRemove(address(token), ACTION_ID, GROUP_ID, providerId, _ids(memberId));
+        executor.removeProviderQuota(address(token), ACTION_ID, GROUP_ID, providerId, _ids(memberId));
     }
 
     function _ids(uint256 a) internal pure returns (uint256[] memory out) {

@@ -174,11 +174,11 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
 
     function invariant_LedgersMatchModel() public view {
         require(
-            lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == handler.totalJoinedModel(),
+            lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == handler.totalJoinedModel(),
             "total joined matches model"
         );
         require(
-            lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == handler.totalDeductionModel(),
+            lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == handler.totalDeductionModel(),
             "total deduction matches model"
         );
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
@@ -194,8 +194,8 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
 
     function invariant_DeductionNeverExceedsBalance() public view {
         require(
-            lpExecutor.totalDeduction(address(token), ACTION_ID, 2)
-                <= lpExecutor.joinedAmount(address(token), ACTION_ID, 2),
+            lpExecutor.deductionByRound(address(token), ACTION_ID, 2)
+                <= lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2),
             "contract deduction bound"
         );
         for (uint256 memberId = 1; memberId <= 2; memberId++) {

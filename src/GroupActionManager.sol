@@ -25,17 +25,17 @@ library GroupActionManager {
     using Uint256Set for Uint256Set.Storage;
 
     modifier onlyGroupOwner(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         uint256 groupId
     ) {
-        if (groupOwnerOrRevert(s, groupId) != msg.sender) {
+        if (groupOwnerOrRevert(self, groupId) != msg.sender) {
             revert IGroupActionManagerErrors.NotGroupOwner(groupId);
         }
         _;
     }
 
-    function groupOwnerOrRevert(GroupActionStorage.Layout storage s, uint256 groupId) internal view returns (address) {
-        address owner = MemberOwner.ofOrZero(s.memberNFTAddress, groupId);
+    function groupOwnerOrRevert(GroupActionStorage.Layout storage self, uint256 groupId) internal view returns (address) {
+        address owner = MemberOwner.ownerOrZero(self.MEMBER_NFT_ADDRESS, groupId);
         if (owner == address(0)) {
             revert IGroupActionManagerErrors.GroupNotExist(groupId);
         }
@@ -44,7 +44,7 @@ library GroupActionManager {
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function onProposalCreated(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         bytes[] calldata targetData
@@ -77,13 +77,13 @@ library GroupActionManager {
             revert IGroupActionExecutorErrors.InvalidActivationMinGovRatio(activationMinGovRatio);
         }
 
-        s.joinTokenAddress[tokenAddress][actionId] = joinTokenAddress;
+        self.joinTokenAddressByActionId[tokenAddress][actionId] = joinTokenAddress;
         // Load-bearing: written only here. Refunds read this value instead of a per-group ledger, so a
         // later write while groups are active would over-refund out of the other groups' stake.
-        s.activationStakeAmount[tokenAddress][actionId] = activationStakeAmount;
-        s.maxJoinAmountRatio[tokenAddress][actionId] = maxJoinAmountRatio;
-        s.activationMinGovRatio[tokenAddress][actionId] = activationMinGovRatio;
-        s.verifierStakeAmount[tokenAddress][actionId] = verifierStakeAmount;
+        self.activationStakeAmountByActionId[tokenAddress][actionId] = activationStakeAmount;
+        self.maxJoinAmountRatioByActionId[tokenAddress][actionId] = maxJoinAmountRatio;
+        self.activationMinGovRatioByActionId[tokenAddress][actionId] = activationMinGovRatio;
+        self.verifierStakeAmountByActionId[tokenAddress][actionId] = verifierStakeAmount;
 
         if (targetData.length == 7) {
             (string[] memory keys, string[] memory descriptions) = abi.decode(targetData[6], (string[], string[]));
@@ -111,51 +111,51 @@ library GroupActionManager {
                     );
                 }
             }
-            s.verificationKeys[tokenAddress][actionId] = keys;
-            s.verificationDescriptions[tokenAddress][actionId] = descriptions;
+            self.verificationKeysByActionId[tokenAddress][actionId] = keys;
+            self.verificationDescriptionsByActionId[tokenAddress][actionId] = descriptions;
         }
 
-        s.createdRound[tokenAddress][actionId] = IPhase(s.phaseAddress).currentPhase();
+        self.createdRoundByActionId[tokenAddress][actionId] = IPhase(self.PHASE_ADDRESS).currentPhase();
 
-        _emitGroupActionCreated(s, tokenAddress, actionId);
+        _emitGroupActionCreated(self, tokenAddress, actionId);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function activateGroup(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         GroupConfig calldata config
-    ) external onlyGroupOwner(s, groupId) {
-        if (s.createdRound[tokenAddress][actionId] == 0) {
+    ) external onlyGroupOwner(self, groupId) {
+        if (self.createdRoundByActionId[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }
 
-        GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
+        GroupActionStorage.GroupState storage group = self.groupState[tokenAddress][actionId][groupId];
         if (group.active) {
             revert IGroupActionManagerErrors.GroupAlreadyActivated(groupId);
         }
 
         _validateGroupConfig(config);
-        _validateActivationMinGovRatio(s, tokenAddress, actionId, groupId);
+        _validateActivationMinGovRatio(self, tokenAddress, actionId, groupId);
 
-        uint256 round = s.currentJoinRound();
+        uint256 round = self.currentJoinRound();
 
         group.config = config;
         group.active = true;
         group.activatedRound = round;
         group.deactivatedRound = 0;
-        s.descriptionHistory[tokenAddress][actionId][groupId].record(round, config.description);
+        self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 
-        uint256 stakeAmount = s.activationStakeAmount[tokenAddress][actionId];
-        s.activeGroupIds[tokenAddress][actionId].add(groupId);
-        s.staked[tokenAddress][actionId] += stakeAmount;
-        s.totalStaked[tokenAddress] += stakeAmount;
-        s.totalStakedByMemberId[tokenAddress][groupId] += stakeAmount;
-        s.tokenAddressesByGroupId[groupId].add(tokenAddress);
-        s.actionIdsByGroupId[tokenAddress][groupId].add(actionId);
-        s.actionIds[tokenAddress].add(actionId);
+        uint256 stakeAmount = self.activationStakeAmountByActionId[tokenAddress][actionId];
+        self.activeGroupIdsByActionId[tokenAddress][actionId].add(groupId);
+        self.stakedByActionId[tokenAddress][actionId] += stakeAmount;
+        self.totalStaked[tokenAddress] += stakeAmount;
+        self.stakedByMemberId[tokenAddress][groupId] += stakeAmount;
+        self.tokenAddressesByGroupId[groupId].add(tokenAddress);
+        self.actionIdsByGroupId[tokenAddress][groupId].add(actionId);
+        self.activeActionIds[tokenAddress].add(actionId);
 
         if (stakeAmount != 0) {
             IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), stakeAmount);
@@ -177,36 +177,36 @@ library GroupActionManager {
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function deactivateGroup(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId
-    ) external onlyGroupOwner(s, groupId) {
-        GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
+    ) external onlyGroupOwner(self, groupId) {
+        GroupActionStorage.GroupState storage group = self.groupState[tokenAddress][actionId][groupId];
         if (!group.active) {
             revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
 
-        uint256 round = s.currentJoinRound();
+        uint256 round = self.currentJoinRound();
         if (round == group.activatedRound) {
             revert IGroupActionManagerErrors.DeactivationLockedInActivatedRound(groupId, round);
         }
 
-        uint256 stakeAmount = s.activationStakeAmount[tokenAddress][actionId];
+        uint256 stakeAmount = self.activationStakeAmountByActionId[tokenAddress][actionId];
 
         group.active = false;
         group.deactivatedRound = round;
 
-        s.activeGroupIds[tokenAddress][actionId].remove(groupId);
-        s.staked[tokenAddress][actionId] -= stakeAmount;
-        s.totalStaked[tokenAddress] -= stakeAmount;
-        s.totalStakedByMemberId[tokenAddress][groupId] -= stakeAmount;
-        s.actionIdsByGroupId[tokenAddress][groupId].remove(actionId);
-        if (s.actionIdsByGroupId[tokenAddress][groupId].count() == 0) {
-            s.tokenAddressesByGroupId[groupId].remove(tokenAddress);
+        self.activeGroupIdsByActionId[tokenAddress][actionId].remove(groupId);
+        self.stakedByActionId[tokenAddress][actionId] -= stakeAmount;
+        self.totalStaked[tokenAddress] -= stakeAmount;
+        self.stakedByMemberId[tokenAddress][groupId] -= stakeAmount;
+        self.actionIdsByGroupId[tokenAddress][groupId].remove(actionId);
+        if (self.actionIdsByGroupId[tokenAddress][groupId].count() == 0) {
+            self.tokenAddressesByGroupId[groupId].remove(tokenAddress);
         }
-        if (s.activeGroupIds[tokenAddress][actionId].count() == 0) {
-            s.actionIds[tokenAddress].remove(actionId);
+        if (self.activeGroupIdsByActionId[tokenAddress][actionId].count() == 0) {
+            self.activeActionIds[tokenAddress].remove(actionId);
         }
 
         if (stakeAmount != 0) {
@@ -223,13 +223,13 @@ library GroupActionManager {
     }
 
     function updateGroupConfig(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         GroupConfig calldata config
-    ) external onlyGroupOwner(s, groupId) {
-        GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
+    ) external onlyGroupOwner(self, groupId) {
+        GroupActionStorage.GroupState storage group = self.groupState[tokenAddress][actionId][groupId];
         if (!group.active) {
             revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
@@ -238,15 +238,15 @@ library GroupActionManager {
 
         GroupConfig memory previousConfig = group.config;
 
-        uint256 round = s.currentJoinRound();
+        uint256 round = self.currentJoinRound();
         group.config = config;
-        s.descriptionHistory[tokenAddress][actionId][groupId].record(round, config.description);
+        self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 
         _emitGroupConfigChanged(tokenAddress, actionId, round, groupId, previousConfig, config);
     }
 
-    function groupInfo(
-        GroupActionStorage.Layout storage s,
+    function groupState(
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId
@@ -260,134 +260,134 @@ library GroupActionManager {
             uint256 deactivatedRound
         )
     {
-        GroupActionStorage.GroupInfo storage group = s.groupInfo[tokenAddress][actionId][groupId];
+        GroupActionStorage.GroupState storage group = self.groupState[tokenAddress][actionId][groupId];
         return (group.config, group.active, group.activatedRound, group.deactivatedRound);
     }
 
     function descriptionByRound(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 round,
         uint256 groupId
     ) external view returns (string memory) {
-        return s.descriptionHistory[tokenAddress][actionId][groupId].value(round);
+        return self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].value(round);
     }
 
     function activeGroupIds(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 total) {
-        return s.activeGroupIds[tokenAddress][actionId].values(offset, limit, reverse);
+        return self.activeGroupIdsByActionId[tokenAddress][actionId].values(offset, limit, reverse);
     }
 
     function isGroupActive(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId
     ) external view returns (bool) {
-        return s.groupInfo[tokenAddress][actionId][groupId].active;
+        return self.groupState[tokenAddress][actionId][groupId].active;
     }
 
     function maxJoinAmount(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId
     ) external view returns (uint256) {
-        return _maxJoinAmount(s, tokenAddress, actionId);
+        return _maxJoinAmount(self, tokenAddress, actionId);
     }
 
     function staked(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId
     ) external view returns (uint256) {
-        return s.staked[tokenAddress][actionId];
+        return self.stakedByActionId[tokenAddress][actionId];
     }
 
     function totalStaked(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress
     ) external view returns (uint256) {
-        return s.totalStaked[tokenAddress];
+        return self.totalStaked[tokenAddress];
     }
 
-    function totalStakedByMemberId(
-        GroupActionStorage.Layout storage s,
+    function stakedByMemberId(
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 memberId
     ) external view returns (uint256) {
-        return s.totalStakedByMemberId[tokenAddress][memberId];
+        return self.stakedByMemberId[tokenAddress][memberId];
     }
 
     function tokenAddressesByGroupId(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         uint256 groupId,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (address[] memory tokenAddresses, uint256 total) {
-        return s.tokenAddressesByGroupId[groupId].values(offset, limit, reverse);
+        return self.tokenAddressesByGroupId[groupId].values(offset, limit, reverse);
     }
 
     function actionIdsByGroupId(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 groupId,
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds_, uint256 total) {
-        return s.actionIdsByGroupId[tokenAddress][groupId].values(offset, limit, reverse);
+    ) external view returns (uint256[] memory actionIds, uint256 total) {
+        return self.actionIdsByGroupId[tokenAddress][groupId].values(offset, limit, reverse);
     }
 
-    function actionIds(
-        GroupActionStorage.Layout storage s,
+    function actionIdsWithActiveGroups(
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory actionIds_, uint256 total) {
-        return s.actionIds[tokenAddress].values(offset, limit, reverse);
+    ) external view returns (uint256[] memory actionIds, uint256 total) {
+        return self.activeActionIds[tokenAddress].values(offset, limit, reverse);
     }
 
     function hasActiveGroups(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 memberId
     ) external view returns (bool) {
-        return s.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
+        return self.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
     }
 
     function _maxJoinAmount(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId
     ) internal view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.joinRound(s.phaseAddress);
+        uint256 round = GroupActionRoundAxis.joinRound(self.PHASE_ADDRESS);
         if (round == 0) {
             return 0;
         }
-        uint256 totalVotes = IVote(s.voteAddress).totalVoteAmount(tokenAddress, round);
-        if (totalVotes == 0) {
+        uint256 totalVoteAmount = IVote(self.VOTE_ADDRESS).totalVoteAmount(tokenAddress, round);
+        if (totalVoteAmount == 0) {
             return 0;
         }
-        uint256 actionVotes = IVote(s.voteAddress).voteAmountByProposalId(tokenAddress, round, actionId);
-        if (actionVotes == 0) {
+        uint256 actionVoteAmount = IVote(self.VOTE_ADDRESS).voteAmountByProposalId(tokenAddress, round, actionId);
+        if (actionVoteAmount == 0) {
             return 0;
         }
-        uint256 totalMinted = IERC20(s.joinTokenAddress[tokenAddress][actionId]).totalSupply();
+        uint256 totalMinted = IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).totalSupply();
         uint256 baseAmount = Math.mulDiv(
             totalMinted,
-            s.maxJoinAmountRatio[tokenAddress][actionId],
+            self.maxJoinAmountRatioByActionId[tokenAddress][actionId],
             GroupActionStorage.PRECISION
         );
-        return Math.mulDiv(baseAmount, actionVotes, totalVotes);
+        return Math.mulDiv(baseAmount, actionVoteAmount, totalVoteAmount);
     }
 
     function _validateGroupConfig(GroupConfig calldata config) internal pure {
@@ -406,18 +406,18 @@ library GroupActionManager {
     }
 
     function _validateActivationMinGovRatio(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId
     ) internal view {
-        uint256 minGovRatio = s.activationMinGovRatio[tokenAddress][actionId];
+        uint256 minGovRatio = self.activationMinGovRatioByActionId[tokenAddress][actionId];
         if (minGovRatio == 0) {
             return;
         }
 
-        IStake stake = IStake(s.stakeAddress);
-        uint256 currentPhase = IPhase(s.phaseAddress).currentPhase();
+        IStake stake = IStake(self.STAKE_ADDRESS);
+        uint256 currentPhase = IPhase(self.PHASE_ADDRESS).currentPhase();
         uint256 totalGovVotes = stake.totalValidGovVotes(tokenAddress, currentPhase);
         if (totalGovVotes == 0) {
             revert IGroupActionManagerErrors.NoGovVotes(tokenAddress);
@@ -431,20 +431,20 @@ library GroupActionManager {
     }
 
     function _emitGroupActionCreated(
-        GroupActionStorage.Layout storage s,
+        GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId
     ) private {
         emit IGroupActionExecutorEvents.GroupActionCreated({
             tokenAddress: tokenAddress,
             actionId: actionId,
-            joinTokenAddress: s.joinTokenAddress[tokenAddress][actionId],
-            activationStakeAmount: s.activationStakeAmount[tokenAddress][actionId],
-            maxJoinAmountRatio: s.maxJoinAmountRatio[tokenAddress][actionId],
-            activationMinGovRatio: s.activationMinGovRatio[tokenAddress][actionId],
-            verifierStakeAmount: s.verifierStakeAmount[tokenAddress][actionId],
-            verificationKeys: s.verificationKeys[tokenAddress][actionId],
-            verificationDescriptions: s.verificationDescriptions[tokenAddress][actionId]
+            joinTokenAddress: self.joinTokenAddressByActionId[tokenAddress][actionId],
+            activationStakeAmount: self.activationStakeAmountByActionId[tokenAddress][actionId],
+            maxJoinAmountRatio: self.maxJoinAmountRatioByActionId[tokenAddress][actionId],
+            activationMinGovRatio: self.activationMinGovRatioByActionId[tokenAddress][actionId],
+            verifierStakeAmount: self.verifierStakeAmountByActionId[tokenAddress][actionId],
+            verificationKeys: self.verificationKeysByActionId[tokenAddress][actionId],
+            verificationDescriptions: self.verificationDescriptionsByActionId[tokenAddress][actionId]
         });
     }
 

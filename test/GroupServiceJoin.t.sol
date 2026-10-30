@@ -24,7 +24,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target joined");
         require(executor.joinInfo(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "round snapshot");
-        require(executor.joinedAmountTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "join token");
+        require(executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "join token");
     }
 
     function testJoinVerifierBranchViaVerifierApplication() external {
@@ -271,15 +271,15 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
         _atPhase(JOIN_PHASE);
         groupAction.setTotalStaked(address(token), 777e18);
-        groupAction.setTotalStakedByMemberId(address(token), GROUP_ID, 123e18);
+        groupAction.setStakedByMemberId(address(token), GROUP_ID, 123e18);
 
-        require(executor.joinedAmount(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 777e18, "action total");
+        require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 777e18, "action total");
         require(
             executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID) == 123e18,
             "member total"
         );
         require(
-            executor.joinedAmount(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1) == 0, "future round reads zero"
+            executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1) == 0, "future round reads zero"
         );
         require(
             executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID) == 0,
@@ -288,6 +288,6 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         // The proxy is the live community stake, not a per-round history.
         groupAction.setTotalStaked(address(token), 888e18);
-        require(executor.joinedAmount(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 888e18, "live value");
+        require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 888e18, "live value");
     }
 }

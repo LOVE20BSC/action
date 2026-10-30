@@ -256,19 +256,19 @@ verify_deployed_and_runtime "ActionTarget" "$ACTION_TARGET_ADDRESS"
 ACTUAL_INIT=$(cast call "$ACTION_TARGET_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_MINT=$(cast call "$ACTION_TARGET_ADDRESS" "mintAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_MINT=$(cast call "$ACTION_TARGET_ADDRESS" "MINT_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "mintAddress" "$MINT_ADDRESS" "$ACTUAL_MINT" || ((FAILED+=1))
 
-ACTUAL_VOTE=$(cast call "$ACTION_TARGET_ADDRESS" "voteAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_VOTE=$(cast call "$ACTION_TARGET_ADDRESS" "VOTE_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "voteAddress" "$VOTE_ADDRESS" "$ACTUAL_VOTE" || ((FAILED+=1))
 
-ACTUAL_SUBMIT=$(cast call "$ACTION_TARGET_ADDRESS" "submitAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_SUBMIT=$(cast call "$ACTION_TARGET_ADDRESS" "SUBMIT_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "submitAddress" "$SUBMIT_ADDRESS" "$ACTUAL_SUBMIT" || ((FAILED+=1))
 
-ACTUAL_MEMBER=$(cast call "$ACTION_TARGET_ADDRESS" "memberNFTAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_MEMBER=$(cast call "$ACTION_TARGET_ADDRESS" "MEMBER_NFT_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "memberNFTAddress" "$MEMBER_NFT_ADDRESS" "$ACTUAL_MEMBER" || ((FAILED+=1))
 
-ACTUAL_PHASE=$(cast call "$ACTION_TARGET_ADDRESS" "phaseAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_PHASE=$(cast call "$ACTION_TARGET_ADDRESS" "PHASE_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "phaseAddress" "$PHASE_ADDRESS" "$ACTUAL_PHASE" || ((FAILED+=1))
 
 # Executor 的派生值在 init 时从 Stake 缓存且不可回读；核对 Stake 本身与 core 地址文件一致，
@@ -297,7 +297,7 @@ verify_deployed_and_runtime "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 ACTUAL_INIT=$(cast call "$LP_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_TARGET=$(cast call "$LP_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_TARGET=$(cast call "$LP_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
 # 4. 验证 GroupActionExecutor
@@ -308,7 +308,7 @@ verify_deployed_and_runtime "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRES
 ACTUAL_INIT=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_TARGET=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_TARGET=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
 # splits 以逗号分隔配置，cast 返回 "[a [1e17], b [4e17]]"：逐个元素去掉科学计数法标注与空格后比对
@@ -343,10 +343,10 @@ verify_deployed_and_runtime "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDR
 ACTUAL_INIT=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
-ACTUAL_TARGET=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "actionTarget()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_TARGET=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 
-ACTUAL_GAE=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "groupActionExecutorAddress()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+ACTUAL_GAE=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "GROUP_ACTION_EXECUTOR_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "groupActionExecutorAddress" "$GROUP_ACTION_EXECUTOR_ADDRESS" "$ACTUAL_GAE" || ((FAILED+=1))
 
 for i in "${!ALL_LIBRARY_NAMES[@]}"; do

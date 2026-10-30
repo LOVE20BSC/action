@@ -26,11 +26,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
     uint256 public constant DEFAULT_MAX_RECIPIENTS = GroupServiceStorage.DEFAULT_MAX_RECIPIENTS;
 
-    GroupServiceStorage.Layout internal s;
+    GroupServiceStorage.Layout internal _layout;
 
     struct Settlement {
         address actionTokenAddress;
-        uint256 ratioForPublicVerifier;
+        uint256 publicVerifierRatio;
         uint256 govRatioMultiplier;
         uint256 verifierWeight;
         uint256 ownerWeight;
@@ -49,14 +49,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     }
 
     modifier onlyActionTarget() {
-        if (msg.sender != s.actionTarget) {
+        if (msg.sender != _layout.ACTION_TARGET_ADDRESS) {
             revert NotActionTarget(msg.sender);
         }
         _;
     }
 
     modifier onlyGroupOwner(uint256 groupId) {
-        address owner = MemberOwner.ofOrZero(s.memberNFTAddress, groupId);
+        address owner = MemberOwner.ownerOrZero(_layout.MEMBER_NFT_ADDRESS, groupId);
         if (owner == address(0)) {
             revert GroupNotExist(groupId);
         }
@@ -69,26 +69,26 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function init(
         address actionTargetAddress,
         address stakeAddress,
-        address groupActionExecutorAddress_
+        address groupActionExecutorAddress
     ) external {
-        if (s.initialized) {
+        if (_layout.initialized) {
             revert AlreadyInitialized();
         }
-        s.initialized = true;
+        _layout.initialized = true;
 
         IStake stake = IStake(stakeAddress);
         address memberNFTAddress = stake.MEMBER_NFT_ADDRESS();
         address phaseAddress = stake.PHASE_ADDRESS();
         address launchAddress = stake.LAUNCH_ADDRESS();
-        address mintAddress = IActionTarget(actionTargetAddress).mintAddress();
+        address mintAddress = IActionTarget(actionTargetAddress).MINT_ADDRESS();
 
-        s.actionTarget = actionTargetAddress;
-        s.mintAddress = mintAddress;
-        s.stakeAddress = stakeAddress;
-        s.groupActionExecutorAddress = groupActionExecutorAddress_;
-        s.memberNFTAddress = memberNFTAddress;
-        s.phaseAddress = phaseAddress;
-        s.launchAddress = launchAddress;
+        _layout.ACTION_TARGET_ADDRESS = actionTargetAddress;
+        _layout.MINT_ADDRESS = mintAddress;
+        _layout.STAKE_ADDRESS = stakeAddress;
+        _layout.GROUP_ACTION_EXECUTOR_ADDRESS = groupActionExecutorAddress;
+        _layout.MEMBER_NFT_ADDRESS = memberNFTAddress;
+        _layout.PHASE_ADDRESS = phaseAddress;
+        _layout.LAUNCH_ADDRESS = launchAddress;
     }
 
     // Load-bearing: the service rounds are the served GroupAction rounds shifted by the same phase
@@ -98,32 +98,32 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     // settles it at phase - 3. If either side shifts, the service reads a round the GroupAction has
     // not verified yet and the divisor silently reads 0.
     function currentVerifyRound() public view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.verifyRound(s.phaseAddress);
+        uint256 round = GroupActionRoundAxis.verifyRound(_layout.PHASE_ADDRESS);
         if (round == 0) {
             revert RoundNotStarted(1, 0);
         }
         return round;
     }
 
-    function GOV_RATIO_MULTIPLIER(
+    function govRatioMultiplier(
         address serviceTokenAddress,
         uint256 serviceActionId
     ) external view returns (uint256) {
-        return s.govRatioMultiplier[serviceTokenAddress][serviceActionId];
+        return _layout.govRatioMultiplierByActionId[serviceTokenAddress][serviceActionId];
     }
 
-    function ACTION_TOKEN_ADDRESS(
+    function actionTokenAddress(
         address serviceTokenAddress,
         uint256 serviceActionId
     ) external view returns (address) {
-        return s.actionTokenAddress[serviceTokenAddress][serviceActionId];
+        return _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
     }
 
-    function RATIO_FOR_PUBLIC_VERIFIER(
+    function publicVerifierRatio(
         address serviceTokenAddress,
         uint256 serviceActionId
     ) external view returns (uint256) {
-        return s.ratioForPublicVerifier[serviceTokenAddress][serviceActionId];
+        return _layout.publicVerifierRatioByActionId[serviceTokenAddress][serviceActionId];
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -132,18 +132,18 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 serviceActionId,
         uint256 memberId
     ) external nonReentrant onlyMemberOwner(memberId) {
-        uint256 round = s.currentJoinRound();
+        uint256 round = _layout.currentJoinRound();
 
-        if (IActionTarget(s.actionTarget).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
+        if (IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
             revert AlreadyJoined(serviceTokenAddress, serviceActionId, memberId);
         }
 
-        address actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
-        if (!_isQualified(actionTokenAddress, round, memberId)) {
-            revert NotQualified(actionTokenAddress, round, memberId);
+        address sourceTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
+        if (!_isQualified(sourceTokenAddress, round, memberId)) {
+            revert NotQualified(sourceTokenAddress, round, memberId);
         }
 
-        IActionTarget(s.actionTarget).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
+        IActionTarget(_layout.ACTION_TARGET_ADDRESS).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
 
         emit ServiceJoined({
             serviceTokenAddress: serviceTokenAddress,
@@ -159,7 +159,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (bool joined) {
-        return IActionTarget(s.actionTarget).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round);
+        return IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round);
     }
 
     function rewardByRecipient(
@@ -170,15 +170,15 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 groupId,
         uint256 recipientId
     ) external view returns (uint256) {
-        GroupRecipients.Distribution memory distribution =
+        GroupRecipients.Distribution memory distributionInfo =
             _distribution(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
 
         if (recipientId == groupId) {
-            return distribution.ownerAmount;
+            return distributionInfo.ownerAmount;
         }
-        for (uint256 i = 0; i < distribution.recipientIds.length; i++) {
-            if (distribution.recipientIds[i] == recipientId) {
-                return distribution.amounts[i];
+        for (uint256 i = 0; i < distributionInfo.recipientIds.length; i++) {
+            if (distributionInfo.recipientIds[i] == recipientId) {
+                return distributionInfo.amounts[i];
             }
         }
         return 0;
@@ -200,28 +200,21 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             uint256 ownerAmount
         )
     {
-        GroupRecipients.Distribution memory distribution =
+        GroupRecipients.Distribution memory distributionInfo =
             _distribution(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
-        return (distribution.recipientIds, distribution.ratios, distribution.amounts, distribution.ownerAmount);
+        return (distributionInfo.recipientIds, distributionInfo.ratios, distributionInfo.amounts, distributionInfo.ownerAmount);
     }
 
-    function joinedAmountTokenAddress(
-        address tokenAddress,
-        uint256 actionId
-    ) external view returns (address joinedTokenAddress) {
-        return s.actionTokenAddress[tokenAddress][actionId];
-    }
-
-    function joinedAmount(
+    function joinedAmountByActionId(
         address tokenAddress,
         uint256 actionId,
         uint256 round
     ) external view returns (uint256 amount) {
-        if (round > s.joinRound()) {
+        if (round > _layout.joinRound()) {
             return 0;
         }
-        return IGroupActionExecutor(s.groupActionExecutorAddress).totalStaked(
-            s.actionTokenAddress[tokenAddress][actionId]
+        return IGroupActionExecutor(_layout.GROUP_ACTION_EXECUTOR_ADDRESS).totalStaked(
+            _layout.actionTokenAddressByActionId[tokenAddress][actionId]
         );
     }
 
@@ -231,23 +224,30 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 amount) {
-        if (round > s.joinRound()) {
+        if (round > _layout.joinRound()) {
             return 0;
         }
-        return IGroupActionExecutor(s.groupActionExecutorAddress).totalStakedByMemberId(
-            s.actionTokenAddress[tokenAddress][actionId], memberId
+        return IGroupActionExecutor(_layout.GROUP_ACTION_EXECUTOR_ADDRESS).stakedByMemberId(
+            _layout.actionTokenAddressByActionId[tokenAddress][actionId], memberId
         );
     }
 
+    function joinTokenAddress(
+        address tokenAddress,
+        uint256 actionId
+    ) external view returns (address joinedTokenAddress) {
+        return _layout.actionTokenAddressByActionId[tokenAddress][actionId];
+    }
+
     function totalGroupActionReward(
-        address actionTokenAddress,
+        address sourceTokenAddress,
         uint256 round
     ) public view returns (uint256) {
-        uint256 cached = s.cachedDenominator(actionTokenAddress, round);
+        uint256 cached = _layout.cachedDenominator(sourceTokenAddress, round);
         if (cached != 0) {
             return cached;
         }
-        return _totalGroupActionReward(_roundActions(actionTokenAddress, round));
+        return _totalGroupActionReward(_roundActions(sourceTokenAddress, round));
     }
 
     function serviceRewardByMember(
@@ -267,12 +267,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             bool claimed
         )
     {
-        if (s.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
-            verifierReward = s.verifierRewardByMember[serviceTokenAddress][serviceActionId][round][memberId];
-            ownerDistributed = s.ownerDistributedByMember[serviceTokenAddress][serviceActionId][round][memberId];
-            ownerRemaining = s.ownerRemainingByMember[serviceTokenAddress][serviceActionId][round][memberId];
+        if (_layout.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
+            verifierReward = _layout.verifierRewardByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
+            ownerDistributed = _layout.ownerDistributedByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
+            ownerRemaining = _layout.ownerRemainingByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
             ownerReward = ownerDistributed + ownerRemaining;
-            ownerBurned = s.ownerBurnedByMember[serviceTokenAddress][serviceActionId][round][memberId];
+            ownerBurned = _layout.ownerBurnedByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
             // forge-lint: disable-next-line(boolean-cst)
             return (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining, true);
         }
@@ -288,7 +288,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         ownerBurned = settlement.ownerBurned;
         if (ownerReward != 0) {
             ownerDistributed = GroupRecipients.projectedDistribution(
-                s, settlement.actionTokenAddress, round, memberId, ownerReward, settlement.ownerWeight
+                _layout, settlement.actionTokenAddress, round, memberId, ownerReward, settlement.ownerWeight
             );
             ownerRemaining = ownerReward - ownerDistributed;
         }
@@ -302,12 +302,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 memberId,
         uint256 round
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
-        if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
+        if (_layout.memberMinted[tokenAddress][actionId][round][memberId]) {
             return (
-                s.verifierRewardByMember[tokenAddress][actionId][round][memberId]
-                    + s.ownerDistributedByMember[tokenAddress][actionId][round][memberId]
-                    + s.ownerRemainingByMember[tokenAddress][actionId][round][memberId],
-                s.ownerBurnedByMember[tokenAddress][actionId][round][memberId],
+                _layout.verifierRewardByMemberId[tokenAddress][actionId][round][memberId]
+                    + _layout.ownerDistributedByMemberId[tokenAddress][actionId][round][memberId]
+                    + _layout.ownerRemainingByMemberId[tokenAddress][actionId][round][memberId],
+                _layout.ownerBurnedByMemberId[tokenAddress][actionId][round][memberId],
                 // forge-lint: disable-next-line(boolean-cst)
                 true
             );
@@ -333,7 +333,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         string[] calldata remarks
     ) external onlyGroupOwner(groupId) {
         GroupRecipients.setRecipients(
-            s, currentVerifyRound(), sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks
+            _layout, currentVerifyRound(), sourceTokenAddress, sourceActionId, groupId, recipientIds, ratios, remarks
         );
     }
 
@@ -351,7 +351,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             string[] memory remarks
         )
     {
-        return GroupRecipients.recipients(s, sourceTokenAddress, sourceActionId, groupId, round);
+        return GroupRecipients.recipients(_layout, sourceTokenAddress, sourceActionId, groupId, round);
     }
 
     function actionIdsWithRecipients(
@@ -362,10 +362,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 total) {
-        return GroupRecipients.actionIdsWithRecipients(s, sourceTokenAddress, groupId, round, offset, limit, reverse);
+        return GroupRecipients.actionIdsWithRecipients(_layout, sourceTokenAddress, groupId, round, offset, limit, reverse);
     }
 
-    function getDistribution(
+    function distribution(
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 groupId,
@@ -381,21 +381,21 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             uint256 ownerAmount
         )
     {
-        GroupRecipients.Distribution memory distribution =
-            GroupRecipients.getDistribution(s, sourceTokenAddress, sourceActionId, groupId, groupReward, round);
-        return (distribution.recipientIds, distribution.ratios, distribution.amounts, distribution.ownerAmount);
+        GroupRecipients.Distribution memory distributionInfo =
+            GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, groupReward, round);
+        return (distributionInfo.recipientIds, distributionInfo.ratios, distributionInfo.amounts, distributionInfo.ownerAmount);
     }
 
-    function actionTarget() external view returns (address) {
-        return s.actionTarget;
+    function ACTION_TARGET_ADDRESS() external view returns (address) {
+        return _layout.ACTION_TARGET_ADDRESS;
     }
 
-    function groupActionExecutorAddress() external view returns (address) {
-        return s.groupActionExecutorAddress;
+    function GROUP_ACTION_EXECUTOR_ADDRESS() external view returns (address) {
+        return _layout.GROUP_ACTION_EXECUTOR_ADDRESS;
     }
 
     function initialized() external view returns (bool) {
-        return s.initialized;
+        return _layout.initialized;
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -404,12 +404,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 actionId,
         uint256 memberId
     ) external nonReentrant onlyMemberOwner(memberId) {
-        if (!IActionTarget(s.actionTarget).isJoined(tokenAddress, actionId, memberId)) {
+        if (!IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoined(tokenAddress, actionId, memberId)) {
             revert NotJoined(tokenAddress, actionId, memberId);
         }
 
-        uint256 round = s.currentJoinRound();
-        IActionTarget(s.actionTarget).clearJoinState(tokenAddress, actionId, memberId);
+        uint256 round = _layout.currentJoinRound();
+        IActionTarget(_layout.ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
 
         emit ServiceExited({
             serviceTokenAddress: tokenAddress,
@@ -422,7 +422,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     // forge-lint: disable-next-item(missing-events-access-control)
     function onProposalCreated(
         address tokenAddress,
-        uint256 proposalId,
+        uint256 serviceActionId,
         bytes[] calldata targetData
     ) external override onlyActionTarget {
         if (targetData.length != 4) {
@@ -435,34 +435,34 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             }
         }
 
-        address actionTokenAddress = abi.decode(targetData[1], (address));
-        uint256 govRatioMultiplier = abi.decode(targetData[2], (uint256));
-        uint256 ratioForPublicVerifier = abi.decode(targetData[3], (uint256));
+        address sourceTokenAddress = abi.decode(targetData[1], (address));
+        uint256 govRatioMultiplierValue = abi.decode(targetData[2], (uint256));
+        uint256 publicVerifierRatioValue = abi.decode(targetData[3], (uint256));
 
-        if (actionTokenAddress == address(0)) {
+        if (sourceTokenAddress == address(0)) {
             revert ZeroActionTokenAddress();
         }
-        if (ratioForPublicVerifier > PRECISION) {
-            revert InvalidRatioForPublicVerifier(ratioForPublicVerifier);
+        if (publicVerifierRatioValue > PRECISION) {
+            revert InvalidRatioForPublicVerifier(publicVerifierRatioValue);
         }
-        if (actionTokenAddress != tokenAddress) {
-            address parentTokenAddress = ILaunch(s.launchAddress).parentToken(actionTokenAddress);
+        if (sourceTokenAddress != tokenAddress) {
+            address parentTokenAddress = ILaunch(_layout.LAUNCH_ADDRESS).parentToken(sourceTokenAddress);
             if (parentTokenAddress != tokenAddress) {
-                revert ActionTokenParentMismatch(actionTokenAddress, tokenAddress, parentTokenAddress);
+                revert ActionTokenParentMismatch(sourceTokenAddress, tokenAddress, parentTokenAddress);
             }
         }
 
-        s.actionTokenAddress[tokenAddress][proposalId] = actionTokenAddress;
-        s.govRatioMultiplier[tokenAddress][proposalId] = govRatioMultiplier;
-        s.ratioForPublicVerifier[tokenAddress][proposalId] = ratioForPublicVerifier;
-        s.createdRound[tokenAddress][proposalId] = IPhase(s.phaseAddress).currentPhase();
+        _layout.actionTokenAddressByActionId[tokenAddress][serviceActionId] = sourceTokenAddress;
+        _layout.govRatioMultiplierByActionId[tokenAddress][serviceActionId] = govRatioMultiplierValue;
+        _layout.publicVerifierRatioByActionId[tokenAddress][serviceActionId] = publicVerifierRatioValue;
+        _layout.createdRoundByActionId[tokenAddress][serviceActionId] = IPhase(_layout.PHASE_ADDRESS).currentPhase();
 
         emit ServiceActionCreated({
             tokenAddress: tokenAddress,
-            actionId: proposalId,
-            actionTokenAddress: actionTokenAddress,
-            govRatioMultiplier: govRatioMultiplier,
-            ratioForPublicVerifier: ratioForPublicVerifier
+            actionId: serviceActionId,
+            actionTokenAddress: sourceTokenAddress,
+            govRatioMultiplier: govRatioMultiplierValue,
+            publicVerifierRatio: publicVerifierRatioValue
         });
     }
 
@@ -497,9 +497,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 sourceActionId,
         uint256 groupId
     ) internal view returns (GroupRecipients.Distribution memory) {
-        (address actionTokenAddress, uint256 slice) =
+        (address sourceTokenAddress, uint256 slice) =
             _ownerSlice(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
-        return GroupRecipients.getDistribution(s, actionTokenAddress, sourceActionId, groupId, slice, round);
+        return GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, slice, round);
     }
 
     function _ownerSlice(
@@ -508,14 +508,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round,
         uint256 sourceActionId,
         uint256 groupId
-    ) internal view returns (address actionTokenAddress, uint256 slice) {
+    ) internal view returns (address sourceTokenAddress, uint256 slice) {
         uint256 ownerReward;
         uint256 ownerWeight;
-        (actionTokenAddress, ownerReward, ownerWeight) =
+        (sourceTokenAddress, ownerReward, ownerWeight) =
             _ownerRewardAndWeight(serviceTokenAddress, serviceActionId, round, groupId);
         if (ownerReward != 0 && ownerWeight != 0) {
             slice = GroupRecipients.ownerSlice(
-                s, actionTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight
+                _layout, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight
             );
         }
     }
@@ -526,8 +526,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) internal view returns (Settlement memory settlement) {
-        settlement.actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
-        if (!IActionTarget(s.actionTarget).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round)) {
+        settlement.actionTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
+        if (!IActionTarget(_layout.ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, memberId, round)) {
             return settlement;
         }
 
@@ -537,15 +537,15 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             return settlement;
         }
 
-        settlement.ratioForPublicVerifier = s.ratioForPublicVerifier[serviceTokenAddress][serviceActionId];
-        settlement.govRatioMultiplier = s.govRatioMultiplier[serviceTokenAddress][serviceActionId];
+        settlement.publicVerifierRatio = _layout.publicVerifierRatioByActionId[serviceTokenAddress][serviceActionId];
+        settlement.govRatioMultiplier = _layout.govRatioMultiplierByActionId[serviceTokenAddress][serviceActionId];
         settlement.denominator = _denominator(scope);
         if (settlement.denominator == 0) {
             return settlement;
         }
 
         (settlement.serviceReward, settlement.actionMinted) =
-            IActionTarget(s.actionTarget).actionReward(serviceTokenAddress, serviceActionId, round);
+            IActionTarget(_layout.ACTION_TARGET_ADDRESS).actionReward(serviceTokenAddress, serviceActionId, round);
         if (settlement.serviceReward == 0) {
             return settlement;
         }
@@ -560,11 +560,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         settlement.ownerBurned = 0;
         settlement.verifierReward = Math.mulDiv(
             settlement.serviceReward,
-            settlement.ratioForPublicVerifier * settlement.verifierWeight,
+            settlement.publicVerifierRatio * settlement.verifierWeight,
             settlement.denominator * PRECISION
         );
 
-        uint256 ownerRatioWeight = (PRECISION - settlement.ratioForPublicVerifier) * settlement.ownerWeight;
+        uint256 ownerRatioWeight = (PRECISION - settlement.publicVerifierRatio) * settlement.ownerWeight;
         uint256 theoreticalOwnerReward =
             Math.mulDiv(settlement.serviceReward, ownerRatioWeight, settlement.denominator * PRECISION);
 
@@ -574,11 +574,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         }
 
         uint256 cap = 0;
-        uint256 currentPhase = IPhase(s.phaseAddress).currentPhase();
-        uint256 totalValidGovVotes = IStake(s.stakeAddress).totalValidGovVotes(settlement.actionTokenAddress, currentPhase);
+        uint256 currentPhase = IPhase(_layout.PHASE_ADDRESS).currentPhase();
+        uint256 totalValidGovVotes = IStake(_layout.STAKE_ADDRESS).totalValidGovVotes(settlement.actionTokenAddress, currentPhase);
         if (totalValidGovVotes != 0) {
             uint256 govRatio = Math.mulDiv(
-                IStake(s.stakeAddress).validGovVotes(settlement.actionTokenAddress, currentPhase, memberId),
+                IStake(_layout.STAKE_ADDRESS).validGovVotes(settlement.actionTokenAddress, currentPhase, memberId),
                 PRECISION,
                 totalValidGovVotes
             );
@@ -609,39 +609,39 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         internal
         view
         returns (
-            address actionTokenAddress,
+            address sourceTokenAddress,
             uint256 ownerReward,
             uint256 ownerWeight
         )
     {
-        actionTokenAddress = s.actionTokenAddress[serviceTokenAddress][serviceActionId];
-        if (s.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
-            ownerReward = s.ownerDistributedByMember[serviceTokenAddress][serviceActionId][round][memberId]
-                + s.ownerRemainingByMember[serviceTokenAddress][serviceActionId][round][memberId];
+        sourceTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
+        if (_layout.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
+            ownerReward = _layout.ownerDistributedByMemberId[serviceTokenAddress][serviceActionId][round][memberId]
+                + _layout.ownerRemainingByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
             if (ownerReward != 0) {
-                (, ownerWeight) = _memberWeights(_roundActions(actionTokenAddress, round), memberId);
+                (, ownerWeight) = _memberWeights(_roundActions(sourceTokenAddress, round), memberId);
             }
-            return (actionTokenAddress, ownerReward, ownerWeight);
+            return (sourceTokenAddress, ownerReward, ownerWeight);
         }
 
         Settlement memory settlement = _settlement(serviceTokenAddress, serviceActionId, round, memberId);
-        return (actionTokenAddress, settlement.ownerReward, settlement.ownerWeight);
+        return (sourceTokenAddress, settlement.ownerReward, settlement.ownerWeight);
     }
 
     function _isQualified(
-        address actionTokenAddress,
+        address sourceTokenAddress,
         uint256 round,
         uint256 memberId
     ) internal view returns (bool) {
-        IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(s.groupActionExecutorAddress);
-        if (groupActionExecutor.hasActiveGroups(actionTokenAddress, memberId)) {
+        IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(_layout.GROUP_ACTION_EXECUTOR_ADDRESS);
+        if (groupActionExecutor.hasActiveGroups(sourceTokenAddress, memberId)) {
             return true;
         }
 
-        uint256[] memory actionIds = _votedGroupActions(actionTokenAddress, round);
+        uint256[] memory actionIds = _votedGroupActions(sourceTokenAddress, round);
         for (uint256 i = 0; i < actionIds.length; i++) {
             VerifierApplication memory application =
-                groupActionExecutor.verifierApplication(actionTokenAddress, actionIds[i], round, memberId);
+                groupActionExecutor.verifierApplication(sourceTokenAddress, actionIds[i], round, memberId);
             if (application.applicationId != 0) {
                 return true;
             }
@@ -655,9 +655,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     ) internal view returns (uint256 verifierWeight, uint256 ownerWeight) {
         for (uint256 i = 0; i < scope.actionIds.length; i++) {
             uint256 actionId = scope.actionIds[i];
-            ownerWeight += s.groupReward(scope.actionTokenAddress, actionId, scope.round, memberId);
+            ownerWeight += _layout.groupReward(scope.actionTokenAddress, actionId, scope.round, memberId);
             if (_lockedVerifierId(scope.actionTokenAddress, actionId, scope.round) == memberId) {
-                verifierWeight += IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionReward(
+                verifierWeight += IGroupActionExecutor(_layout.GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionReward(
                     scope.actionTokenAddress, actionId, scope.round
                 );
             }
@@ -665,37 +665,37 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     }
 
     function _denominator(RoundActions memory scope) internal view returns (uint256) {
-        uint256 cached = s.cachedDenominator(scope.actionTokenAddress, scope.round);
+        uint256 cached = _layout.cachedDenominator(scope.actionTokenAddress, scope.round);
         return cached != 0 ? cached : _totalGroupActionReward(scope);
     }
 
     function _totalGroupActionReward(RoundActions memory scope) internal view returns (uint256 total) {
         for (uint256 i = 0; i < scope.actionIds.length; i++) {
-            total += IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionReward(
+            total += IGroupActionExecutor(_layout.GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionReward(
                 scope.actionTokenAddress, scope.actionIds[i], scope.round
             );
         }
     }
 
     function _roundActions(
-        address actionTokenAddress,
+        address sourceTokenAddress,
         uint256 round
     ) internal view returns (RoundActions memory scope) {
-        scope.actionTokenAddress = actionTokenAddress;
+        scope.actionTokenAddress = sourceTokenAddress;
         scope.round = round;
-        scope.actionIds = _votedGroupActions(actionTokenAddress, round);
+        scope.actionIds = _votedGroupActions(sourceTokenAddress, round);
     }
 
     function _votedGroupActions(
-        address actionTokenAddress,
+        address sourceTokenAddress,
         uint256 round
     ) internal view returns (uint256[] memory) {
         (uint256[] memory actionIds, address[] memory executors, ) =
-            IActionTarget(s.actionTarget).votedActions(actionTokenAddress, round, 0, type(uint256).max, false);
+            IActionTarget(_layout.ACTION_TARGET_ADDRESS).votedActions(sourceTokenAddress, round, 0, type(uint256).max, false);
 
         uint256 count = 0;
         for (uint256 i = 0; i < actionIds.length; i++) {
-            if (executors[i] == s.groupActionExecutorAddress) {
+            if (executors[i] == _layout.GROUP_ACTION_EXECUTOR_ADDRESS) {
                 count++;
             }
         }
@@ -703,7 +703,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256[] memory groupActionIds = new uint256[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < actionIds.length; i++) {
-            if (executors[i] == s.groupActionExecutorAddress) {
+            if (executors[i] == _layout.GROUP_ACTION_EXECUTOR_ADDRESS) {
                 groupActionIds[index] = actionIds[i];
                 index++;
             }
@@ -712,11 +712,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     }
 
     function _lockedVerifierId(
-        address actionTokenAddress,
+        address sourceTokenAddress,
         uint256 actionId,
         uint256 round
     ) internal view returns (uint256) {
-        return IGroupActionExecutor(s.groupActionExecutorAddress).lockedVerifierId(actionTokenAddress, actionId, round);
+        return IGroupActionExecutor(_layout.GROUP_ACTION_EXECUTOR_ADDRESS).lockedVerifierId(sourceTokenAddress, actionId, round);
     }
 
     function _isSettleableRound(
@@ -724,24 +724,24 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 actionId,
         uint256 round
     ) internal view returns (bool) {
-        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
         return createdRound != 0 && round >= createdRound && round <= _mintRound();
     }
 
     function _memberNFTAddress() internal view override returns (address) {
-        return s.memberNFTAddress;
+        return _layout.MEMBER_NFT_ADDRESS;
     }
 
     function _phaseAddress() internal view override returns (address) {
-        return s.phaseAddress;
+        return _layout.PHASE_ADDRESS;
     }
 
     function _joinRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.joinRound(s.phaseAddress);
+        return GroupActionRoundAxis.joinRound(_layout.PHASE_ADDRESS);
     }
 
     function _mintRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.mintRound(s.phaseAddress);
+        return GroupActionRoundAxis.mintRound(_layout.PHASE_ADDRESS);
     }
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function _mintMemberReward(
@@ -750,7 +750,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 memberId,
         uint256 round
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 createdRound = s.createdRound[tokenAddress][actionId];
+        uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
         if (createdRound == 0) {
             revert ActionNotCreated(tokenAddress, actionId);
         }
@@ -762,7 +762,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             revert RoundAfterMintWindow(round, mintRound);
         }
 
-        if (s.memberMinted[tokenAddress][actionId][round][memberId]) {
+        if (_layout.memberMinted[tokenAddress][actionId][round][memberId]) {
             revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
         }
 
@@ -775,7 +775,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
         if (!settlement.actionMinted) {
             // forge-lint: disable-next-line(reentrancy-no-eth)
-            settlement.serviceReward = IActionTarget(s.actionTarget).mintActionReward(tokenAddress, actionId, round);
+            settlement.serviceReward = IActionTarget(_layout.ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
             _applyFormulas(settlement, memberId);
             mintAmount = settlement.verifierReward + settlement.ownerReward;
             burnAmount = settlement.ownerBurned;
@@ -787,15 +787,15 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         // Load-bearing: the cache key is the action token's round, not the service token's; a parent
         // service leaves the child's round open, and caching there pairs a frozen divisor with live weights.
         if (
-            s.cachedDenominator(settlement.actionTokenAddress, round) == 0
-                && IMint(s.mintAddress).isRewardPrepared(settlement.actionTokenAddress, round)
+            _layout.cachedDenominator(settlement.actionTokenAddress, round) == 0
+                && IMint(_layout.MINT_ADDRESS).isRewardPrepared(settlement.actionTokenAddress, round)
         ) {
-            s.cacheDenominator(settlement.actionTokenAddress, round, settlement.denominator);
+            _layout.cacheDenominator(settlement.actionTokenAddress, round, settlement.denominator);
         }
 
-        s.memberMinted[tokenAddress][actionId][round][memberId] = true;
-        s.verifierRewardByMember[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
-        s.ownerBurnedByMember[tokenAddress][actionId][round][memberId] = burnAmount;
+        _layout.memberMinted[tokenAddress][actionId][round][memberId] = true;
+        _layout.verifierRewardByMemberId[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
+        _layout.ownerBurnedByMemberId[tokenAddress][actionId][round][memberId] = burnAmount;
 
         if (burnAmount != 0) {
             // forge-lint: disable-next-line(reentrancy-no-eth)
@@ -806,7 +806,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (settlement.ownerReward != 0) {
             // forge-lint: disable-next-item(reentrancy-no-eth)
             distributed = GroupRecipients.distribute(
-                s,
+                _layout,
                 settlement.actionTokenAddress,
                 tokenAddress,
                 actionId,
@@ -817,8 +817,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             );
         }
         uint256 remaining = settlement.ownerReward - distributed;
-        s.ownerDistributedByMember[tokenAddress][actionId][round][memberId] = distributed;
-        s.ownerRemainingByMember[tokenAddress][actionId][round][memberId] = remaining;
+        _layout.ownerDistributedByMemberId[tokenAddress][actionId][round][memberId] = distributed;
+        _layout.ownerRemainingByMemberId[tokenAddress][actionId][round][memberId] = remaining;
 
         if (remaining != 0) {
             IERC20(tokenAddress).safeTransfer(msg.sender, remaining);

@@ -184,7 +184,7 @@ contract ActionTargetRealIntegrationTest {
     }
 
     function _assertCreationCallbacks(uint256 proposalId) internal view {
-        require(actionTarget.executor(address(token), proposalId) == address(executor), "executor bound");
+        require(actionTarget.executorByActionId(address(token), proposalId) == address(executor), "executor bound");
         require(executor.createdCalls() == 1, "creation callback forwarded");
         require(executor.submittedCalls() == 1, "submission callback forwarded");
         require(

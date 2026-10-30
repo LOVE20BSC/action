@@ -53,7 +53,7 @@ interface IActionExecutorErrors {
 }
 
 interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExecutorErrors {
-    function actionTarget() external view returns (address);
+    function ACTION_TARGET_ADDRESS() external view returns (address);
     function initialized() external view returns (bool);
 
     function exit(
@@ -83,7 +83,7 @@ interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExec
         uint256 memberId,
         uint256 round
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted);
-    function joinedAmount(
+    function joinedAmountByActionId(
         address tokenAddress,
         uint256 actionId,
         uint256 round
@@ -94,7 +94,7 @@ interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExec
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 amount);
-    function joinedAmountTokenAddress(
+    function joinTokenAddress(
         address tokenAddress,
         uint256 actionId
     ) external view returns (address joinedTokenAddress);

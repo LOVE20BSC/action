@@ -194,11 +194,11 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         );
         require(logs[0].topics[1] == bytes32(uint256(uint160(address(token)))), "token topic");
         require(logs[0].topics[2] == bytes32(SERVICE_ACTION_ID), "action topic");
-        (address actionTokenAddress, uint256 govRatioMultiplier, uint256 ratioForPublicVerifier) =
+        (address actionTokenAddress, uint256 govRatioMultiplier, uint256 publicVerifierRatio) =
             abi.decode(logs[0].data, (address, uint256, uint256));
         require(actionTokenAddress == address(childToken), "action token");
         require(govRatioMultiplier == 2e18, "gov ratio multiplier");
-        require(ratioForPublicVerifier == PRECISION / 2, "public verifier ratio");
+        require(publicVerifierRatio == PRECISION / 2, "public verifier ratio");
     }
 
     function _prepareCappedTwoActionScenario() internal {

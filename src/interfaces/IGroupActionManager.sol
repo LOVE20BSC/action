@@ -104,7 +104,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         GroupConfig calldata config
     ) external;
 
-    function groupInfo(
+    function groupState(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId
@@ -157,7 +157,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
 
     function totalStaked(address tokenAddress) external view returns (uint256);
 
-    function totalStakedByMemberId(
+    function stakedByMemberId(
         address tokenAddress,
         uint256 memberId
     ) external view returns (uint256);
@@ -189,7 +189,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
             uint256 total
         );
 
-    function actionIds(
+    function actionIdsWithActiveGroups(
         address tokenAddress,
         uint256 offset,
         uint256 limit,

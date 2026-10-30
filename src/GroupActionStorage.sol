@@ -24,7 +24,7 @@ library GroupActionStorage {
     uint256 constant MAX_VERIFICATION_ENTRIES = 16;
     uint256 constant MAX_VERIFICATION_TEXT_BYTES = 1024;
 
-    struct GroupInfo {
+    struct GroupState {
         GroupConfig config;
         bool active;
         uint256 activatedRound;
@@ -32,93 +32,93 @@ library GroupActionStorage {
     }
 
     struct Layout {
-        address actionTarget;
-        address stakeAddress;
-        address memberNFTAddress;
-        address phaseAddress;
-        address voteAddress;
-        uint256[] splits;
+        address ACTION_TARGET_ADDRESS;
+        address STAKE_ADDRESS;
+        address MEMBER_NFT_ADDRESS;
+        address PHASE_ADDRESS;
+        address VOTE_ADDRESS;
+        uint256[] SPLITS;
         bool initialized;
 
         // tokenAddress => actionId => join token address
-        mapping(address => mapping(uint256 => address)) joinTokenAddress;
+        mapping(address => mapping(uint256 => address)) joinTokenAddressByActionId;
         // tokenAddress => actionId => activation stake amount
-        mapping(address => mapping(uint256 => uint256)) activationStakeAmount;
+        mapping(address => mapping(uint256 => uint256)) activationStakeAmountByActionId;
         // tokenAddress => actionId => max join amount ratio (1e18 precision)
-        mapping(address => mapping(uint256 => uint256)) maxJoinAmountRatio;
+        mapping(address => mapping(uint256 => uint256)) maxJoinAmountRatioByActionId;
         // tokenAddress => actionId => activation min gov ratio (1e18 precision)
-        mapping(address => mapping(uint256 => uint256)) activationMinGovRatio;
+        mapping(address => mapping(uint256 => uint256)) activationMinGovRatioByActionId;
         // tokenAddress => actionId => verifier stake amount required to apply
-        mapping(address => mapping(uint256 => uint256)) verifierStakeAmount;
+        mapping(address => mapping(uint256 => uint256)) verifierStakeAmountByActionId;
         // tokenAddress => actionId => creation vote round
-        mapping(address => mapping(uint256 => uint256)) createdRound;
+        mapping(address => mapping(uint256 => uint256)) createdRoundByActionId;
         // tokenAddress => actionId => verification schema keys
-        mapping(address => mapping(uint256 => string[])) verificationKeys;
+        mapping(address => mapping(uint256 => string[])) verificationKeysByActionId;
         // tokenAddress => actionId => verification schema descriptions
-        mapping(address => mapping(uint256 => string[])) verificationDescriptions;
+        mapping(address => mapping(uint256 => string[])) verificationDescriptionsByActionId;
 
         // tokenAddress => actionId => groupId => group info
-        mapping(address => mapping(uint256 => mapping(uint256 => GroupInfo))) groupInfo;
+        mapping(address => mapping(uint256 => mapping(uint256 => GroupState))) groupState;
         // tokenAddress => actionId => active group ids
-        mapping(address => mapping(uint256 => Uint256Set.Storage)) activeGroupIds;
+        mapping(address => mapping(uint256 => Uint256Set.Storage)) activeGroupIdsByActionId;
         // tokenAddress => actionId => groupId => description history by round
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryString.History))) descriptionHistory;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryString.History))) descriptionHistoryByGroupId;
         // tokenAddress => actionId => staked amount of active groups
-        mapping(address => mapping(uint256 => uint256)) staked;
+        mapping(address => mapping(uint256 => uint256)) stakedByActionId;
         // tokenAddress => total staked across actions
         mapping(address => uint256) totalStaked;
         // tokenAddress => group owner memberId => total staked of the member's active groups
-        mapping(address => mapping(uint256 => uint256)) totalStakedByMemberId;
+        mapping(address => mapping(uint256 => uint256)) stakedByMemberId;
         // groupId => token addresses with active groups of the group
         mapping(uint256 => AddressSet.Storage) tokenAddressesByGroupId;
         // tokenAddress => groupId => action ids with active groups of the group
         mapping(address => mapping(uint256 => Uint256Set.Storage)) actionIdsByGroupId;
         // tokenAddress => action ids with any active group
-        mapping(address => Uint256Set.Storage) actionIds;
+        mapping(address => Uint256Set.Storage) activeActionIds;
 
         // tokenAddress => actionId => memberId => joined round history
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) joinedRoundHistory;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) joinedRoundHistoryByMemberId;
         // tokenAddress => actionId => memberId => group id history
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) groupHistory;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) groupHistoryByMemberId;
         // tokenAddress => actionId => memberId => own amount history (providerId 0)
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) ownAmountHistory;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) ownAmountHistoryByMemberId;
         // tokenAddress => actionId => memberId => aggregate provider amount history
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) providerAmountHistory;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) providerAmountHistoryByMemberId;
         // tokenAddress => actionId => memberId => provider ids with balance, per round
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Set.Storage))) providerIdsByMemberId;
         // tokenAddress => actionId => memberId => providerId => provider amount history
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History)))) providerAmountByProviderId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History)))) providerAmountByMemberIdByProviderId;
         // tokenAddress => actionId => groupId => member ids per round
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Set.Storage))) memberIdsByGroupId;
         // tokenAddress => actionId => group ids per round
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) groupIdsByRound;
         // tokenAddress => actionId => groupId => total joined amount history
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) totalJoinedAmountByGroupId;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) joinedAmountByGroupId;
         // tokenAddress => actionId => total joined amount history
-        mapping(address => mapping(uint256 => RoundHistoryUint256.History)) totalJoinedAmount;
+        mapping(address => mapping(uint256 => RoundHistoryUint256.History)) joinedAmountByActionId;
 
         // tokenAddress => actionId => groupId => providerId => member ids with an outstanding grant
         // (kept until the granted amount reaches zero)
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => Uint256Set.Storage)))) quotaMemberIds;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => Uint256Set.Storage)))) quotaMemberIdsByGroupIdByProviderId;
         // tokenAddress => actionId => groupId => providerId => memberId => granted quota amount
-        // Only provider actions change it; used quota is read from providerAmountByProviderId,
+        // Only provider actions change it; used quota is read from providerAmountByMemberIdByProviderId,
         // so the available quota is granted - used.
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))) quotaAmount;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))) quotaAmountByGroupIdByProviderIdByMemberId;
 
         // groupId => memberId => count of actions the member currently joins in the group
         mapping(uint256 => mapping(uint256 => uint256)) membershipCountByGroupIdByMemberId;
         // groupId => memberId => tokenAddress => count of actions of the token the member currently joins in the group
-        mapping(uint256 => mapping(uint256 => mapping(address => uint256))) membershipCountByToken;
+        mapping(uint256 => mapping(uint256 => mapping(address => uint256))) membershipCountByTokenAddress;
         // groupId => memberId => token addresses of current membership
-        mapping(uint256 => mapping(uint256 => AddressSet.Storage)) gTokenAddressesByGroupIdByMemberId;
+        mapping(uint256 => mapping(uint256 => AddressSet.Storage)) joinedTokenAddressesByGroupIdByMemberId;
         // group ids with members
-        Uint256Set.Storage gGroupIds;
+        Uint256Set.Storage joinedGroupIds;
         // memberId => group ids the member currently belongs to
-        mapping(uint256 => Uint256Set.Storage) gGroupIdsByMemberId;
+        mapping(uint256 => Uint256Set.Storage) joinedGroupIdsByMemberId;
         // member ids with membership
-        Uint256Set.Storage gMemberIds;
+        Uint256Set.Storage joinedMemberIds;
         // groupId => member ids currently in the group
-        mapping(uint256 => Uint256Set.Storage) gMemberIdsByGroupId;
+        mapping(uint256 => Uint256Set.Storage) joinedMemberIdsByGroupId;
 
         // tokenAddress => actionId => round => memberId => origin score deduction from MAX_ORIGIN_SCORE
         // (0 = full score or unverified).
@@ -126,14 +126,14 @@ library GroupActionStorage {
         // `verifiedMemberCount` slots of the round's member set. The set is written only at the current
         // join round (phase - 1) while verification runs for `phase - 2`; a later write to that round
         // would shift the prefix and silently misreport scores.
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeduction;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeductionByMemberId;
         // tokenAddress => actionId => round => groupId => verified member count
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCount;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCountByGroupId;
         // tokenAddress => actionId => round => number of groups whose cursor reached its member count
         // Load-bearing: the count only reaches the group count because a completed group cannot submit
         // again (`GroupVerificationAlreadyComplete`) and `groupIdsByRound[round]` never holds a zero-member group;
         // otherwise the round stays unverified forever with no revert.
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCount;
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCountByRound;
         // tokenAddress => actionId => round => every group in the round is fully verified
         mapping(address => mapping(uint256 => mapping(uint256 => bool))) roundVerified;
         // tokenAddress => actionId => round => groupId => accumulated final score
@@ -143,7 +143,7 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => locked verifier member id (0 = none)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) lockedVerifierId;
         // tokenAddress => actionId => latest application id
-        mapping(address => mapping(uint256 => uint256)) applicationIdCounter;
+        mapping(address => mapping(uint256 => uint256)) applicationIdCount;
         // tokenAddress => actionId => applicationId => the verifier holding it
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationVerifierId;
         // tokenAddress => actionId => applicationId => application description
@@ -154,7 +154,7 @@ library GroupActionStorage {
         // round's application and silently rejects whoever replaced or cancelled after the vote round.
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) applicationIdHistory;
         // tokenAddress => actionId => round => applicationId => votes cast in that round
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) votesByApplicationId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) voteAmountByApplicationId;
         // tokenAddress => actionId => verifierId => current application id (0 = none)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) currentApplicationId;
         // tokenAddress => actionId => active application ids
@@ -179,15 +179,15 @@ library GroupActionStorage {
             voterIdsByApplicationId;
         // tokenAddress => actionId => round => applicationId => voterId => votes that voter cast
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))))
-            votesByApplicationIdByVoterId;
+            voteAmountByApplicationIdByVoterId;
     }
 
-    function joinRound(Layout storage s) internal view returns (uint256) {
-        return GroupActionRoundAxis.joinRound(s.phaseAddress);
+    function joinRound(Layout storage self) internal view returns (uint256) {
+        return GroupActionRoundAxis.joinRound(self.PHASE_ADDRESS);
     }
 
-    function currentJoinRound(Layout storage s) internal view returns (uint256) {
-        uint256 round = joinRound(s);
+    function currentJoinRound(Layout storage self) internal view returns (uint256) {
+        uint256 round = joinRound(self);
         if (round == 0) {
             revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
@@ -195,13 +195,13 @@ library GroupActionStorage {
     }
 
     function memberAmountAt(
-        Layout storage s,
+        Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 round,
         uint256 memberId
     ) internal view returns (uint256) {
-        return s.ownAmountHistory[tokenAddress][actionId][memberId].value(round)
-            + s.providerAmountHistory[tokenAddress][actionId][memberId].value(round);
+        return self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round)
+            + self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
     }
 }

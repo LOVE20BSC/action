@@ -22,13 +22,13 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
             );
             actionTarget.onProposalCreated(address(token), 11, targetData);
         }
-        require(actionTarget.executor(address(token), 11) == address(0), "never bound");
+        require(actionTarget.executorByActionId(address(token), 11) == address(0), "never bound");
     }
 
     function testCreateAtPhaseZeroRecordsZeroRound() external {
         phase.setPhase(0);
         _createAction(11);
-        require(actionTarget.executor(address(token), 11) == address(executor), "bound at phase zero");
+        require(actionTarget.executorByActionId(address(token), 11) == address(executor), "bound at phase zero");
 
         vm.prank(address(executor));
         vm.expectRevert(

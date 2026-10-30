@@ -52,15 +52,13 @@ interface IGroupActionExecutor is
     IGroupActionExecutorEvents,
     IGroupActionExecutorErrors
 {
-    function JOIN_TOKEN_ADDRESS(address tokenAddress, uint256 actionId) external view returns (address);
+    function activationStakeAmount(address tokenAddress, uint256 actionId) external view returns (uint256);
 
-    function ACTIVATION_STAKE_AMOUNT(address tokenAddress, uint256 actionId) external view returns (uint256);
+    function maxJoinAmountRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
 
-    function MAX_JOIN_AMOUNT_RATIO(address tokenAddress, uint256 actionId) external view returns (uint256);
+    function activationMinGovRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
 
-    function ACTIVATION_MIN_GOV_RATIO(address tokenAddress, uint256 actionId) external view returns (uint256);
-
-    function VERIFIER_STAKE_AMOUNT(address tokenAddress, uint256 actionId) external view returns (uint256);
+    function verifierStakeAmount(address tokenAddress, uint256 actionId) external view returns (uint256);
 
     function SPLITS() external view returns (uint256[] memory);
 

@@ -27,7 +27,11 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testInitDerivesDependenciesFromStake() external {
         require(lpExecutor.initialized(), "initialized");
-        require(lpExecutor.actionTarget() == address(actionTarget), "action target bound");
+        require(lpExecutor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target bound");
+        require(lpExecutor.MEMBER_NFT_ADDRESS() == address(memberNFT), "member nft bound");
+        require(lpExecutor.PHASE_ADDRESS() == address(phase), "phase bound");
+        require(lpExecutor.STAKE_ADDRESS() == address(stake), "stake bound");
+        require(lpExecutor.PAIR_FACTORY_ADDRESS() == stake.PAIR_FACTORY_ADDRESS(), "pair factory bound");
 
         MockLpPhase otherPhase = new MockLpPhase();
         otherPhase.setCurrentPhase(7);
@@ -69,25 +73,25 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.prank(OUTSIDER);
         fresh.init(address(actionTarget), address(stake));
         require(fresh.initialized(), "outsider init succeeds");
-        require(fresh.actionTarget() == address(actionTarget), "binding set");
+        require(fresh.ACTION_TARGET_ADDRESS() == address(actionTarget), "binding set");
     }
 
     function testInitRejectsSecondCall() external {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.AlreadyInitialized.selector));
         lpExecutor.init(address(actionTarget), address(stake));
-        require(lpExecutor.actionTarget() == address(actionTarget), "binding unchanged");
+        require(lpExecutor.ACTION_TARGET_ADDRESS() == address(actionTarget), "binding unchanged");
     }
 
     function testCreateStoresConfig() external view {
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), ACTION_ID) == address(joinToken),
+            lpExecutor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken),
             "join token stored"
         );
         require(
-            lpExecutor.GOV_RATIO_MULTIPLIER(address(token), ACTION_ID) == GOV_RATIO_MULTIPLIER,
+            lpExecutor.govRatioMultiplier(address(token), ACTION_ID) == GOV_RATIO_MULTIPLIER,
             "multiplier stored"
         );
-        require(lpExecutor.MIN_GOV_RATIO(address(token), ACTION_ID) == MIN_GOV_RATIO, "min ratio stored");
+        require(lpExecutor.minGovRatio(address(token), ACTION_ID) == MIN_GOV_RATIO, "min ratio stored");
     }
 
     function testCreateRejectsNonActionTargetCaller() external {
@@ -110,7 +114,7 @@ contract LpExecutorTest is LpExecutorTestBase {
             lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
         }
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
+            lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
             "nothing stored"
         );
     }
@@ -176,7 +180,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         stake.setPairFactoryAddress(address(factory));
         _createAction(SECOND_ACTION_ID);
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), SECOND_ACTION_ID) == address(joinToken),
+            lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(joinToken),
             "valid create succeeds"
         );
     }
@@ -195,8 +199,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         targetData[3] = abi.encode(PRECISION);
         vm.prank(address(actionTarget));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
-        require(lpExecutor.GOV_RATIO_MULTIPLIER(address(token), SECOND_ACTION_ID) == 0, "zero multiplier");
-        require(lpExecutor.MIN_GOV_RATIO(address(token), SECOND_ACTION_ID) == PRECISION, "full min ratio");
+        require(lpExecutor.govRatioMultiplier(address(token), SECOND_ACTION_ID) == 0, "zero multiplier");
+        require(lpExecutor.minGovRatio(address(token), SECOND_ACTION_ID) == PRECISION, "full min ratio");
     }
 
     function testCreateRollsBackOnFailure() external {
@@ -207,17 +211,17 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
 
         require(
-            lpExecutor.GOV_RATIO_MULTIPLIER(address(token), SECOND_ACTION_ID) == 0,
+            lpExecutor.govRatioMultiplier(address(token), SECOND_ACTION_ID) == 0,
             "multiplier not stored"
         );
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
+            lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
             "join token not stored"
         );
 
         _createAction(SECOND_ACTION_ID);
         require(
-            lpExecutor.GOV_RATIO_MULTIPLIER(address(token), SECOND_ACTION_ID) == GOV_RATIO_MULTIPLIER,
+            lpExecutor.govRatioMultiplier(address(token), SECOND_ACTION_ID) == GOV_RATIO_MULTIPLIER,
             "retry succeeds"
         );
     }
@@ -257,12 +261,12 @@ contract LpExecutorTest is LpExecutorTestBase {
         uint256 executorBefore = joinToken.balanceOf(address(lpExecutor));
         _join(1, 100e18);
 
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 100e18, "total joined");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18, "total joined");
         require(
             lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 100e18,
             "member joined"
         );
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "no deduction at start");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "no deduction at start");
 
         (uint256 deduction, uint256[] memory blocks, uint256[] memory amounts) =
             lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
@@ -288,8 +292,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(deduction == 20e18, "second join deduction");
         require(amounts.length == 2 && amounts[0] == 100e18 && amounts[1] == 50e18, "both amounts recorded");
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 150e18, "balance sum");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 150e18, "total sum");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 20e18, "total deduction sum");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 150e18, "total sum");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 20e18, "total deduction sum");
     }
 
     function testJoinUsesJoinPhaseInfoAndFreezesDeduction() external {
@@ -321,14 +325,14 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == 7, "deduction capped at the join amount");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 7, "total deduction capped");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 7, "total deduction capped");
     }
 
     function testJoinRequiresMemberOwner() external {
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, 1));
         lpExecutor.join(address(token), ACTION_ID, 1, 1e18);
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "nothing recorded");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "nothing recorded");
     }
 
     function testJoinChecksOwnerBeforeAmount() external {
@@ -392,8 +396,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.join(address(token), ACTION_ID, 1, 100e18);
 
         require(joinToken.balanceOf(MEMBER1) == memberBefore, "transfer rolled back");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "total rolled back");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction rolled back");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "total rolled back");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction rolled back");
         (uint256 deduction, uint256[] memory blocks, uint256[] memory amounts) =
             lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == 0 && blocks.length == 0 && amounts.length == 0, "records rolled back");
@@ -408,7 +412,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(joinToken)));
         lpExecutor.join(address(token), ACTION_ID, 1, 100e18);
 
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "ledger rolled back");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "ledger rolled back");
         require(actionTarget.isJoined(address(token), ACTION_ID, 1) == false, "target rolled back");
     }
 
@@ -420,8 +424,8 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         _atPhase(5);
         _join(1, 100e18);
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 4) == 100e18, "join round 4");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 3) == 0, "round 3 untouched");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 4) == 100e18, "join round 4");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 3) == 0, "round 3 untouched");
     }
 
     function testJoinBalancesCarryAcrossRounds() external {
@@ -438,8 +442,8 @@ contract LpExecutorTest is LpExecutorTestBase {
             lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 3, 1) == 150e18,
             "round 3 carries the balance"
         );
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "round 2 deduction");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 3) == 15e18, "round 3 deduction only");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "round 2 deduction");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 3) == 15e18, "round 3 deduction only");
     }
 
     function testWithdrawPartialRoundsDeductionDown() external {
@@ -452,10 +456,10 @@ contract LpExecutorTest is LpExecutorTestBase {
         _withdraw(1, 40e18);
 
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 160e18, "balance reduced");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 160e18, "total reduced");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 160e18, "total reduced");
         (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == 24e18, "deduction scaled down");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 24e18, "total deduction scaled");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 24e18, "total deduction scaled");
         require(joinToken.balanceOf(MEMBER1) - memberBefore == 40e18, "part returned");
         require(actionTarget.clearCalls() == 0, "partial withdraw keeps the join state");
     }
@@ -473,7 +477,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         (uint256 deduction, uint256[] memory blocks, uint256[] memory amounts) =
             lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == 3, "deduction stays 3");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 3, "total deduction stays 3");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 3, "total deduction stays 3");
         require(blocks.length == 1 && amounts.length == 1 && amounts[0] == 7, "join records retained");
     }
 
@@ -488,8 +492,8 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         require(joinToken.balanceOf(MEMBER1) - memberBefore == 5, "remainder returned");
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0, "balance cleared");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "total cleared");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction taken");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "total cleared");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction taken");
         (uint256 deduction, uint256[] memory blocks, uint256[] memory amounts) =
             lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == 0 && blocks.length == 0 && amounts.length == 0, "records cleared");
@@ -502,7 +506,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(1, 100e18);
 
         _withdraw(1, 100e18);
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction taken exactly");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction taken exactly");
     }
 
     function testWithdrawUpdatesOnlyCurrentRound() external {
@@ -519,8 +523,8 @@ contract LpExecutorTest is LpExecutorTestBase {
             lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 3, 1) == 60e18,
             "current round reduced"
         );
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 100e18, "past total frozen");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 3) == 60e18, "current total reduced");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18, "past total frozen");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 3) == 60e18, "current total reduced");
     }
 
     function testWithdrawRejectsZeroAndOverdraft() external {
@@ -572,7 +576,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         require(joinToken.balanceOf(MEMBER1) == memberBefore, "transfer rolled back");
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 100e18, "balance retained");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 30e18, "deduction retained");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 30e18, "deduction retained");
         require(actionTarget.isJoined(address(token), ACTION_ID, 1), "target state retained");
     }
 
@@ -585,8 +589,8 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         require(joinToken.balanceOf(MEMBER1) - memberBefore == 100e18, "balance returned");
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0, "member cleared");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 0, "total cleared");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "deduction taken");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "total cleared");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction taken");
         (uint256 deduction, uint256[] memory blocks, uint256[] memory amounts) =
             lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == 0 && blocks.length == 0 && amounts.length == 0, "records cleared");
@@ -614,8 +618,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         _exit(1);
 
         require(joinToken.balanceOf(MEMBER1) - memberBefore == 100e18, "inherited balance returned");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 100e18, "past round retained");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 4) == 0, "current round cleared");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18, "past round retained");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 4) == 0, "current round cleared");
     }
 
     function testExitTwiceRevertsNotJoined() external {
@@ -1073,26 +1077,26 @@ contract LpExecutorTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
 
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 2) == 100e18, "current round");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 3) == 0, "beyond join round");
-        require(lpExecutor.joinedAmount(address(token), ACTION_ID, 1) == 0, "before first record");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18, "current round");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 3) == 0, "beyond join round");
+        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 1) == 0, "before first record");
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 2) == 0, "unknown member");
     }
 
     function testJoinedAmountTokenAddressDefaults() external view {
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), ACTION_ID) == address(joinToken),
+            lpExecutor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken),
             "configured join token"
         );
         require(
-            lpExecutor.joinedAmountTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
+            lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
             "unknown action defaults to zero"
         );
     }
 
     function testGettersDefaultToZeroForUnknownAction() external view {
-        require(lpExecutor.GOV_RATIO_MULTIPLIER(address(token), 99) == 0, "multiplier default");
-        require(lpExecutor.MIN_GOV_RATIO(address(token), 99) == 0, "min ratio default");
+        require(lpExecutor.govRatioMultiplier(address(token), 99) == 0, "multiplier default");
+        require(lpExecutor.minGovRatio(address(token), 99) == 0, "min ratio default");
     }
 
     function testGovRatioReturnsCurrentThenRecorded() external {

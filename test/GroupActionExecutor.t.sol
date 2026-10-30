@@ -10,12 +10,12 @@ import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 contract GroupActionExecutorTest is GroupActionExecutorTestBase {
     function testInitDerivesDependenciesAndValidates() external {
         require(executor.initialized(), "initialized");
-        require(executor.actionTarget() == address(actionTarget), "action target");
-        require(executor.JOIN_TOKEN_ADDRESS(address(token), ACTION_ID) == address(joinToken), "join token stored");
-        require(executor.ACTIVATION_STAKE_AMOUNT(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake stored");
-        require(executor.MAX_JOIN_AMOUNT_RATIO(address(token), ACTION_ID) == PRECISION, "ratio stored");
-        require(executor.ACTIVATION_MIN_GOV_RATIO(address(token), ACTION_ID) == 0, "min gov ratio stored");
-        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "verifier stake stored");
+        require(executor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target");
+        require(executor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token stored");
+        require(executor.activationStakeAmount(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake stored");
+        require(executor.maxJoinAmountRatio(address(token), ACTION_ID) == PRECISION, "ratio stored");
+        require(executor.activationMinGovRatio(address(token), ACTION_ID) == 0, "min gov ratio stored");
+        require(executor.verifierStakeAmount(address(token), ACTION_ID) == VERIFIER_STAKE, "verifier stake stored");
         uint256[] memory splits = executor.SPLITS();
         require(splits.length == 1 && splits[0] == 5e17, "splits stored");
 
@@ -211,14 +211,14 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
     function testJoinedAmountQueryGuards() external {
         _prepareRound();
 
-        require(executor.joinedAmount(address(token), ACTION_ID, 2) == 100e18 + PROVIDER_QUOTA, "round total");
-        require(executor.joinedAmount(address(token), ACTION_ID, 3) == 0, "future round zero");
+        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18 + PROVIDER_QUOTA, "round total");
+        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 3) == 0, "future round zero");
         require(
             executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == 100e18,
             "member round amount"
         );
         require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 3, MEMBER1_ID) == 0, "member future zero");
-        require(executor.joinedAmountTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token");
+        require(executor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token");
         require(executor.currentJoinRound() == 2, "join round getter");
         require(executor.currentVoteRound() == 3, "vote round getter");
     }
@@ -235,7 +235,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 200e18);
         uint256[] memory ids = _ids(MEMBER2_ID);
         vm.prank(secondProvider);
-        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, secondProviderId, ids, _ids(100e18));
+        executor.addProviderQuota(address(token), ACTION_ID, GROUP_ID, secondProviderId, ids, _ids(100e18));
         _grantQuota(PROVIDER_ID, MEMBER1_ID, 50e18);
 
         vm.prank(MEMBER2);

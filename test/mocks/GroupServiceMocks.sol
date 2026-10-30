@@ -135,8 +135,8 @@ contract MockGroupServiceActionTarget {
         uint256 createdRound
     );
 
-    address public phaseAddress;
-    address public mintAddress;
+    address public PHASE_ADDRESS;
+    address public MINT_ADDRESS;
 
     // tokenAddress => actionId => creation vote round
     mapping(address => mapping(uint256 => uint256)) internal _createdRound;
@@ -164,12 +164,12 @@ contract MockGroupServiceActionTarget {
     uint256 public lastMintActionId;
     uint256 public lastMintRound;
 
-    function setPhaseAddress(address phaseAddress_) external {
-        phaseAddress = phaseAddress_;
+    function setPhaseAddress(address phaseAddress) external {
+        PHASE_ADDRESS = phaseAddress;
     }
 
-    function setMintAddress(address mintAddress_) external {
-        mintAddress = mintAddress_;
+    function setMintAddress(address mintAddress) external {
+        MINT_ADDRESS = mintAddress;
     }
 
     function setBoundExecutor(address tokenAddress, uint256 actionId, address executor_) external {
@@ -203,7 +203,7 @@ contract MockGroupServiceActionTarget {
     }
 
     function registerJoinState(address tokenAddress, uint256 actionId, uint256 memberId) external {
-        uint256 currentRound = MockGroupServicePhase(phaseAddress).currentPhase();
+        uint256 currentRound = MockGroupServicePhase(PHASE_ADDRESS).currentPhase();
         uint256 createdRound = _createdRound[tokenAddress][actionId];
         if (currentRound <= createdRound) {
             revert JoinNotOpen(tokenAddress, actionId, currentRound, createdRound);
@@ -272,7 +272,7 @@ contract MockGroupServiceActionTarget {
     }
 
     function _joinRound() internal view returns (uint256) {
-        uint256 currentRound = MockGroupServicePhase(phaseAddress).currentPhase();
+        uint256 currentRound = MockGroupServicePhase(PHASE_ADDRESS).currentPhase();
         return currentRound == 0 ? 0 : currentRound - 1;
     }
 
@@ -326,7 +326,7 @@ contract MockGroupServiceGroupActionExecutor {
     // tokenAddress => total staked
     mapping(address => uint256) internal _totalStaked;
     // tokenAddress => memberId => total staked
-    mapping(address => mapping(uint256 => uint256)) internal _totalStakedByMemberId;
+    mapping(address => mapping(uint256 => uint256)) internal _stakedByMemberId;
 
     // tokenAddress => actionId => join token address (zero = action never created)
     mapping(address => mapping(uint256 => address)) internal _joinTokenAddress;
@@ -335,11 +335,11 @@ contract MockGroupServiceGroupActionExecutor {
         _activeGroups[tokenAddress][memberId] = active;
     }
 
-    function setJoinTokenAddress(address tokenAddress, uint256 actionId, address joinTokenAddress) external {
-        _joinTokenAddress[tokenAddress][actionId] = joinTokenAddress;
+    function setJoinTokenAddress(address tokenAddress, uint256 actionId, address joinTokenAddressValue) external {
+        _joinTokenAddress[tokenAddress][actionId] = joinTokenAddressValue;
     }
 
-    function JOIN_TOKEN_ADDRESS(address tokenAddress, uint256 actionId) external view returns (address) {
+    function joinTokenAddress(address tokenAddress, uint256 actionId) external view returns (address) {
         return _joinTokenAddress[tokenAddress][actionId];
     }
 
@@ -391,8 +391,8 @@ contract MockGroupServiceGroupActionExecutor {
         _totalStaked[tokenAddress] = amount;
     }
 
-    function setTotalStakedByMemberId(address tokenAddress, uint256 memberId, uint256 amount) external {
-        _totalStakedByMemberId[tokenAddress][memberId] = amount;
+    function setStakedByMemberId(address tokenAddress, uint256 memberId, uint256 amount) external {
+        _stakedByMemberId[tokenAddress][memberId] = amount;
     }
 
     function hasActiveGroups(address tokenAddress, uint256 memberId) external view returns (bool) {
@@ -491,8 +491,8 @@ contract MockGroupServiceGroupActionExecutor {
         return _totalStaked[tokenAddress];
     }
 
-    function totalStakedByMemberId(address tokenAddress, uint256 memberId) external view returns (uint256) {
-        return _totalStakedByMemberId[tokenAddress][memberId];
+    function stakedByMemberId(address tokenAddress, uint256 memberId) external view returns (uint256) {
+        return _stakedByMemberId[tokenAddress][memberId];
     }
 }
 

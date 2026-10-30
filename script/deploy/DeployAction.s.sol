@@ -140,20 +140,20 @@ contract DeployAction is Script {
         IMint mint = IMint(mintAddress);
         IActionTarget actionTarget = IActionTarget(addrs.actionTarget);
         require(actionTarget.initialized(), "ActionTarget not initialized");
-        require(actionTarget.mintAddress() == mintAddress, "ActionTarget mint mismatch");
-        require(actionTarget.voteAddress() == mint.VOTE_ADDRESS(), "ActionTarget vote mismatch");
-        require(actionTarget.submitAddress() == mint.SUBMIT_ADDRESS(), "ActionTarget submit mismatch");
-        require(actionTarget.memberNFTAddress() == mint.MEMBER_NFT_ADDRESS(), "ActionTarget member NFT mismatch");
-        require(actionTarget.phaseAddress() == mint.PHASE_ADDRESS(), "ActionTarget phase mismatch");
+        require(actionTarget.MINT_ADDRESS() == mintAddress, "ActionTarget mint mismatch");
+        require(actionTarget.VOTE_ADDRESS() == mint.VOTE_ADDRESS(), "ActionTarget vote mismatch");
+        require(actionTarget.SUBMIT_ADDRESS() == mint.SUBMIT_ADDRESS(), "ActionTarget submit mismatch");
+        require(actionTarget.MEMBER_NFT_ADDRESS() == mint.MEMBER_NFT_ADDRESS(), "ActionTarget member NFT mismatch");
+        require(actionTarget.PHASE_ADDRESS() == mint.PHASE_ADDRESS(), "ActionTarget phase mismatch");
 
         LpExecutor lpExecutor = LpExecutor(addrs.lpExecutor);
         require(lpExecutor.initialized(), "LpExecutor not initialized");
-        require(lpExecutor.actionTarget() == addrs.actionTarget, "LpExecutor action target mismatch");
+        require(lpExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget, "LpExecutor action target mismatch");
 
         GroupActionExecutor groupActionExecutor = GroupActionExecutor(addrs.groupActionExecutor);
         require(groupActionExecutor.initialized(), "GroupActionExecutor not initialized");
         require(
-            groupActionExecutor.actionTarget() == addrs.actionTarget,
+            groupActionExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget,
             "GroupActionExecutor action target mismatch"
         );
         uint256[] memory splits = groupActionExecutor.SPLITS();
@@ -166,11 +166,11 @@ contract DeployAction is Script {
         GroupServiceExecutor groupServiceExecutor = GroupServiceExecutor(addrs.groupServiceExecutor);
         require(groupServiceExecutor.initialized(), "GroupServiceExecutor not initialized");
         require(
-            groupServiceExecutor.actionTarget() == addrs.actionTarget,
+            groupServiceExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget,
             "GroupServiceExecutor action target mismatch"
         );
         require(
-            groupServiceExecutor.groupActionExecutorAddress() == addrs.groupActionExecutor,
+            groupServiceExecutor.GROUP_ACTION_EXECUTOR_ADDRESS() == addrs.groupActionExecutor,
             "GroupServiceExecutor binding mismatch"
         );
     }

@@ -99,7 +99,7 @@ contract GroupActionHandler {
         amounts[0] = amount;
         vm.prank(provider);
         try
-            GroupActionExecutor(executor).providerQuotaAdd(
+            GroupActionExecutor(executor).addProviderQuota(
                 token, ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds, amounts
             )
         {
@@ -113,7 +113,7 @@ contract GroupActionHandler {
         uint256[] memory memberIds = new uint256[](1);
         memberIds[0] = MEMBER2_ID;
         vm.prank(provider);
-        GroupActionExecutor(executor).providerQuotaRemove(token, ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds);
+        GroupActionExecutor(executor).removeProviderQuota(token, ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds);
         quotaModel = 0;
         grantModel = 0;
         providerModel[MEMBER2_ID] = 0;
@@ -143,11 +143,11 @@ contract GroupActionHandler {
         ownModel[memberId] = 0;
     }
 
-    function providerQuotaWithdraw(uint256 seed) external {
+    function withdrawProviderQuota(uint256 seed) external {
         if (quotaModel == 0) return;
         uint256 amount = (seed % quotaModel) + 1;
         vm.prank(provider);
-        GroupActionExecutor(executor).providerQuotaWithdraw(token, ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, amount);
+        GroupActionExecutor(executor).withdrawProviderQuota(token, ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, amount);
         quotaModel -= amount;
         grantModel -= amount;
     }
@@ -192,7 +192,7 @@ contract GroupActionInvariantTest is GroupActionExecutorTestBase {
             "member 2 amount matches model"
         );
         require(
-            executor.totalJoinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID)
+            executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID)
                 == handler.ownModel(MEMBER1_ID) + handler.ownModel(MEMBER2_ID) + handler.providerModel(MEMBER2_ID),
             "group total matches model"
         );

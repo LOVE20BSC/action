@@ -79,11 +79,11 @@ interface IActionTargetErrors {
 }
 
 interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetErrors {
-    function memberNFTAddress() external view returns (address);
-    function submitAddress() external view returns (address);
-    function voteAddress() external view returns (address);
-    function mintAddress() external view returns (address);
-    function phaseAddress() external view returns (address);
+    function MEMBER_NFT_ADDRESS() external view returns (address);
+    function SUBMIT_ADDRESS() external view returns (address);
+    function VOTE_ADDRESS() external view returns (address);
+    function MINT_ADDRESS() external view returns (address);
+    function PHASE_ADDRESS() external view returns (address);
 
     function initialized() external view returns (bool);
     function init(address mintAddress) external;
@@ -125,7 +125,7 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
         uint256 actionId,
         uint256[] calldata memberIds
     ) external view returns (uint256[] memory rounds);
-    function executor(
+    function executorByActionId(
         address tokenAddress,
         uint256 actionId
     ) external view returns (address);

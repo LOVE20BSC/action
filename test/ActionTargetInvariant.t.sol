@@ -213,9 +213,9 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
         for (uint256 i = 0; i < 4; i++) {
             uint256 actionId = handler.actionIdAt(i);
             if (handler.created(actionId)) {
-                require(actionTarget.executor(address(token), actionId) == address(executor), "bound executor");
+                require(actionTarget.executorByActionId(address(token), actionId) == address(executor), "bound executor");
             } else {
-                require(actionTarget.executor(address(token), actionId) == address(0), "unbound stays zero");
+                require(actionTarget.executorByActionId(address(token), actionId) == address(0), "unbound stays zero");
             }
         }
     }

@@ -185,7 +185,7 @@ abstract contract GroupServiceTestBase {
         out[2] = c;
     }
 
-    function _serviceTargetData(address actionTokenAddress, uint256 govRatioMultiplier, uint256 ratioForPublicVerifier)
+    function _serviceTargetData(address actionTokenAddress, uint256 govRatioMultiplier, uint256 publicVerifierRatio)
         internal
         view
         returns (bytes[] memory targetData)
@@ -194,7 +194,7 @@ abstract contract GroupServiceTestBase {
         targetData[0] = abi.encode(address(executor));
         targetData[1] = abi.encode(actionTokenAddress);
         targetData[2] = abi.encode(govRatioMultiplier);
-        targetData[3] = abi.encode(ratioForPublicVerifier);
+        targetData[3] = abi.encode(publicVerifierRatio);
     }
 
     /// @dev Creates the service proposal through the ActionTarget callback. The
@@ -206,21 +206,21 @@ abstract contract GroupServiceTestBase {
         address actionTokenAddress,
         uint256 actionId,
         uint256 govRatioMultiplier,
-        uint256 ratioForPublicVerifier
+        uint256 publicVerifierRatio
     ) internal {
         vm.prank(address(actionTarget));
         executor.onProposalCreated(
             serviceTokenAddress,
             actionId,
-            _serviceTargetData(actionTokenAddress, govRatioMultiplier, ratioForPublicVerifier)
+            _serviceTargetData(actionTokenAddress, govRatioMultiplier, publicVerifierRatio)
         );
         actionTarget.setCreatedRound(serviceTokenAddress, actionId, _currentPhase);
     }
 
-    function _createServiceAction(uint256 actionId, uint256 govRatioMultiplier, uint256 ratioForPublicVerifier)
+    function _createServiceAction(uint256 actionId, uint256 govRatioMultiplier, uint256 publicVerifierRatio)
         internal
     {
-        _createServiceActionOn(address(token), address(token), actionId, govRatioMultiplier, ratioForPublicVerifier);
+        _createServiceActionOn(address(token), address(token), actionId, govRatioMultiplier, publicVerifierRatio);
     }
 
     function _joinService(uint256 memberId) internal {

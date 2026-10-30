@@ -18,7 +18,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.isGroupActive(address(token), ACTION_ID, GROUP_ID), "active");
         require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "staked");
         require(executor.totalStaked(address(token)) == ACTIVATION_STAKE, "total staked");
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "owner staked");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "owner staked");
 
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
         _activateGroupWith(GROUP_8, _defaultConfig());
@@ -35,7 +35,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         (uint256[] memory actionIds, uint256 actionTotal) =
             executor.actionIdsByGroupId(address(token), GROUP_ID, 0, 10, false);
         require(actionTotal == 1 && actionIds[0] == ACTION_ID, "action by group");
-        (actionIds, actionTotal) = executor.actionIds(address(token), 0, 10, false);
+        (actionIds, actionTotal) = executor.actionIdsWithActiveGroups(address(token), 0, 10, false);
         require(actionTotal == 1 && actionIds[0] == ACTION_ID, "action ids");
 
         require(
@@ -51,7 +51,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
     function testVerifierStakeStaysOutOfActivationLedgers() external {
         _submitApplication();
-        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
+        require(executor.verifierStakeAmount(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
 
         _castVerifierVotes();
         _atPhase(3);
@@ -60,8 +60,8 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "action ledger holds the activation stake only");
         require(executor.totalStaked(address(token)) == ACTIVATION_STAKE, "token total holds the activation stake only");
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "group owner stake");
-        require(executor.totalStakedByMemberId(address(token), VERIFIER_ID) == 0, "verifier stake excluded");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "group owner stake");
+        require(executor.stakedByMemberId(address(token), VERIFIER_ID) == 0, "verifier stake excluded");
         require(executor.hasActiveGroups(address(token), VERIFIER_ID) == false, "verifier stake grants no group");
         require(
             token.balanceOf(address(executor)) == VERIFIER_STAKE + ACTIVATION_STAKE, "both stakes held by the executor"
@@ -172,7 +172,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(!executor.isGroupActive(address(token), ACTION_ID, GROUP_ID), "inactive");
         require(executor.staked(address(token), ACTION_ID) == 0, "staked cleared");
         require(executor.totalStaked(address(token)) == 0, "total cleared");
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "owner cleared");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == 0, "owner cleared");
 
         (uint256[] memory groupIds, uint256 total) = executor.activeGroupIds(address(token), ACTION_ID, 0, 10, false);
         require(total == 0 && groupIds.length == 0, "no active groups");
@@ -180,7 +180,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(tokenTotal == 0, "token link removed");
         (, uint256 actionTotal) = executor.actionIdsByGroupId(address(token), GROUP_ID, 0, 10, false);
         require(actionTotal == 0, "action link removed");
-        (, actionTotal) = executor.actionIds(address(token), 0, 10, false);
+        (, actionTotal) = executor.actionIdsWithActiveGroups(address(token), 0, 10, false);
         require(actionTotal == 0, "action ids removed");
         require(!executor.hasActiveGroups(address(token), GROUP_OWNER_ID), "active after false");
     }
@@ -218,7 +218,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
 
         (GroupConfig memory config, bool active, uint256 activatedRound, uint256 deactivatedRound) =
-            executor.groupInfo(address(token), ACTION_ID, GROUP_ID);
+            executor.groupState(address(token), ACTION_ID, GROUP_ID);
         require(active && activatedRound == 2 && deactivatedRound == 0, "group info flags");
         require(keccak256(bytes(config.description)) == keccak256(bytes("v2")), "description updated");
         require(
@@ -402,7 +402,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         );
         require(executor.staked(address(token), ACTION_ID) == 0, "action stake ledger cleared");
         require(executor.totalStaked(address(token)) == 0, "token stake ledger cleared");
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member stake ledger cleared");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == 0, "member stake ledger cleared");
     }
 
     function testPreActivationCannotEnterWithoutPayingTheStake() external {
@@ -412,7 +412,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         _activateGroup();
         require(
-            executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "attacker paid on A1"
+            executor.stakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "attacker paid on A1"
         );
 
         vm.prank(GROUP_OWNER);
@@ -433,7 +433,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         require(executor.staked(address(token), ACTION_2) == ACTIVATION_STAKE, "honest stake intact");
         require(executor.totalStaked(address(token)) == ACTIVATION_STAKE * 2, "both stakes held");
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "A1 stake untouched");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "A1 stake untouched");
     }
 
     function testDeactivateThenReactivateKeepsTheStakeLedgerClosed() external {
@@ -446,13 +446,13 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(
             token.balanceOf(GROUP_OWNER) == balanceBefore + ACTIVATION_STAKE, "refunded on first deactivation"
         );
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed");
 
         _atPhase(5);
         _activateGroupWith(GROUP_ID, _defaultConfig());
         require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "paid on reactivation");
         require(
-            executor.totalStakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "member ledger reopened"
+            executor.stakedByMemberId(address(token), GROUP_ID) == ACTIVATION_STAKE, "member ledger reopened"
         );
 
         _atPhase(6);
@@ -463,6 +463,6 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         );
         require(executor.staked(address(token), ACTION_ID) == 0, "action ledger closed");
         require(executor.totalStaked(address(token)) == 0, "token ledger closed");
-        require(executor.totalStakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed again");
+        require(executor.stakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed again");
     }
 }

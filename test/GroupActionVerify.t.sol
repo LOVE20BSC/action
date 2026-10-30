@@ -33,7 +33,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     uint256 internal constant MEMBER_AMOUNT_B = 20e18;
     uint256 internal constant MEMBER_AMOUNT_C = 30e18;
 
-    GroupActionStorage.Layout internal s;
+    GroupActionStorage.Layout internal _layout;
     MockGroupActionPhase internal phase;
     MockGroupActionMemberNFT internal memberNFT;
 
@@ -42,16 +42,16 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         phase.setCurrentPhase(3);
         memberNFT = new MockGroupActionMemberNFT();
 
-        s.memberNFTAddress = address(memberNFT);
-        s.phaseAddress = address(phase);
-        s.lockedVerifierId[TOKEN][ACTION_ID][ROUND] = VERIFIER_ID;
+        _layout.MEMBER_NFT_ADDRESS = address(memberNFT);
+        _layout.PHASE_ADDRESS = address(phase);
+        _layout.lockedVerifierId[TOKEN][ACTION_ID][ROUND] = VERIFIER_ID;
 
         _seedMember(1, GROUP_A, MEMBER_AMOUNT_A);
         _seedMember(2, GROUP_A, MEMBER_AMOUNT_B);
         _seedMember(3, GROUP_A, MEMBER_AMOUNT_C);
         _seedMember(4, GROUP_B, 40e18);
-        s.groupIdsByRound[TOKEN][ACTION_ID].add(ROUND, GROUP_A);
-        s.groupIdsByRound[TOKEN][ACTION_ID].add(ROUND, GROUP_B);
+        _layout.groupIdsByRound[TOKEN][ACTION_ID].add(ROUND, GROUP_A);
+        _layout.groupIdsByRound[TOKEN][ACTION_ID].add(ROUND, GROUP_B);
     }
 
     function test_RevertIfOriginScoreAboveMax() external {
@@ -72,27 +72,27 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100));
 
-        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score, bool verified) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(score == 100 && verified, "origin score at max");
-        (uint256 finalScore, bool finalVerified) = GroupActionVerify.finalScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 finalScore, bool finalVerified) = GroupActionVerify.finalScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(finalScore == MEMBER_AMOUNT_A * 100 && finalVerified, "final score at max");
         require(
-            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND) == MEMBER_AMOUNT_A * 100,
+            GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND) == MEMBER_AMOUNT_A * 100,
             "total accumulated"
         );
-        require(GroupActionVerify.verifiedMemberCount(s, TOKEN, ACTION_ID, ROUND, GROUP_A) == 1, "cursor advanced");
+        require(GroupActionVerify.verifiedMemberCount(_layout, TOKEN, ACTION_ID, ROUND, GROUP_A) == 1, "cursor advanced");
     }
 
     function test_ScoreZeroVerifiesWithZeroContribution() external {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(0));
 
-        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score, bool verified) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(score == 0 && verified, "zero score is verified");
-        (uint256 finalScore, ) = GroupActionVerify.finalScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 finalScore, ) = GroupActionVerify.finalScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(finalScore == 0, "zero final score");
-        require(GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND) == 0, "zero total");
-        require(GroupActionVerify.verifiedMemberCount(s, TOKEN, ACTION_ID, ROUND, GROUP_A) == 1, "cursor advanced");
+        require(GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND) == 0, "zero total");
+        require(GroupActionVerify.verifiedMemberCount(_layout, TOKEN, ACTION_ID, ROUND, GROUP_A) == 1, "cursor advanced");
     }
 
     function test_ContinuousBatchesFollowSetOrder() external {
@@ -100,14 +100,14 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _submit(GROUP_A, 0, _scores(100, 90));
         _submit(GROUP_A, 2, _scores(80));
 
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
-        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
-        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 3);
         require(score1 == 100 && verified1, "member 1 first");
         require(score2 == 90 && verified2, "member 2 second");
         require(score3 == 80 && verified3, "member 3 third");
         require(
-            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+            GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
             "total accumulated across batches"
         );
@@ -117,24 +117,24 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100, 90));
         _submit(GROUP_A, 2, _scores(80));
-        require(!GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "group B still pending");
+        require(!GroupActionVerify.isRoundVerified(_layout, TOKEN, ACTION_ID, ROUND), "group B still pending");
 
         _submit(GROUP_B, 0, _scores(50));
-        require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "round complete");
+        require(GroupActionVerify.isRoundVerified(_layout, TOKEN, ACTION_ID, ROUND), "round complete");
     }
 
     function test_FullScoreWritesNoDeductionSlot() external {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100, 60));
 
-        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][1] == 0, "full score writes no slot");
-        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][2] == 40, "deduction stored");
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
-        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND][1] == 0, "full score writes no slot");
+        require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND][2] == 40, "deduction stored");
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
         require(score1 == 100 && verified1, "full score decodes");
         require(score2 == 60 && verified2, "deduction decodes");
         require(
-            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+            GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 60,
             "totals unchanged"
         );
@@ -144,25 +144,25 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100));
 
-        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score, bool verified) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
         require(score == 0 && !verified, "beyond cursor unverified");
-        (uint256 finalScore, bool finalVerified) = GroupActionVerify.finalScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 finalScore, bool finalVerified) = GroupActionVerify.finalScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
         require(finalScore == 0 && !finalVerified, "beyond cursor final zero");
     }
 
     function test_MemberOutsideMemberSetReturnsZero() external {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100));
-        s.groupHistory[TOKEN][ACTION_ID][9].record(ROUND, GROUP_A);
+        _layout.groupHistoryByMemberId[TOKEN][ACTION_ID][9].record(ROUND, GROUP_A);
 
-        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 9);
+        (uint256 score, bool verified) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 9);
         require(score == 0 && !verified, "absent from member set is unverified");
     }
 
     function test_UnscoredGroupReturnsZero() external {
         _bindVerifier();
 
-        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 4);
+        (uint256 score, bool verified) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 4);
         require(score == 0 && !verified, "unscored group unverified");
     }
 
@@ -172,33 +172,33 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _submit(GROUP_B, 0, _scores(50));
 
         // Round 2: member 2 leaves, swap-and-pop displaces member 3 within the round-2 order.
-        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].remove(ROUND + 1, 2);
+        _layout.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].remove(ROUND + 1, 2);
 
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
-        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
-        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 3);
         require(score1 == 100 && verified1, "member 1 keeps round score");
         require(score2 == 60 && verified2, "departing member keeps round score");
         require(score3 == 30 && verified3, "displaced member keeps round score");
         require(
-            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+            GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 60 + MEMBER_AMOUNT_C * 30 + 40e18 * 50,
             "totals frozen across later rounds"
         );
-        require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "round stays verified");
+        require(GroupActionVerify.isRoundVerified(_layout, TOKEN, ACTION_ID, ROUND), "round stays verified");
     }
 
     function test_RoundVerifiedTracksTheGroupCounter() external {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100, 60, 30));
-        require(!GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "partial round");
-        require(s.verifiedGroupCount[TOKEN][ACTION_ID][ROUND] == 1, "one group counted");
+        require(!GroupActionVerify.isRoundVerified(_layout, TOKEN, ACTION_ID, ROUND), "partial round");
+        require(_layout.verifiedGroupCountByRound[TOKEN][ACTION_ID][ROUND] == 1, "one group counted");
 
         _submit(GROUP_B, 0, _scores(50));
-        require(GroupActionVerify.isRoundVerified(s, TOKEN, ACTION_ID, ROUND), "verified");
+        require(GroupActionVerify.isRoundVerified(_layout, TOKEN, ACTION_ID, ROUND), "verified");
         require(
-            s.verifiedGroupCount[TOKEN][ACTION_ID][ROUND]
-                == s.groupIdsByRound[TOKEN][ACTION_ID].countByRound(ROUND),
+            _layout.verifiedGroupCountByRound[TOKEN][ACTION_ID][ROUND]
+                == _layout.groupIdsByRound[TOKEN][ACTION_ID].countByRound(ROUND),
             "counter reaches the group count"
         );
     }
@@ -243,25 +243,25 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     function test_SameRoundChurnKeepsFinalOrderVerifiable() external {
         _bindVerifier();
         // Member 2 leaves and re-joins within the round: the round keeps the final arrangement [1, 3, 2].
-        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].remove(ROUND, 2);
-        s.groupHistory[TOKEN][ACTION_ID][2].record(ROUND, 0);
-        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].add(ROUND, 2);
-        s.groupHistory[TOKEN][ACTION_ID][2].record(ROUND, GROUP_A);
+        _layout.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].remove(ROUND, 2);
+        _layout.groupHistoryByMemberId[TOKEN][ACTION_ID][2].record(ROUND, 0);
+        _layout.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].add(ROUND, 2);
+        _layout.groupHistoryByMemberId[TOKEN][ACTION_ID][2].record(ROUND, GROUP_A);
 
         _submit(GROUP_A, 0, _scores(100, 90, 80));
 
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
-        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
-        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 3);
         require(score1 == 100 && verified1, "slot 0 scored first");
         require(score3 == 90 && verified3, "displaced member scored in new slot");
         require(score2 == 80 && verified2, "re-added member scored last");
         require(
-            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND)
+            GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_C * 90 + MEMBER_AMOUNT_B * 80,
             "totals follow the final arrangement"
         );
-        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][3] == 10, "deduction follows member 3");
+        require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND][3] == 10, "deduction follows member 3");
     }
 
     function test_PartialBatchRemainderStaysUnverified() external {
@@ -269,17 +269,17 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _submit(GROUP_A, 0, _scores(100));
         _submit(GROUP_A, 1, _scores(90));
 
-        (uint256 score3, bool verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        (uint256 score3, bool verified3) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 3);
         require(score3 == 0 && !verified3, "remainder stays unverified");
         require(
-            GroupActionVerify.verifiedMemberCount(s, TOKEN, ACTION_ID, ROUND, GROUP_A) == 2,
+            GroupActionVerify.verifiedMemberCount(_layout, TOKEN, ACTION_ID, ROUND, GROUP_A) == 2,
             "cursor at batch boundary"
         );
 
         _submit(GROUP_A, 2, _scores(80));
-        (score3, verified3) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 3);
+        (score3, verified3) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 3);
         require(score3 == 80 && verified3, "remainder verified by final batch");
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(score1 == 100 && verified1, "first batch untouched");
     }
 
@@ -288,13 +288,13 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _submit(GROUP_A, 0, _scores(100, 60));
 
         // Corrupt the slot lookup only: the member index still points at slot 0.
-        s.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].slotHistory[0].record(ROUND, 99);
+        _layout.memberIdsByGroupId[TOKEN][ACTION_ID][GROUP_A].slotHistory[0].record(ROUND, 99);
 
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(score1 == 0 && !verified1, "slot mismatch rejected");
-        (uint256 final1, bool finalVerified1) = GroupActionVerify.finalScore(s, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 final1, bool finalVerified1) = GroupActionVerify.finalScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
         require(final1 == 0 && !finalVerified1, "slot mismatch final zero");
-        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 2);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 2);
         require(score2 == 60 && verified2, "unrelated member unchanged");
     }
 
@@ -303,17 +303,17 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _submit(GROUP_A, 0, _scores(60));
 
         phase.setCurrentPhase(4);
-        s.lockedVerifierId[TOKEN][ACTION_ID][ROUND + 1] = VERIFIER_ID;
+        _layout.lockedVerifierId[TOKEN][ACTION_ID][ROUND + 1] = VERIFIER_ID;
         _submit(GROUP_A, 0, _scores(100));
 
-        (uint256 score1, bool verified1) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 1);
-        (uint256 score2, bool verified2) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND + 1, 1);
+        (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);
+        (uint256 score2, bool verified2) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND + 1, 1);
         require(score1 == 60 && verified1, "round 1 deduction intact");
         require(score2 == 100 && verified2, "round 2 full score decodes from empty slot");
-        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND][1] == 40, "round 1 slot");
-        require(s.originScoreDeduction[TOKEN][ACTION_ID][ROUND + 1][1] == 0, "round 2 no slot");
+        require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND][1] == 40, "round 1 slot");
+        require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND + 1][1] == 0, "round 2 no slot");
         require(
-            GroupActionVerify.totalFinalScore(s, TOKEN, ACTION_ID, ROUND + 1) == MEMBER_AMOUNT_A * 100,
+            GroupActionVerify.totalFinalScore(_layout, TOKEN, ACTION_ID, ROUND + 1) == MEMBER_AMOUNT_A * 100,
             "round 2 totals"
         );
     }
@@ -322,14 +322,14 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _bindVerifier();
         _submit(GROUP_A, 0, _scores(100, 60, 30));
 
-        (uint256 score, bool verified) = GroupActionVerify.originScore(s, TOKEN, ACTION_ID, ROUND, 99);
+        (uint256 score, bool verified) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 99);
         require(score == 0 && !verified, "no group attribution is unverified");
     }
 
     function _seedMember(uint256 memberId, uint256 groupId, uint256 amount) internal {
-        s.memberIdsByGroupId[TOKEN][ACTION_ID][groupId].add(ROUND, memberId);
-        s.groupHistory[TOKEN][ACTION_ID][memberId].record(ROUND, groupId);
-        s.ownAmountHistory[TOKEN][ACTION_ID][memberId].record(ROUND, amount);
+        _layout.memberIdsByGroupId[TOKEN][ACTION_ID][groupId].add(ROUND, memberId);
+        _layout.groupHistoryByMemberId[TOKEN][ACTION_ID][memberId].record(ROUND, groupId);
+        _layout.ownAmountHistoryByMemberId[TOKEN][ACTION_ID][memberId].record(ROUND, amount);
     }
 
     function _bindVerifier() internal {
@@ -339,7 +339,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     }
 
     function _submit(uint256 groupId, uint256 startIndex, uint256[] memory scores) internal {
-        GroupActionVerify.submitOriginScores(s, TOKEN, ACTION_ID, VERIFIER_ID, groupId, startIndex, scores);
+        GroupActionVerify.submitOriginScores(_layout, TOKEN, ACTION_ID, VERIFIER_ID, groupId, startIndex, scores);
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

@@ -336,7 +336,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     }
 
     function testVerifierStakeLifecycle() external {
-        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
+        require(executor.verifierStakeAmount(address(token), ACTION_ID) == VERIFIER_STAKE, "stake configured");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "no stake before applying");
 
         uint256 verifierBefore = token.balanceOf(VERIFIER);
@@ -362,7 +362,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
     function testVerifierStakeZeroConfigNeedsNoTransfer() external {
         _createActionWith(ACTION_2, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, 0));
-        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_2) == 0, "stake disabled");
+        require(executor.verifierStakeAmount(address(token), ACTION_2) == 0, "stake disabled");
 
         uint256 before = token.balanceOf(VERIFIER);
         vm.prank(VERIFIER);
@@ -646,7 +646,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _submitApplication();
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "v");
-        require(executor.VERIFIER_STAKE_AMOUNT(address(token), ACTION_2) == VERIFIER_STAKE * 2, "second action config");
+        require(executor.verifierStakeAmount(address(token), ACTION_2) == VERIFIER_STAKE * 2, "second action config");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "action 1 stake");
         require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == VERIFIER_STAKE * 2, "action 2 stake");
         require(token.balanceOf(address(executor)) == VERIFIER_STAKE * 3, "both action stakes held");

@@ -67,8 +67,8 @@ interface IGroupActionVerifyEvents {
         uint256 round,
         uint256 indexed applicationId,
         uint256 verifierId,
-        uint256 votesAdded,
-        uint256 totalVotes
+        uint256 voteAmountAdded,
+        uint256 voteAmountTotal
     );
 }
 
@@ -216,13 +216,13 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 actionId,
         uint256 round,
         uint256[] calldata verifierIds
-    ) external view returns (uint256[] memory votes);
+    ) external view returns (uint256[] memory voteAmounts);
 
     function topVerifiers(
         address tokenAddress,
         uint256 actionId,
         uint256 round
-    ) external view returns (uint256[] memory verifierIds, uint256[] memory votes);
+    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts);
 
     function applicationVoters(
         address tokenAddress,
@@ -237,7 +237,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         view
         returns (
             uint256[] memory voterIds,
-            uint256[] memory votes,
+            uint256[] memory voteAmounts,
             uint256 total
         );
 
@@ -254,7 +254,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         view
         returns (
             uint256[] memory voterIds,
-            uint256[] memory votes,
+            uint256[] memory voteAmounts,
             uint256 total
         );
 }

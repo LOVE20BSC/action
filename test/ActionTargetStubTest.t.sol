@@ -41,7 +41,7 @@ contract CallbackStub {
 contract BrokenHandshakeExecutor {
     error HandshakeBroken();
 
-    function actionTarget() external pure returns (address) {
+    function ACTION_TARGET_ADDRESS() external pure returns (address) {
         revert HandshakeBroken();
     }
 }
@@ -71,7 +71,7 @@ contract ActionTargetStubTest is ActionTargetTestBase {
             abi.encodeWithSelector(IActionTargetErrors.UnboundProposal.selector, address(token), 98)
         );
         stub.callVoted(address(token), 3, 98, 5, 250, targetData);
-        require(stubTarget.executor(address(token), 99) == address(0), "no binding created");
+        require(stubTarget.executorByActionId(address(token), 99) == address(0), "no binding created");
     }
 
     function testStubHandshakeRevertReportsHandshakeFailure() external {
@@ -80,6 +80,6 @@ contract ActionTargetStubTest is ActionTargetTestBase {
             abi.encodeWithSelector(IActionTargetErrors.ExecutorHandshakeFailed.selector, address(broken))
         );
         stub.callCreated(address(token), 11, _targetData(address(broken)));
-        require(stubTarget.executor(address(token), 11) == address(0), "no binding created");
+        require(stubTarget.executorByActionId(address(token), 11) == address(0), "no binding created");
     }
 }

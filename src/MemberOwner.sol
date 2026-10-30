@@ -9,8 +9,8 @@ library MemberOwner {
     // authorization miss, or a `GroupNotExist` revert. If ownerOf ever returned a non-zero owner for
     // an absent id, the code-check callers would answer true and the views would silently report
     // live data for a group that does not exist. Other failures pass through unchanged.
-    function ofOrZero(address memberNFT, uint256 memberId) internal view returns (address owner) {
-        try IMemberNFT(memberNFT).ownerOf(memberId) returns (address resolved) {
+    function ownerOrZero(address memberNFTAddress, uint256 memberId) internal view returns (address owner) {
+        try IMemberNFT(memberNFTAddress).ownerOf(memberId) returns (address resolved) {
             return resolved;
         } catch (bytes memory err) {
             bytes4 selector;

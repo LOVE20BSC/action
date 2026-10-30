@@ -76,7 +76,7 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 total);
 
-    function getDistribution(
+    function distribution(
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 groupId,

@@ -65,9 +65,13 @@ interface ILpExecutorEvents {
 }
 
 interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
-    function GOV_RATIO_MULTIPLIER(address tokenAddress, uint256 actionId) external view returns (uint256);
+    function MEMBER_NFT_ADDRESS() external view returns (address);
+    function PHASE_ADDRESS() external view returns (address);
+    function STAKE_ADDRESS() external view returns (address);
+    function PAIR_FACTORY_ADDRESS() external view returns (address);
 
-    function MIN_GOV_RATIO(address tokenAddress, uint256 actionId) external view returns (uint256);
+    function govRatioMultiplier(address tokenAddress, uint256 actionId) external view returns (uint256);
+    function minGovRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
 
     function init(address actionTargetAddress, address stakeAddress) external;
 
@@ -99,7 +103,7 @@ interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
             uint256[] memory joinAmounts
         );
 
-    function totalDeduction(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256);
+    function deductionByRound(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256);
 
     function govRatio(
         address tokenAddress,

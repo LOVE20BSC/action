@@ -47,7 +47,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         (, amount, , ownAmount, ) = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
         require(amount == amount1 + amount2 - amount2 - 1 && ownAmount == amount, "partial withdraw");
         require(
-            executor.totalJoinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == amount,
+            executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == amount,
             "group total tracks"
         );
         require(joinToken.balanceOf(address(executor)) == amount, "balance conserved");
@@ -176,9 +176,9 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         }
 
         (uint256[] memory page, uint256 total) =
-            executor.gMemberIdsByGroupId(GROUP_ID, offset, limit, false);
+            executor.joinedMemberIdsByGroupId(GROUP_ID, offset, limit, false);
         require(total == 3 && page.length == expected, "page bounds");
-        (page, ) = executor.gMemberIdsByGroupId(GROUP_ID, offset, limit, true);
+        (page, ) = executor.joinedMemberIdsByGroupId(GROUP_ID, offset, limit, true);
         require(page.length == expected, "reverse page bounds");
     }
 
@@ -191,7 +191,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == amount, "current");
         uint256 ahead = uint256(aheadSeed) % 10 + 3;
         require(executor.joinedAmountByMemberId(address(token), ACTION_ID, ahead, MEMBER1_ID) == 0, "future zero");
-        require(executor.joinedAmount(address(token), ACTION_ID, ahead) == 0, "future total zero");
+        require(executor.joinedAmountByActionId(address(token), ACTION_ID, ahead) == 0, "future total zero");
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

@@ -15,11 +15,11 @@ contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
     using Uint256Set for Uint256Set.Storage;
 
-    address public memberNFTAddress;
-    address public submitAddress;
-    address public voteAddress;
-    address public mintAddress;
-    address public phaseAddress;
+    address public MEMBER_NFT_ADDRESS;
+    address public SUBMIT_ADDRESS;
+    address public VOTE_ADDRESS;
+    address public MINT_ADDRESS;
+    address public PHASE_ADDRESS;
     bool public initialized;
 
     // tokenAddress => memberId => actionIds
@@ -39,32 +39,32 @@ contract ActionTarget is IActionTarget {
         internal _executorByActionId;
 
     // tokenAddress => actionId => creation vote round
-    mapping(address => mapping(uint256 => uint256)) internal _createdRound;
+    mapping(address => mapping(uint256 => uint256)) internal _createdRoundByActionId;
 
     // tokenAddress => all bound actionIds
-    mapping(address => uint256[]) internal _allActionIds;
+    mapping(address => uint256[]) internal _actionIds;
 
     // tokenAddress => executor => bound actionIds
     mapping(address => mapping(address => uint256[])) internal _actionIdsByExecutor;
 
     // forge-lint: disable-next-item(missing-zero-check)
-    function init(address mintAddress_) external {
+    function init(address mintAddress) external {
         if (initialized) {
             revert AlreadyInitialized();
         }
         initialized = true;
 
-        IMint mint = IMint(mintAddress_);
-        address voteAddress_ = mint.VOTE_ADDRESS();
-        address submitAddress_ = mint.SUBMIT_ADDRESS();
-        address memberNFTAddress_ = mint.MEMBER_NFT_ADDRESS();
-        address phaseAddress_ = mint.PHASE_ADDRESS();
+        IMint mint = IMint(mintAddress);
+        address voteAddress = mint.VOTE_ADDRESS();
+        address submitAddress = mint.SUBMIT_ADDRESS();
+        address memberNFTAddress = mint.MEMBER_NFT_ADDRESS();
+        address phaseAddress = mint.PHASE_ADDRESS();
 
-        memberNFTAddress = memberNFTAddress_;
-        submitAddress = submitAddress_;
-        voteAddress = voteAddress_;
-        mintAddress = mintAddress_;
-        phaseAddress = phaseAddress_;
+        MEMBER_NFT_ADDRESS = memberNFTAddress;
+        SUBMIT_ADDRESS = submitAddress;
+        VOTE_ADDRESS = voteAddress;
+        MINT_ADDRESS = mintAddress;
+        PHASE_ADDRESS = phaseAddress;
     }
 
     modifier onlyBoundExecutor(address tokenAddress, uint256 actionId) {
@@ -75,21 +75,21 @@ contract ActionTarget is IActionTarget {
     }
 
     modifier onlySubmit() {
-        if (msg.sender != submitAddress) {
+        if (msg.sender != SUBMIT_ADDRESS) {
             revert NotSubmit(msg.sender);
         }
         _;
     }
 
     modifier onlyVote() {
-        if (msg.sender != voteAddress) {
+        if (msg.sender != VOTE_ADDRESS) {
             revert NotVote(msg.sender);
         }
         _;
     }
 
     modifier onlyMemberOwner(uint256 memberId) {
-        if (IMemberNFT(memberNFTAddress).ownerOf(memberId) != msg.sender) {
+        if (IMemberNFT(MEMBER_NFT_ADDRESS).ownerOf(memberId) != msg.sender) {
             revert NotMemberOwner(memberId);
         }
         _;
@@ -103,7 +103,7 @@ contract ActionTarget is IActionTarget {
         return bound != address(0) && bound == msg.sender;
     }
 
-    function executor(
+    function executorByActionId(
         address tokenAddress,
         uint256 actionId
     ) external view returns (address) {
@@ -116,7 +116,7 @@ contract ActionTarget is IActionTarget {
         uint256 memberId
     ) external onlyBoundExecutor(tokenAddress, actionId) {
         uint256 currentRound = _currentRound();
-        uint256 createdRound = _createdRound[tokenAddress][actionId];
+        uint256 createdRound = _createdRoundByActionId[tokenAddress][actionId];
         if (currentRound <= createdRound) {
             revert JoinNotOpen(tokenAddress, actionId, currentRound, createdRound);
         }
@@ -266,13 +266,13 @@ contract ActionTarget is IActionTarget {
         uint256 actionId,
         uint256 round
     ) external onlyBoundExecutor(tokenAddress, actionId) returns (uint256 amount) {
-        if (!IVote(voteAddress).isProposalIdVoted(tokenAddress, round, actionId)) {
+        if (!IVote(VOTE_ADDRESS).isProposalIdVoted(tokenAddress, round, actionId)) {
             revert ProposalNotVoted(tokenAddress, actionId);
         }
 
         address bound = _executorByActionId[tokenAddress][actionId];
         // forge-lint: disable-next-line(reentrancy-no-eth)
-        amount = IMint(mintAddress).mintProposalReward(tokenAddress, round, actionId, bound);
+        amount = IMint(MINT_ADDRESS).mintProposalReward(tokenAddress, round, actionId, bound);
 
         emit ActionRewardMinted({
             tokenAddress: tokenAddress,
@@ -289,19 +289,19 @@ contract ActionTarget is IActionTarget {
     ) external view returns (uint256 amount, bool minted) {
         bool isBound = _executorByActionId[tokenAddress][actionId] != address(0);
         if (isBound) {
-            (amount, minted) = IMint(mintAddress).proposalRewardByProposalId(tokenAddress, round, actionId);
+            (amount, minted) = IMint(MINT_ADDRESS).proposalRewardByProposalId(tokenAddress, round, actionId);
         }
     }
 
     function actionIdsByExecutor(
         address tokenAddress,
-        address executor_,
+        address executor,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 total) {
         (actionIds, total) = Pagination.paginate(
-            _actionIdsByExecutor[tokenAddress][executor_],
+            _actionIdsByExecutor[tokenAddress][executor],
             offset,
             limit,
             reverse
@@ -323,7 +323,7 @@ contract ActionTarget is IActionTarget {
         )
     {
         (actionIds, total) = Pagination.paginate(
-            _allActionIds[tokenAddress],
+            _actionIds[tokenAddress],
             offset,
             limit,
             reverse
@@ -376,7 +376,7 @@ contract ActionTarget is IActionTarget {
     }
 
     function _currentRound() internal view returns (uint256) {
-        return IPhase(phaseAddress).currentPhase();
+        return IPhase(PHASE_ADDRESS).currentPhase();
     }
 
     function _joinRound() internal view returns (uint256) {
@@ -396,7 +396,7 @@ contract ActionTarget is IActionTarget {
             uint256 count
         )
     {
-        (uint256[] memory votedIds, ) = IVote(voteAddress).votedProposalIds(
+        (uint256[] memory votedIds, ) = IVote(VOTE_ADDRESS).votedProposalIds(
             tokenAddress,
             round,
             0,
@@ -431,37 +431,37 @@ contract ActionTarget is IActionTarget {
         if (targetData[0].length != 32) {
             revert InvalidTargetDataShape(0, targetData[0].length);
         }
-        address executor_ = abi.decode(targetData[0], (address));
-        if (executor_.code.length == 0) {
-            revert ExecutorNotContract(executor_);
+        address executor = abi.decode(targetData[0], (address));
+        if (executor.code.length == 0) {
+            revert ExecutorNotContract(executor);
         }
-        try IActionExecutor(executor_).actionTarget() returns (address acknowledged) {
+        try IActionExecutor(executor).ACTION_TARGET_ADDRESS() returns (address acknowledged) {
             if (acknowledged != address(this)) {
                 revert ExecutorTargetMismatch(address(this), acknowledged);
             }
         } catch {
-            revert ExecutorHandshakeFailed(executor_);
+            revert ExecutorHandshakeFailed(executor);
         }
         if (_executorByActionId[tokenAddress][proposalId] != address(0)) {
             revert AlreadyCreated(tokenAddress, proposalId);
         }
 
         // forge-lint: disable-next-line(missing-events-access-control)
-        _executorByActionId[tokenAddress][proposalId] = executor_;
+        _executorByActionId[tokenAddress][proposalId] = executor;
 
         uint256 createdRound = _currentRound();
-        _createdRound[tokenAddress][proposalId] = createdRound;
-        _allActionIds[tokenAddress].push(proposalId);
-        _actionIdsByExecutor[tokenAddress][executor_].push(proposalId);
+        _createdRoundByActionId[tokenAddress][proposalId] = createdRound;
+        _actionIds[tokenAddress].push(proposalId);
+        _actionIdsByExecutor[tokenAddress][executor].push(proposalId);
 
         emit ActionRegistered({
             tokenAddress: tokenAddress,
             actionId: proposalId,
             round: createdRound,
-            executor: executor_
+            executor: executor
         });
 
-        IActionExecutor(executor_).onProposalCreated(
+        IActionExecutor(executor).onProposalCreated(
             tokenAddress,
             proposalId,
             targetData
@@ -502,7 +502,7 @@ contract ActionTarget is IActionTarget {
         uint256 round,
         uint256 proposalId,
         uint256 voterId,
-        uint256 votes,
+        uint256 voteAmount,
         bytes[] calldata targetData
     ) external onlyVote {
         address bound = _executorByActionId[tokenAddress][proposalId];
@@ -524,7 +524,7 @@ contract ActionTarget is IActionTarget {
             round,
             proposalId,
             voterId,
-            votes,
+            voteAmount,
             targetData
         );
     }

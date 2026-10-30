@@ -14,32 +14,32 @@ library GroupServiceStorage {
     uint256 constant MAX_REMARK_BYTES = 256;
 
     struct Layout {
-        address actionTarget;
-        address stakeAddress;
-        address groupActionExecutorAddress;
-        address memberNFTAddress;
-        address phaseAddress;
-        address launchAddress;
-        address mintAddress;
+        address ACTION_TARGET_ADDRESS;
+        address STAKE_ADDRESS;
+        address GROUP_ACTION_EXECUTOR_ADDRESS;
+        address MEMBER_NFT_ADDRESS;
+        address PHASE_ADDRESS;
+        address LAUNCH_ADDRESS;
+        address MINT_ADDRESS;
         bool initialized;
 
         // serviceTokenAddress => serviceActionId => action token address
-        mapping(address => mapping(uint256 => address)) actionTokenAddress;
+        mapping(address => mapping(uint256 => address)) actionTokenAddressByActionId;
         // serviceTokenAddress => serviceActionId => gov ratio multiplier for the group owner (1e18 precision)
-        mapping(address => mapping(uint256 => uint256)) govRatioMultiplier;
+        mapping(address => mapping(uint256 => uint256)) govRatioMultiplierByActionId;
         // serviceTokenAddress => serviceActionId => ratio for the public verifier (1e18 precision)
-        mapping(address => mapping(uint256 => uint256)) ratioForPublicVerifier;
+        mapping(address => mapping(uint256 => uint256)) publicVerifierRatioByActionId;
         // serviceTokenAddress => serviceActionId => creation vote round
-        mapping(address => mapping(uint256 => uint256)) createdRound;
+        mapping(address => mapping(uint256 => uint256)) createdRoundByActionId;
         // actionTokenAddress => round => cached divisor (0 = not cached)
         mapping(address => mapping(uint256 => uint256)) totalGroupActionRewardByRound;
 
         // serviceTokenAddress => serviceActionId => round => memberId => settlement record
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) memberMinted;
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifierRewardByMember;
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerBurnedByMember;
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerDistributedByMember;
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerRemainingByMember;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifierRewardByMemberId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerBurnedByMemberId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerDistributedByMemberId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerRemainingByMemberId;
 
         // sourceTokenAddress => sourceActionId => groupId => round => recipient ids
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Array.History))) recipientIdsHistory;
@@ -55,12 +55,12 @@ library GroupServiceStorage {
     // keys the join snapshot it writes by that round, and every `isJoinedByRound` / `joinedAmount`
     // argument here is read in the same round space; if the two drift, the reported round and the
     // recorded snapshot disagree without any revert.
-    function joinRound(Layout storage s) internal view returns (uint256) {
-        return GroupActionRoundAxis.joinRound(s.phaseAddress);
+    function joinRound(Layout storage self) internal view returns (uint256) {
+        return GroupActionRoundAxis.joinRound(self.PHASE_ADDRESS);
     }
 
-    function currentJoinRound(Layout storage s) internal view returns (uint256) {
-        uint256 round = joinRound(s);
+    function currentJoinRound(Layout storage self) internal view returns (uint256) {
+        uint256 round = joinRound(self);
         if (round == 0) {
             revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
@@ -68,20 +68,20 @@ library GroupServiceStorage {
     }
 
     function cachedDenominator(
-        Layout storage s,
+        Layout storage self,
         address actionTokenAddress,
         uint256 round
     ) internal view returns (uint256) {
-        return s.totalGroupActionRewardByRound[actionTokenAddress][round];
+        return self.totalGroupActionRewardByRound[actionTokenAddress][round];
     }
 
     function cacheDenominator(
-        Layout storage s,
+        Layout storage self,
         address actionTokenAddress,
         uint256 round,
         uint256 value
     ) internal {
-        s.totalGroupActionRewardByRound[actionTokenAddress][round] = value;
+        self.totalGroupActionRewardByRound[actionTokenAddress][round] = value;
     }
 
     // Load-bearing: the divisor cached by the executor may only be paired with weights from the same
@@ -89,13 +89,13 @@ library GroupServiceStorage {
     // window is open (verification closed); caching earlier pairs a frozen divisor with live weights
     // and pays a member twice without reverting.
     function groupReward(
-        Layout storage s,
+        Layout storage self,
         address actionTokenAddress,
         uint256 actionId,
         uint256 round,
         uint256 groupId
     ) internal view returns (uint256) {
-        return IGroupActionExecutor(s.groupActionExecutorAddress).generatedActionRewardByGroupId(
+        return IGroupActionExecutor(self.GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionRewardByGroupId(
             actionTokenAddress, actionId, round, groupId
         );
     }

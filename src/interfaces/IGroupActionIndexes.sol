@@ -7,7 +7,7 @@ interface IGroupActionIndexes {
         uint256 memberId
     ) external view returns (bool);
 
-    function gGroupIds(
+    function joinedGroupIds(
         uint256 offset,
         uint256 limit,
         bool reverse
@@ -19,7 +19,7 @@ interface IGroupActionIndexes {
             uint256 total
         );
 
-    function gGroupIdsByMemberId(
+    function joinedGroupIdsByMemberId(
         uint256 memberId,
         uint256 offset,
         uint256 limit,
@@ -32,7 +32,7 @@ interface IGroupActionIndexes {
             uint256 total
         );
 
-    function gTokenAddressesByGroupIdByMemberId(
+    function joinedTokenAddressesByGroupIdByMemberId(
         uint256 groupId,
         uint256 memberId,
         uint256 offset,
@@ -46,7 +46,7 @@ interface IGroupActionIndexes {
             uint256 total
         );
 
-    function gMemberIds(
+    function joinedMemberIds(
         uint256 offset,
         uint256 limit,
         bool reverse
@@ -58,7 +58,7 @@ interface IGroupActionIndexes {
             uint256 total
         );
 
-    function gMemberIdsByGroupId(
+    function joinedMemberIdsByGroupId(
         uint256 groupId,
         uint256 offset,
         uint256 limit,

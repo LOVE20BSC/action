@@ -10,7 +10,7 @@ interface IGroupServiceExecutorEvents {
         uint256 indexed actionId,
         address actionTokenAddress,
         uint256 govRatioMultiplier,
-        uint256 ratioForPublicVerifier
+        uint256 publicVerifierRatio
     );
     event RecipientPaid(
         address indexed serviceTokenAddress,
@@ -94,19 +94,19 @@ interface IGroupServiceExecutor is
         address stakeAddress,
         address groupActionExecutorAddress
     ) external;
-    function groupActionExecutorAddress() external view returns (address);
+    function GROUP_ACTION_EXECUTOR_ADDRESS() external view returns (address);
     function currentVerifyRound() external view returns (uint256);
 
-    function GOV_RATIO_MULTIPLIER(
+    function govRatioMultiplier(
         address serviceTokenAddress,
         uint256 serviceActionId
     ) external view returns (uint256);
 
-    function ACTION_TOKEN_ADDRESS(
+    function actionTokenAddress(
         address serviceTokenAddress,
         uint256 serviceActionId
     ) external view returns (address);
-    function RATIO_FOR_PUBLIC_VERIFIER(
+    function publicVerifierRatio(
         address serviceTokenAddress,
         uint256 serviceActionId
     ) external view returns (uint256);
@@ -153,7 +153,7 @@ interface IGroupServiceExecutor is
             bool claimed
         );
     function totalGroupActionReward(
-        address actionTokenAddress,
+        address sourceTokenAddress,
         uint256 round
     ) external view returns (uint256);
 

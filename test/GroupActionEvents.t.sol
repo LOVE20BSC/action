@@ -85,7 +85,7 @@ contract GroupActionEventsTest is
 
         vm.recordLogs();
         vm.prank(PROVIDER);
-        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds, amounts);
+        executor.addProviderQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, memberIds, amounts);
         GroupActionExecutorVm.Log[] memory logs = vm.getRecordedLogs();
         require(logs.length == 2, "one quota event per member");
         require(logs[0].emitter == address(executor), "quota event emitted by the executor");
@@ -114,7 +114,7 @@ contract GroupActionEventsTest is
             amount: 10e18,
             quotaTotal: 70e18
         });
-        executor.providerQuotaAdd(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID), _ids(10e18));
+        executor.addProviderQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID), _ids(10e18));
 
         vm.expectEmit(true, true, true, true);
         emit GroupActionJoined({
@@ -300,7 +300,7 @@ contract GroupActionEventsTest is
             quotaTotal: 100e18
         });
         vm.prank(PROVIDER);
-        executor.providerQuotaWithdraw(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
+        executor.withdrawProviderQuota(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
     }
 
     function testProviderQuotaRemoveWithdrawsTheUsedPart() external {
@@ -387,7 +387,7 @@ contract GroupActionEventsTest is
             "deactivated"
         );
         (, bool active, uint256 activatedRound, uint256 deactivatedRound) =
-            executor.groupInfo(address(token), ACTION_ID, GROUP_ID);
+            executor.groupState(address(token), ACTION_ID, GROUP_ID);
         require(!active && deactivatedRound == 3, "inactive with deactivated round");
 
         _atPhase(5);
@@ -406,7 +406,7 @@ contract GroupActionEventsTest is
     }
 
     function _groupState() private view returns (bool active, uint256 activatedRound, uint256 deactivatedRound) {
-        (, active, activatedRound, deactivatedRound) = executor.groupInfo(address(token), ACTION_ID, GROUP_ID);
+        (, active, activatedRound, deactivatedRound) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
     }
 
     function testGroupLifecycleEvents() external {
@@ -562,8 +562,8 @@ contract GroupActionEventsTest is
             round: 4,
             applicationId: 1,
             verifierId: VERIFIER_ID,
-            votesAdded: 60e18,
-            totalVotes: 60e18
+            voteAmountAdded: 60e18,
+            voteAmountTotal: 60e18
         });
         _castVotesFromAt(MEMBER2_ID, VERIFIER_ID, 60e18, 4);
     }
@@ -581,8 +581,8 @@ contract GroupActionEventsTest is
             round: CREATION_PHASE,
             applicationId: 1,
             verifierId: VERIFIER_ID,
-            votesAdded: 100e18,
-            totalVotes: 100e18
+            voteAmountAdded: 100e18,
+            voteAmountTotal: 100e18
         });
         _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 100e18);
 
@@ -594,8 +594,8 @@ contract GroupActionEventsTest is
             round: CREATION_PHASE,
             applicationId: 1,
             verifierId: VERIFIER_ID,
-            votesAdded: 60e18,
-            totalVotes: 160e18
+            voteAmountAdded: 60e18,
+            voteAmountTotal: 160e18
         });
         _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 60e18);
 
@@ -903,7 +903,7 @@ contract GroupActionEventsTest is
         config.description = _repeat("D", 1024);
         _activateGroupWith(GROUP_ID, config);
 
-        (GroupConfig memory stored,,,) = executor.groupInfo(address(token), ACTION_ID, GROUP_ID);
+        (GroupConfig memory stored,,,) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
         require(bytes(stored.description).length == 1024, "max description stored");
     }
 

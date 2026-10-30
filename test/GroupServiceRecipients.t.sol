@@ -279,7 +279,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID, MEMBER2_ID), _ratios(PRECISION / 2, PRECISION / 4));
 
         (uint256[] memory recipientIds, uint256[] memory ratios, uint256[] memory amounts, uint256 ownerAmount) =
-            executor.getDistribution(address(token), GROUP_ACTION_ID, GROUP_ID, 3, SERVICE_ROUND);
+            executor.distribution(address(token), GROUP_ACTION_ID, GROUP_ID, 3, SERVICE_ROUND);
         require(recipientIds.length == 2 && recipientIds[0] == MEMBER1_ID, "recipients projected");
         require(ratios[0] == PRECISION / 2 && ratios[1] == PRECISION / 4, "ratios projected");
         require(amounts[0] == 1 && amounts[1] == 0, "each item floors independently");
@@ -288,12 +288,12 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         // 100% allocation of an odd amount does not underflow.
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION));
         (,, amounts, ownerAmount) =
-            executor.getDistribution(address(token), GROUP_ACTION_ID, GROUP_ID, 3, SERVICE_ROUND);
+            executor.distribution(address(token), GROUP_ACTION_ID, GROUP_ID, 3, SERVICE_ROUND);
         require(amounts[0] == 3 && ownerAmount == 0, "full allocation keeps the whole budget");
 
         // No configuration: the owner keeps everything.
         (,, amounts, ownerAmount) =
-            executor.getDistribution(address(token), GROUP_ACTION_ID_B, GROUP_ID, 5, SERVICE_ROUND);
+            executor.distribution(address(token), GROUP_ACTION_ID_B, GROUP_ID, 5, SERVICE_ROUND);
         require(amounts.length == 0 && ownerAmount == 5, "unconfigured action keeps the whole budget");
     }
 

@@ -213,7 +213,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 serviceReward,
         uint256 denominator,
         uint256 ownerWeight,
-        uint256 ratioForPublicVerifier,
+        uint256 publicVerifierRatio,
         uint256 govRatioMultiplier,
         uint256 validGovVotes,
         uint256 totalValidGovVotes
@@ -222,7 +222,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
             serviceReward,
             denominator,
             ownerWeight,
-            ratioForPublicVerifier,
+            publicVerifierRatio,
             govRatioMultiplier,
             validGovVotes,
             totalValidGovVotes
@@ -236,12 +236,12 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 serviceReward,
         uint256 denominator,
         uint256 ownerWeight,
-        uint256 ratioForPublicVerifier,
+        uint256 publicVerifierRatio,
         uint256 govRatioMultiplier,
         uint256 validGovVotes,
         uint256 totalValidGovVotes
     ) internal pure returns (uint256 ownerReward, uint256 ownerBurned) {
-        uint256 ownerRatioWeight = (PRECISION - ratioForPublicVerifier) * ownerWeight;
+        uint256 ownerRatioWeight = (PRECISION - publicVerifierRatio) * ownerWeight;
         uint256 theoretical = Math.mulDiv(serviceReward, ownerRatioWeight, denominator * PRECISION);
         if (govRatioMultiplier == 0) {
             return (theoretical, 0);

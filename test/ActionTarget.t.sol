@@ -24,11 +24,11 @@ contract ActionTargetTest is ActionTargetTestBase {
 
     function testInitBindsDependenciesAndDerivesPhase() external view {
         require(actionTarget.initialized(), "initialized");
-        require(actionTarget.memberNFTAddress() == address(memberNFT), "memberNFT bound");
-        require(actionTarget.submitAddress() == submitAddress, "submit bound");
-        require(actionTarget.voteAddress() == address(vote), "vote bound");
-        require(actionTarget.mintAddress() == address(mint), "mint bound");
-        require(actionTarget.phaseAddress() == address(phase), "phase derived from mint");
+        require(actionTarget.MEMBER_NFT_ADDRESS() == address(memberNFT), "memberNFT bound");
+        require(actionTarget.SUBMIT_ADDRESS() == submitAddress, "submit bound");
+        require(actionTarget.VOTE_ADDRESS() == address(vote), "vote bound");
+        require(actionTarget.MINT_ADDRESS() == address(mint), "mint bound");
+        require(actionTarget.PHASE_ADDRESS() == address(phase), "phase derived from mint");
     }
 
     function testInitIsPermissionless() external {
@@ -36,18 +36,18 @@ contract ActionTargetTest is ActionTargetTestBase {
         vm.prank(OUTSIDER);
         fresh.init(address(mint));
         require(fresh.initialized(), "outsider init succeeds");
-        require(fresh.phaseAddress() == address(phase), "phase derived");
+        require(fresh.PHASE_ADDRESS() == address(phase), "phase derived");
     }
 
     function testInitRejectsSecondCall() external {
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.AlreadyInitialized.selector));
         actionTarget.init(address(mint));
-        require(actionTarget.memberNFTAddress() == address(memberNFT), "state unchanged");
+        require(actionTarget.MEMBER_NFT_ADDRESS() == address(memberNFT), "state unchanged");
     }
 
     function testCreateBindsExecutorAndIndexes() external {
         _createAction(11);
-        require(actionTarget.executor(address(token), 11) == address(executor), "executor bound");
+        require(actionTarget.executorByActionId(address(token), 11) == address(executor), "executor bound");
         (uint256[] memory actionIds,, uint256 total) = actionTarget.actions(address(token), 0, 10, false);
         require(total == 1 && actionIds.length == 1 && actionIds[0] == 11, "actions index");
         (uint256[] memory byExecutor, uint256 executorTotal) =
@@ -65,7 +65,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         vm.prank(submitAddress);
         actionTarget.onProposalCreated(address(token), 12, targetData);
         require(executor.lastCreatedTargetDataHash() == keccak256(abi.encode(targetData)), "business items forwarded");
-        require(actionTarget.executor(address(token), 12) == address(executor), "bound");
+        require(actionTarget.executorByActionId(address(token), 12) == address(executor), "bound");
     }
 
     function testCreateRejectsNonSubmitCaller() external {
@@ -122,7 +122,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         vm.prank(submitAddress);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.AlreadyCreated.selector, address(token), 11));
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(second)));
-        require(actionTarget.executor(address(token), 11) == address(executor), "first binding retained");
+        require(actionTarget.executorByActionId(address(token), 11) == address(executor), "first binding retained");
         (uint256[] memory actionIds,, uint256 total) = actionTarget.actions(address(token), 0, 10, false);
         require(total == 1 && actionIds.length == 1, "index not duplicated");
         (uint256[] memory secondIds, uint256 secondTotal) =
@@ -135,7 +135,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         vm.prank(submitAddress);
         vm.expectRevert(abi.encodeWithSelector(MockExecutor.CreatedCallbackReverted.selector));
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(executor)));
-        require(actionTarget.executor(address(token), 11) == address(0), "binding rolled back");
+        require(actionTarget.executorByActionId(address(token), 11) == address(0), "binding rolled back");
         (uint256[] memory actionIds,, uint256 total) = actionTarget.actions(address(token), 0, 0, false);
         require(total == 0 && actionIds.length == 0, "index rolled back");
     }
@@ -750,8 +750,8 @@ contract ActionTargetTest is ActionTargetTestBase {
     }
 
     function testExecutorGetterReturnsZeroForUnboundAction() external {
-        require(actionTarget.executor(address(token), 99) == address(0), "unbound executor");
+        require(actionTarget.executorByActionId(address(token), 99) == address(0), "unbound executor");
         _createAction(11);
-        require(actionTarget.executor(address(token), 11) == address(executor), "bound executor");
+        require(actionTarget.executorByActionId(address(token), 11) == address(executor), "bound executor");
     }
 }

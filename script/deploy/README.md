@@ -151,8 +151,8 @@ GROUP_RECIPIENTS_LIBRARY_ADDRESS=0x...
 只读链上状态（`forge inspect` 会在本地编译并刷新 `out`/`cache`，不写地址文件），可重复运行：
 
 - 4 个合约均已部署（`cast code` 非空）、运行时代码与构建产物逐字节一致，且 `initialized() == true`
-- `ActionTarget` 的 `mintAddress / voteAddress / submitAddress / memberNFTAddress / phaseAddress` 与 core 地址一致
-- 三个 Executor 的 `actionTarget()` 指向本次部署的 `ActionTarget`；`GroupServiceExecutor.groupActionExecutorAddress()` 指向本次部署的 `GroupActionExecutor`
+- `ActionTarget` 的 `MINT_ADDRESS / VOTE_ADDRESS / SUBMIT_ADDRESS / MEMBER_NFT_ADDRESS / PHASE_ADDRESS` 与 core 地址一致
+- 三个 Executor 的 `ACTION_TARGET_ADDRESS()` 指向本次部署的 `ActionTarget`；`GroupServiceExecutor.GROUP_ACTION_EXECUTOR_ADDRESS()` 指向本次部署的 `GroupActionExecutor`
 - `GroupActionExecutor.SPLITS()` 与 `action.params` 配置一致，并复核每项 `0 < split < 1e18` 且严格递增（cast 对大整数的 `[1e17]` 科学计数法标注已归一化）
 - 4 个链接库地址均已入账、链上有代码，且运行时字节码与构建产物一致（库的 runtime 内嵌自身地址，比对时按入账地址替换该处）；两个 Executor 的比对按入账地址传 `--libraries`（地址文件键集合必须恰好是 4 个合约 + 4 个库）
 

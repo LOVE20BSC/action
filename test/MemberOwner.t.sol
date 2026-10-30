@@ -19,13 +19,13 @@ contract MockMemberOwnerNFT {
 contract MemberOwnerTest is Test {
     function testOfOrZeroMapsNonexistentToken() public {
         MockMemberOwnerNFT nft = new MockMemberOwnerNFT();
-        assertEq(MemberOwner.ofOrZero(address(nft), 0), address(0));
+        assertEq(MemberOwner.ownerOrZero(address(nft), 0), address(0));
     }
 
     function testOfOrZeroRethrowsUnexpectedFailure() public {
         MockMemberOwnerNFT nft = new MockMemberOwnerNFT();
 
         vm.expectRevert(MockMemberOwnerNFT.UnexpectedOwnerFailure.selector);
-        MemberOwner.ofOrZero(address(nft), 1);
+        MemberOwner.ownerOrZero(address(nft), 1);
     }
 }

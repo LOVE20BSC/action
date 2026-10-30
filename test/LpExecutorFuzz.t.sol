@@ -13,7 +13,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
 
         (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == joinAmount * joinElapsed / PHASE_BLOCKS, "deduction formula");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == deduction, "total deduction");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == deduction, "total deduction");
         require(
             lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == joinAmount,
             "balance recorded"
@@ -28,7 +28,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
 
         (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
         require(deduction == joinAmount, "deduction capped at the amount");
-        require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == joinAmount, "total capped");
+        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == joinAmount, "total capped");
     }
 
     function testFuzzWithdrawScalesDeduction(uint96 amount, uint16 elapsed, uint96 withdrawSeed) external {
@@ -36,13 +36,13 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         uint256 joinElapsed = uint256(elapsed) % PHASE_BLOCKS;
         _atPhaseBlock(3, 3000 + joinElapsed);
         _join(1, joinAmount);
-        uint256 deductionBefore = lpExecutor.totalDeduction(address(token), ACTION_ID, 2);
+        uint256 deductionBefore = lpExecutor.deductionByRound(address(token), ACTION_ID, 2);
         uint256 withdrawAmount = uint256(withdrawSeed) % joinAmount + 1;
 
         _withdraw(1, withdrawAmount);
 
         if (withdrawAmount == joinAmount) {
-            require(lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == 0, "full withdraw takes all");
+            require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "full withdraw takes all");
             require(
                 lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0,
                 "balance cleared"
@@ -54,7 +54,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
                 "balance reduced"
             );
             require(
-                lpExecutor.totalDeduction(address(token), ACTION_ID, 2) == deductionBefore - reduction,
+                lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == deductionBefore - reduction,
                 "deduction reduced proportionally"
             );
         }

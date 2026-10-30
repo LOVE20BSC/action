@@ -27,7 +27,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
 
     function mintMemberRewards(
         address tokenAddress,
-        uint256[] calldata actionIds_,
+        uint256[] calldata actionIds,
         uint256 memberId,
         uint256[] calldata rounds
     )
@@ -37,7 +37,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         onlyMemberOwner(memberId)
         returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts)
     {
-        uint256 length = actionIds_.length;
+        uint256 length = actionIds.length;
         if (length != rounds.length) {
             revert IActionExecutorErrors.BatchLengthMismatch(length, rounds.length);
         }
@@ -45,7 +45,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds_[i], memberId, rounds[i]);
+            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], memberId, rounds[i]);
         }
     }
 

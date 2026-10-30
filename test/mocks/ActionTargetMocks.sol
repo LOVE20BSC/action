@@ -250,7 +250,7 @@ contract MockExecutor {
 
 
 
-    function actionTarget() external view returns (address) {
+    function ACTION_TARGET_ADDRESS() external view returns (address) {
         if (revertActionTarget) revert ActionTargetUnavailable();
         return _actionTargetAddress;
     }
