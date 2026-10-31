@@ -86,7 +86,7 @@ library GroupRecipients {
             revert IGroupRecipientsErrors.UnknownSourceAction(sourceTokenAddress, sourceActionId);
         }
 
-        _validateRecipients(protocol, table, groupId);
+        _checkRecipients(protocol, table, groupId);
 
         uint256[] memory prevRecipientIds =
             self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
@@ -103,7 +103,7 @@ library GroupRecipients {
             self.actionIdsWithRecipients[sourceTokenAddress][groupId].remove(round, sourceActionId);
         }
 
-        emit IGroupRecipientsEvents.RecipientTableChanged({
+        emit IGroupRecipientsEvents.RecipientsChanged({
             sourceTokenAddress: sourceTokenAddress,
             sourceActionId: sourceActionId,
             round: round,
@@ -298,7 +298,7 @@ library GroupRecipients {
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)
-    function _validateRecipients(
+    function _checkRecipients(
         GroupServiceStorage.Protocol memory protocol,
         RecipientTable memory table,
         uint256 groupId

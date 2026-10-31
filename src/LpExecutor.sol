@@ -28,47 +28,47 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         PAIR_FACTORY_ADDRESS = IStake(STAKE_ADDRESS).PAIR_FACTORY_ADDRESS();
     }
 
-    /// @dev tokenAddress => actionId => join token address
+    // tokenAddress => actionId => join token address
     mapping(address => mapping(uint256 => address)) internal _joinTokenAddressByActionId;
 
-    /// @dev tokenAddress => actionId => gov ratio multiplier (1e18 precision)
+    // tokenAddress => actionId => gov ratio multiplier (1e18 precision)
     mapping(address => mapping(uint256 => uint256)) internal _govRatioMultiplierByActionId;
 
-    /// @dev tokenAddress => actionId => minimum gov ratio (1e18 precision)
+    // tokenAddress => actionId => minimum gov ratio (1e18 precision)
     mapping(address => mapping(uint256 => uint256)) internal _minGovRatioByActionId;
 
-    /// @dev tokenAddress => actionId => creation vote round
+    // tokenAddress => actionId => creation vote round
     mapping(address => mapping(uint256 => uint256)) internal _createdRoundByActionId;
 
-    /// @dev tokenAddress => actionId => round => memberId => accumulated deduction for time-weighted LP calculation
+    // tokenAddress => actionId => round => memberId => accumulated deduction for time-weighted LP calculation
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _deductionByMemberId;
 
-    /// @dev tokenAddress => actionId => round => accumulated total deduction across all members
+    // tokenAddress => actionId => round => accumulated total deduction across all members
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _deductionByRound;
 
-    /// @dev tokenAddress => actionId => round => memberId => block numbers of each join in this round
+    // tokenAddress => actionId => round => memberId => block numbers of each join in this round
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256[])))) internal _joinBlocksByMemberId;
 
-    /// @dev tokenAddress => actionId => round => memberId => amounts of each join in this round
+    // tokenAddress => actionId => round => memberId => amounts of each join in this round
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256[])))) internal _joinAmountsByMemberId;
 
-    /// @dev tokenAddress => actionId => round => memberId => gov ratio at mint time
+    // tokenAddress => actionId => round => memberId => gov ratio at mint time
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _mintedGovRatioByMemberId;
 
-    /// @dev tokenAddress => actionId => memberId => joined amount history
+    // tokenAddress => actionId => memberId => joined amount history
     mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History)))
         internal _joinedAmountByMemberId;
 
-    /// @dev tokenAddress => actionId => total joined amount history
+    // tokenAddress => actionId => total joined amount history
     mapping(address => mapping(uint256 => RoundHistoryUint256.History)) internal _joinedAmountByActionId;
 
-    /// @dev tokenAddress => actionId => round => memberId => whether the member reward is minted
+    // tokenAddress => actionId => round => memberId => whether the member reward is minted
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) internal _memberMinted;
 
-    /// @dev tokenAddress => actionId => round => memberId => minted reward
+    // tokenAddress => actionId => round => memberId => minted reward
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _mintedRewardByMemberId;
 
-    /// @dev tokenAddress => actionId => round => memberId => burned reward
+    // tokenAddress => actionId => round => memberId => burned reward
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _burnedRewardByMemberId;
 
     function govRatioMultiplier(
@@ -344,8 +344,6 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         return _deductionByRound[tokenAddress][actionId][round];
     }
 
-    /// @dev The cap is priced on the weight the member holds now, not on the weight of the round being
-    ///      settled: the old protocol read the live `globalGovVotes` / `validGovVotes` too.
     function _calculateGovRatio(
         address tokenAddress,
         uint256 currentPhase,
@@ -485,7 +483,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        _requireMintWindow(
+        _checkMintWindow(
             tokenAddress,
             actionId,
             round,

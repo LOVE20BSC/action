@@ -456,7 +456,7 @@ contract GroupActionEventsTest is
             prevDescription: "group"
         });
         vm.prank(GROUP_OWNER);
-        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
+        executor.setGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
 
         vm.expectEmit(true, true, true, true);
         emit GroupDeactivated({

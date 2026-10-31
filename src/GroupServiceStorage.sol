@@ -11,7 +11,6 @@ library GroupServiceStorage {
     uint256 constant DEFAULT_MAX_RECIPIENTS = 10;
     uint256 constant MAX_REMARK_BYTES = 256;
 
-    /// @dev Constructor-time bindings of the executor, passed to the libraries that need them.
     struct Protocol {
         address memberNFTAddress;
         address groupActionExecutorAddress;

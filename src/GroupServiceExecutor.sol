@@ -544,11 +544,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             cap = Math.mulDiv(govRatio, settlement.govRatioMultiplier, PRECISION);
         }
 
-        // Load-bearing: compare against the smallest cap that reaches the theoretical reward instead
-        // of cross-multiplying. `cap * denominator >= ownerRatioWeight` is exactly
-        // `cap >= ceil(ownerRatioWeight / denominator)`, and the division form cannot overflow. The
-        // multiplication overflows for an extreme `govRatioMultiplier`, which would revert every
-        // settlement of the action and strand its reward forever.
+        // Load-bearing: ceil, not floor. The threshold must be the smallest cap that reaches the
+        // theoretical reward, so the two branches stay continuous at the boundary; a cap one below
+        // also passes under floor and the fractional burn silently disappears.
         uint256 capForTheoreticalOwnerReward =
             Math.mulDiv(ownerRatioWeight, 1, settlement.denominator, Math.Rounding.Ceil);
         if (cap >= capForTheoreticalOwnerReward) {
@@ -707,7 +705,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        _requireMintWindow(
+        _checkMintWindow(
             tokenAddress,
             actionId,
             round,

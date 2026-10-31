@@ -215,7 +215,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             maxAccounts: 3
         });
         vm.prank(GROUP_OWNER);
-        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
+        executor.setGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
 
         (GroupConfig memory config, bool active, uint256 activatedRound, uint256 deactivatedRound) =
             executor.groupState(address(token), ACTION_ID, GROUP_ID);
@@ -240,11 +240,11 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         memberNFT.setOwner(GROUP_99, GROUP_OWNER);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector, GROUP_99));
-        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_99, updated);
+        executor.setGroupConfig(address(token), ACTION_ID, GROUP_99, updated);
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NotGroupOwner.selector, GROUP_ID));
-        executor.updateGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
+        executor.setGroupConfig(address(token), ACTION_ID, GROUP_ID, updated);
     }
 
     function testMaxJoinAmountDerivation() external {

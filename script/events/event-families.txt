@@ -29,6 +29,6 @@ VerifierStakeDeposited action.verification
 VerifierStakeRefunded action.verification
 VerifierLocked action.verification
 ApplicationVoteRecorded action.verification
-RecipientTableChanged action.recipients
+RecipientsChanged action.recipients
 RecipientPaid action.service
 ServiceRewardsDistributed action.service

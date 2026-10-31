@@ -37,8 +37,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "replaced verifier leaves the rank");
         uint256[] memory replacedIds = new uint256[](1);
         replacedIds[0] = VERIFIER2_ID;
-        uint256[] memory replacedVotes = executor.votesByVerifierIds(address(token), ACTION_ID, 2, replacedIds);
-        require(replacedVotes[0] == 0, "the replacement starts at zero in this round");
+        uint256[] memory replacedVoteAmounts =
+            executor.voteAmountsByVerifierIds(address(token), ACTION_ID, 2, replacedIds);
+        require(replacedVoteAmounts[0] == 0, "the replacement starts at zero in this round");
 
         VerifierApplication memory application =
             executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER2_ID);
@@ -59,8 +60,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         uint256[] memory ids = new uint256[](2);
         ids[0] = VERIFIER_ID;
         ids[1] = VERIFIER2_ID;
-        uint256[] memory currentVotes = executor.votesByVerifierIds(address(token), ACTION_ID, 2, ids);
-        require(currentVotes[0] == 0 && currentVotes[1] == 0, "no votes on current applications");
+        uint256[] memory currentVoteAmounts =
+            executor.voteAmountsByVerifierIds(address(token), ACTION_ID, 2, ids);
+        require(currentVoteAmounts[0] == 0 && currentVoteAmounts[1] == 0, "no votes on current applications");
     }
 
     function testUnrankedVerifierRejected() external {

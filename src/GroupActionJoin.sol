@@ -76,7 +76,7 @@ library GroupActionJoin {
             revert IGroupActionJoinErrors.AlreadyInOtherGroup(memberId, joinedGroupId, groupId);
         }
 
-        _validateGroupConstraints(self, protocol, tokenAddress, actionId, groupId, memberId, amount, joinedGroupId == 0);
+        _checkGroupConstraints(self, protocol, tokenAddress, actionId, groupId, memberId, amount, joinedGroupId == 0);
 
         uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
 
@@ -519,14 +519,14 @@ library GroupActionJoin {
         )
     {
         (providerIds, totalCount) =
-            _pageProviderIds(self, tokenAddress, actionId, round, memberId, offset, limit, reverse);
+            _providerIds(self, tokenAddress, actionId, round, memberId, offset, limit, reverse);
         amounts = new uint256[](providerIds.length);
         for (uint256 i = 0; i < providerIds.length; i++) {
             amounts[i] = _providerAmountAt(self, tokenAddress, actionId, round, memberId, providerIds[i]);
         }
     }
 
-    function _pageProviderIds(
+    function _providerIds(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
@@ -621,7 +621,7 @@ library GroupActionJoin {
         self.joinedAmountByActionId[tokenAddress][actionId].decrease(round, amount);
     }
 
-    function _validateGroupConstraints(
+    function _checkGroupConstraints(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,

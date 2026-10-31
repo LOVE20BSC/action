@@ -143,8 +143,8 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.GroupAlreadyActivated(groupId);
         }
 
-        _validateGroupConfig(config);
-        _validateActivationMinGovRatio(self, protocol, tokenAddress, actionId, groupId);
+        _checkGroupConfig(config);
+        _checkActivationMinGovRatio(self, protocol, tokenAddress, actionId, groupId);
 
         uint256 round = currentJoinRound(protocol.phaseAddress);
 
@@ -218,7 +218,7 @@ library GroupActionManager {
         });
     }
 
-    function updateGroupConfig(
+    function setGroupConfig(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
@@ -231,7 +231,7 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
 
-        _validateGroupConfig(config);
+        _checkGroupConfig(config);
 
         GroupConfig memory previousConfig = group.config;
 
@@ -389,7 +389,7 @@ library GroupActionManager {
         return Math.mulDiv(baseAmount, actionVoteAmount, totalVoteAmount);
     }
 
-    function _validateGroupConfig(GroupConfig calldata config) internal pure {
+    function _checkGroupConfig(GroupConfig calldata config) internal pure {
         if (config.minJoinAmount == 0) {
             revert IGroupActionManagerErrors.InvalidMinJoinAmount(config.minJoinAmount);
         }
@@ -404,7 +404,7 @@ library GroupActionManager {
         }
     }
 
-    function _validateActivationMinGovRatio(
+    function _checkActivationMinGovRatio(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,

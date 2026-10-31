@@ -22,7 +22,7 @@ GroupActionExecutor.VerifierStakeDeposited(tokenAddress:address indexed,actionId
 GroupActionExecutor.VerifierStakeRefunded(tokenAddress:address indexed,actionId:uint256 indexed,verifierId:uint256 indexed,round:uint256,amount:uint256)
 GroupServiceExecutor.MemberRewardMinted(tokenAddress:address indexed,actionId:uint256 indexed,memberId:uint256 indexed,round:uint256,mintAmount:uint256,burnAmount:uint256)
 GroupServiceExecutor.RecipientPaid(serviceTokenAddress:address indexed,serviceActionId:uint256 indexed,round:uint256,groupId:uint256 indexed,sourceTokenAddress:address,sourceActionId:uint256,recipientId:uint256,amount:uint256)
-GroupServiceExecutor.RecipientTableChanged(sourceTokenAddress:address indexed,sourceActionId:uint256 indexed,round:uint256,groupId:uint256 indexed,recipientIds:uint256[],ratios:uint256[],remarks:string[],prevRecipientIds:uint256[],prevRatios:uint256[],prevRemarks:string[])
+GroupServiceExecutor.RecipientsChanged(sourceTokenAddress:address indexed,sourceActionId:uint256 indexed,round:uint256,groupId:uint256 indexed,recipientIds:uint256[],ratios:uint256[],remarks:string[],prevRecipientIds:uint256[],prevRatios:uint256[],prevRemarks:string[])
 GroupServiceExecutor.ServiceActionCreated(tokenAddress:address indexed,actionId:uint256 indexed,actionTokenAddress:address,govRatioMultiplier:uint256,publicVerifierRatio:uint256)
 GroupServiceExecutor.ServiceExited(serviceTokenAddress:address indexed,serviceActionId:uint256 indexed,memberId:uint256 indexed,round:uint256)
 GroupServiceExecutor.ServiceJoined(serviceTokenAddress:address indexed,serviceActionId:uint256 indexed,memberId:uint256 indexed,round:uint256)

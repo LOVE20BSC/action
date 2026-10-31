@@ -97,7 +97,7 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         uint256 groupId
     ) external;
 
-    function updateGroupConfig(
+    function setGroupConfig(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,

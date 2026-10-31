@@ -424,13 +424,13 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionVerify.verifierApplications(_layout, tokenAddress, actionId, offset, limit, reverse);
     }
 
-    function votesByVerifierIds(
+    function voteAmountsByVerifierIds(
         address tokenAddress,
         uint256 actionId,
         uint256 round,
         uint256[] calldata verifierIds
     ) external view returns (uint256[] memory voteAmounts) {
-        return GroupActionVerify.votesByVerifierIds(_layout, tokenAddress, actionId, round, verifierIds);
+        return GroupActionVerify.voteAmountsByVerifierIds(_layout, tokenAddress, actionId, round, verifierIds);
     }
 
     function topVerifiers(
@@ -517,13 +517,13 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
-    function updateGroupConfig(
+    function setGroupConfig(
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         GroupConfig calldata config
     ) external {
-        GroupActionManager.updateGroupConfig(_layout, _protocol(), tokenAddress, actionId, groupId, config);
+        GroupActionManager.setGroupConfig(_layout, _protocol(), tokenAddress, actionId, groupId, config);
     }
 
     function groupState(
@@ -703,7 +703,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        _requireMintWindow(
+        _checkMintWindow(
             tokenAddress,
             actionId,
             round,

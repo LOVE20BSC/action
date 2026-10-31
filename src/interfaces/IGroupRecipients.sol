@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 interface IGroupRecipientsEvents {
-    event RecipientTableChanged(
+    event RecipientsChanged(
         address indexed sourceTokenAddress,
         uint256 indexed sourceActionId,
         uint256 round,

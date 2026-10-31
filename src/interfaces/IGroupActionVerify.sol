@@ -211,7 +211,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
             uint256 totalCount
         );
 
-    function votesByVerifierIds(
+    function voteAmountsByVerifierIds(
         address tokenAddress,
         uint256 actionId,
         uint256 round,

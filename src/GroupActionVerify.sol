@@ -37,8 +37,6 @@ library GroupActionVerify {
         uint256 startIndex;
     }
 
-    // Load-bearing: the emission keeps its own struct because eight separate arguments overflow the
-    // stack once the event reads the post-write tally.
     struct VoteRecord {
         address tokenAddress;
         uint256 actionId;
@@ -157,7 +155,7 @@ library GroupActionVerify {
         uint256 verifierId,
         string calldata description
     ) external onlyMemberOwner(self, protocol, verifierId) returns (uint256 applicationId) {
-        uint256 round = _requireApplicationWindow(self, protocol, tokenAddress, actionId, verifierId, description);
+        uint256 round = _checkApplicationWindow(self, protocol, tokenAddress, actionId, verifierId, description);
 
         uint256 previousApplicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
@@ -266,7 +264,7 @@ library GroupActionVerify {
         }
     }
 
-    function votesByVerifierIds(
+    function voteAmountsByVerifierIds(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
@@ -429,7 +427,7 @@ library GroupActionVerify {
         uint256[] calldata originScores
     ) internal returns (bool groupVerified) {
         (uint256[] memory memberIds, ) =
-            _pageMembers(self, tokenAddress, actionId, round, groupId, verifiedCount, originScores.length);
+            _memberIds(self, tokenAddress, actionId, round, groupId, verifiedCount, originScores.length);
         uint256 groupFinal = self.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
         uint256 totalFinal = self.totalFinalScore[tokenAddress][actionId][round];
         for (uint256 i = 0; i < originScores.length; i++) {
@@ -507,7 +505,7 @@ library GroupActionVerify {
         return (GroupActionStorage.MAX_ORIGIN_SCORE - deduction, true);
     }
 
-    function _pageMembers(
+    function _memberIds(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
@@ -528,7 +526,7 @@ library GroupActionVerify {
         return round;
     }
 
-    function _requireOpenVerifier(
+    function _checkOpenVerifier(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
@@ -711,7 +709,7 @@ library GroupActionVerify {
                     );
                 }
             } else {
-                _requireOpenVerifier(self, protocol, submission.tokenAddress, submission.actionId, round, submission.verifierId);
+                _checkOpenVerifier(self, protocol, submission.tokenAddress, submission.actionId, round, submission.verifierId);
             }
 
             uint256 memberCount = self.memberIdsByGroupId[submission.tokenAddress][submission.actionId][submission.groupId]
@@ -813,7 +811,7 @@ library GroupActionVerify {
         });
     }
 
-    function _requireApplicationWindow(
+    function _checkApplicationWindow(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,

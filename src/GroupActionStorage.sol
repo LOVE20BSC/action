@@ -29,7 +29,6 @@ library GroupActionStorage {
         uint256 deactivatedRound;
     }
 
-    /// @dev Constructor-time bindings of the executor, passed to the libraries that need them.
     struct Protocol {
         address actionTargetAddress;
         address stakeAddress;
@@ -99,11 +98,8 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => RoundHistoryUint256.History)) joinedAmountByActionId;
 
         // tokenAddress => actionId => groupId => providerId => member ids with an outstanding grant
-        // (kept until the granted amount reaches zero)
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => Uint256Set.Storage)))) quotaMemberIdsByGroupIdByProviderId;
         // tokenAddress => actionId => groupId => providerId => memberId => granted quota amount
-        // Only provider actions change it; used quota is read from providerAmountByMemberIdByProviderId,
-        // so the available quota is granted - used.
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))) quotaAmountByGroupIdByProviderIdByMemberId;
 
         // groupId => memberId => count of actions the member currently joins in the group
@@ -112,11 +108,9 @@ library GroupActionStorage {
         mapping(uint256 => mapping(uint256 => mapping(address => uint256))) membershipCountByTokenAddress;
         // groupId => memberId => token addresses of current membership
         mapping(uint256 => mapping(uint256 => AddressSet.Storage)) joinedTokenAddressesByGroupIdByMemberId;
-        // group ids with members
         Uint256Set.Storage joinedGroupIds;
         // memberId => group ids the member currently belongs to
         mapping(uint256 => Uint256Set.Storage) joinedGroupIdsByMemberId;
-        // member ids with membership
         Uint256Set.Storage joinedMemberIds;
         // groupId => member ids currently in the group
         mapping(uint256 => Uint256Set.Storage) joinedMemberIdsByGroupId;
