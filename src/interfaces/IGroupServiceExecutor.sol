@@ -89,12 +89,9 @@ interface IGroupServiceExecutor is
     IGroupServiceExecutorEvents,
     IGroupServiceExecutorErrors
 {
-    function init(
-        address actionTargetAddress,
-        address stakeAddress,
-        address groupActionExecutorAddress
-    ) external;
     function GROUP_ACTION_EXECUTOR_ADDRESS() external view returns (address);
+    function LAUNCH_ADDRESS() external view returns (address);
+    function MINT_ADDRESS() external view returns (address);
     function currentVerifyRound() external view returns (uint256);
 
     function govRatioMultiplier(

@@ -8,8 +8,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionExecutorTest is GroupActionExecutorTestBase {
-    function testInitDerivesDependenciesAndValidates() external {
-        require(executor.initialized(), "initialized");
+    function testConstructorDerivesDependenciesAndValidates() external {
         require(executor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target");
         require(executor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token stored");
         require(executor.activationStakeAmount(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake stored");
@@ -22,12 +21,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _atPhase(3);
         require(executor.currentJoinRound() == 2, "join round derived from stake phase");
         require(executor.currentVerifyRound() == 1, "verify round derived from stake phase");
-
-        uint256[] memory again = new uint256[](1);
-        again[0] = 5e17;
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.AlreadyInitialized.selector));
-        executor.init(address(actionTarget), address(stake), again);
-
     }
 
     function testFullRoundSettleMatchesFinalScore() external {
@@ -271,10 +264,12 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         executor.currentMintRound();
 
-        GroupActionExecutor fresh = new GroupActionExecutor();
-        uint256[] memory splits = new uint256[](1);
-        splits[0] = 5e17;
-        fresh.init(address(actionTarget), address(stake), splits);
+        GroupActionExecutor fresh;
+        {
+            uint256[] memory splits = new uint256[](1);
+            splits[0] = 5e17;
+            fresh = new GroupActionExecutor(address(actionTarget), splits);
+        }
 
         phase.setCurrentPhase(0);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));

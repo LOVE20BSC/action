@@ -21,13 +21,12 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     uint256 internal constant PRECISION = 1e18;
 
-    address public ACTION_TARGET_ADDRESS;
-    bool public initialized;
+    address public immutable PAIR_FACTORY_ADDRESS;
 
-    address public MEMBER_NFT_ADDRESS;
-    address public PHASE_ADDRESS;
-    address public STAKE_ADDRESS;
-    address public PAIR_FACTORY_ADDRESS;
+    // forge-lint: disable-next-item(missing-zero-check)
+    constructor(address actionTargetAddress) ExecutorBase(actionTargetAddress) {
+        PAIR_FACTORY_ADDRESS = IStake(STAKE_ADDRESS).PAIR_FACTORY_ADDRESS();
+    }
 
     /// @dev tokenAddress => actionId => join token address
     mapping(address => mapping(uint256 => address)) internal _joinTokenAddressByActionId;
@@ -72,13 +71,6 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     /// @dev tokenAddress => actionId => round => memberId => burned reward
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _burnedRewardByMemberId;
 
-    modifier onlyActionTarget() {
-        if (msg.sender != ACTION_TARGET_ADDRESS) {
-            revert NotActionTarget(msg.sender);
-        }
-        _;
-    }
-
     function govRatioMultiplier(
         address tokenAddress,
         uint256 actionId
@@ -91,24 +83,6 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 actionId
     ) external view returns (uint256) {
         return _minGovRatioByActionId[tokenAddress][actionId];
-    }
-
-    // forge-lint: disable-next-item(missing-zero-check)
-    function init(address actionTargetAddress, address stakeAddress) external {
-        if (initialized) {
-            revert AlreadyInitialized();
-        }
-        initialized = true;
-
-        address memberNFTAddress = IStake(stakeAddress).MEMBER_NFT_ADDRESS();
-        address phaseAddress = IStake(stakeAddress).PHASE_ADDRESS();
-        address pairFactoryAddress = IStake(stakeAddress).PAIR_FACTORY_ADDRESS();
-
-        ACTION_TARGET_ADDRESS = actionTargetAddress;
-        MEMBER_NFT_ADDRESS = memberNFTAddress;
-        STAKE_ADDRESS = stakeAddress;
-        PHASE_ADDRESS = phaseAddress;
-        PAIR_FACTORY_ADDRESS = pairFactoryAddress;
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -154,13 +128,6 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             minGovRatio: minGovRatioValue
         });
     }
-
-    function onProposalSubmitted(address, uint256, uint256, bytes[] calldata)
-        external
-        virtual
-        override
-        onlyActionTarget
-    {}
 
     function onProposalVoted(address, uint256, uint256, uint256, uint256, bytes[] calldata targetData)
         external
@@ -474,14 +441,6 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
     }
 
-    function _memberNFTAddress() internal view override returns (address) {
-        return MEMBER_NFT_ADDRESS;
-    }
-
-    function _phaseAddress() internal view override returns (address) {
-        return PHASE_ADDRESS;
-    }
-
     function _joinRound() internal view override returns (uint256) {
         return LpRoundAxis.joinRound(PHASE_ADDRESS);
     }
@@ -526,21 +485,14 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 createdRound = _createdRoundByActionId[tokenAddress][actionId];
-        if (createdRound == 0) {
-            revert ActionNotCreated(tokenAddress, actionId);
-        }
-        if (round < createdRound) {
-            revert RoundBeforeActionCreated(round, createdRound);
-        }
-        uint256 mintRound = _mintRound();
-        if (round > mintRound) {
-            revert RoundAfterMintWindow(round, mintRound);
-        }
-
-        if (_memberMinted[tokenAddress][actionId][round][memberId]) {
-            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
-        }
+        _requireMintWindow(
+            tokenAddress,
+            actionId,
+            round,
+            memberId,
+            _createdRoundByActionId[tokenAddress][actionId],
+            _memberMinted[tokenAddress][actionId][round][memberId]
+        );
 
         uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
         if (totalEffectiveAmount != 0) {

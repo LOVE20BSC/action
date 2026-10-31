@@ -15,7 +15,6 @@ interface IActionExecutorEvents {
 }
 
 interface IActionExecutorErrors {
-    error AlreadyInitialized();
     error NotActionTarget(address caller);
     error ActionNotCreated(
         address tokenAddress,
@@ -54,7 +53,9 @@ interface IActionExecutorErrors {
 
 interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExecutorErrors {
     function ACTION_TARGET_ADDRESS() external view returns (address);
-    function initialized() external view returns (bool);
+    function STAKE_ADDRESS() external view returns (address);
+    function MEMBER_NFT_ADDRESS() external view returns (address);
+    function PHASE_ADDRESS() external view returns (address);
 
     function exit(
         address tokenAddress,

@@ -47,6 +47,7 @@ library GroupRecipients {
     // forge-lint: disable-next-item(missing-events-access-control)
     function setRecipients(
         GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         uint256 round,
         address sourceTokenAddress,
         uint256 sourceActionId,
@@ -57,6 +58,7 @@ library GroupRecipients {
     ) external {
         _setRecipients(
             self,
+            protocol,
             round,
             sourceTokenAddress,
             sourceActionId,
@@ -67,6 +69,7 @@ library GroupRecipients {
 
     function _setRecipients(
         GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         uint256 round,
         address sourceTokenAddress,
         uint256 sourceActionId,
@@ -77,13 +80,13 @@ library GroupRecipients {
         // Load-bearing: settlement only reads configs for actions this executor created, so any other
         // key is silently ignored and the owner keeps the whole slice.
         if (
-            IGroupActionExecutor(self.GROUP_ACTION_EXECUTOR_ADDRESS).joinTokenAddress(sourceTokenAddress, sourceActionId)
+            IGroupActionExecutor(protocol.groupActionExecutorAddress).joinTokenAddress(sourceTokenAddress, sourceActionId)
                 == address(0)
         ) {
             revert IGroupRecipientsErrors.UnknownSourceAction(sourceTokenAddress, sourceActionId);
         }
 
-        _validateRecipients(self, table, groupId);
+        _validateRecipients(protocol, table, groupId);
 
         uint256[] memory prevRecipientIds =
             self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
@@ -164,6 +167,7 @@ library GroupRecipients {
 
     function distribute(
         GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
         address serviceTokenAddress,
         uint256 serviceActionId,
@@ -180,17 +184,20 @@ library GroupRecipients {
             self.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, 0, type(uint256).max, false);
         for (uint256 i = 0; i < sourceActionIds.length; i++) {
             uint256 sourceActionId = sourceActionIds[i];
-            uint256 slice = ownerSlice(self, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight);
+            uint256 slice =
+                ownerSlice(protocol, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight);
             if (slice == 0) {
                 continue;
             }
-            distributed +=
-                _distributeToRecipients(self, slice, sourceTokenAddress, serviceTokenAddress, serviceActionId, round, groupId, sourceActionId);
+            distributed += _distributeToRecipients(
+                self, protocol, slice, sourceTokenAddress, serviceTokenAddress, serviceActionId, round, groupId, sourceActionId
+            );
         }
     }
 
     function projectedDistribution(
         GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
         uint256 round,
         uint256 groupId,
@@ -204,13 +211,15 @@ library GroupRecipients {
         (uint256[] memory sourceActionIds, ) =
             self.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, 0, type(uint256).max, false);
         for (uint256 i = 0; i < sourceActionIds.length; i++) {
-            distributed +=
-                _projectedForAction(self, sourceTokenAddress, sourceActionIds[i], round, groupId, ownerReward, ownerWeight);
+            distributed += _projectedForAction(
+                self, protocol, sourceTokenAddress, sourceActionIds[i], round, groupId, ownerReward, ownerWeight
+            );
         }
     }
 
     function _distributeToRecipients(
         GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         uint256 slice,
         address sourceTokenAddress,
         address serviceTokenAddress,
@@ -229,7 +238,9 @@ library GroupRecipients {
             if (amount == 0) {
                 continue;
             }
-            IERC20(serviceTokenAddress).safeTransfer(IMemberNFT(self.MEMBER_NFT_ADDRESS).ownerOf(recipientIds[j]), amount);
+            IERC20(serviceTokenAddress).safeTransfer(
+                IMemberNFT(protocol.memberNFTAddress).ownerOf(recipientIds[j]), amount
+            );
             _emitRecipientPaid(
                 RecipientPaidParams({
                     serviceTokenAddress: serviceTokenAddress,
@@ -247,6 +258,7 @@ library GroupRecipients {
 
     function _projectedForAction(
         GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 round,
@@ -254,7 +266,9 @@ library GroupRecipients {
         uint256 ownerReward,
         uint256 ownerWeight
     ) internal view returns (uint256 distributed) {
-        uint256 slice = ownerSlice(self, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight);
+        uint256 slice = ownerSlice(
+            protocol, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight
+        );
         if (slice == 0) {
             return 0;
         }
@@ -266,7 +280,7 @@ library GroupRecipients {
     }
 
     function ownerSlice(
-        GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
         uint256 sourceActionId,
         uint256 round,
@@ -274,7 +288,9 @@ library GroupRecipients {
         uint256 ownerReward,
         uint256 ownerWeight
     ) internal view returns (uint256) {
-        uint256 groupReward = self.groupReward(sourceTokenAddress, sourceActionId, round, groupId);
+        uint256 groupReward = GroupServiceStorage.groupReward(
+            protocol.groupActionExecutorAddress, sourceTokenAddress, sourceActionId, round, groupId
+        );
         if (groupReward == 0) {
             return 0;
         }
@@ -283,7 +299,7 @@ library GroupRecipients {
 
     // forge-lint: disable-next-item(require-revert-in-loop)
     function _validateRecipients(
-        GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
         RecipientTable memory table,
         uint256 groupId
     ) internal view {
@@ -315,7 +331,7 @@ library GroupRecipients {
                     revert IGroupRecipientsErrors.DuplicateMemberId(recipientId);
                 }
             }
-            IMemberNFT(self.MEMBER_NFT_ADDRESS).ownerOf(recipientId);
+            IMemberNFT(protocol.memberNFTAddress).ownerOf(recipientId);
             totalRatios += table.ratios[i];
         }
         if (totalRatios > GroupServiceStorage.PRECISION) {

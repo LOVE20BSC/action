@@ -51,9 +51,10 @@ library GroupActionVerify {
 
     modifier onlyMemberOwner(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         uint256 memberId
     ) {
-        if (IMemberNFT(self.MEMBER_NFT_ADDRESS).ownerOf(memberId) != msg.sender) {
+        if (IMemberNFT(protocol.memberNFTAddress).ownerOf(memberId) != msg.sender) {
             revert IActionExecutorErrors.NotMemberOwner(memberId);
         }
         _;
@@ -61,15 +62,17 @@ library GroupActionVerify {
 
     function submitOriginScores(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 verifierId,
         uint256 groupId,
         uint256 startIndex,
         uint256[] calldata originScores
-    ) external onlyMemberOwner(self, verifierId) {
+    ) external onlyMemberOwner(self, protocol, verifierId) {
         _submitOriginScores(
             self,
+            protocol,
             OriginSubmission({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
@@ -148,24 +151,13 @@ library GroupActionVerify {
     // forge-lint: disable-next-item(missing-events-access-control)
     function submitVerifierApplication(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 verifierId,
         string calldata description
-    ) external onlyMemberOwner(self, verifierId) returns (uint256 applicationId) {
-        uint256 round = IPhase(self.PHASE_ADDRESS).currentPhase();
-        if (IStake(self.STAKE_ADDRESS).validGovVotes(tokenAddress, round, verifierId) == 0) {
-            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
-        }
-        uint256 descriptionLength = bytes(description).length;
-        if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
-            revert IGroupActionExecutorErrors.DescriptionTooLong(
-                descriptionLength, GroupActionStorage.MAX_DESCRIPTION_BYTES
-            );
-        }
-        if (self.createdRoundByActionId[tokenAddress][actionId] == 0) {
-            revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
-        }
+    ) external onlyMemberOwner(self, protocol, verifierId) returns (uint256 applicationId) {
+        uint256 round = _requireApplicationWindow(self, protocol, tokenAddress, actionId, verifierId, description);
 
         uint256 previousApplicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
@@ -174,14 +166,7 @@ library GroupActionVerify {
 
         uint256 stakeAmount = previousApplicationId == 0 ? self.verifierStakeAmountByActionId[tokenAddress][actionId] : 0;
         if (stakeAmount != 0) {
-            IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), stakeAmount);
-            emit IGroupActionVerifyEvents.VerifierStakeDeposited({
-                tokenAddress: tokenAddress,
-                actionId: actionId,
-                verifierId: verifierId,
-                round: round,
-                amount: stakeAmount
-            });
+            _depositVerifierStake(tokenAddress, actionId, round, verifierId, stakeAmount);
         }
 
         _emitVerifierApplicationSubmitted(
@@ -192,11 +177,12 @@ library GroupActionVerify {
     // forge-lint: disable-next-item(missing-events-access-control)
     function cancelVerifierApplication(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 verifierId
-    ) external onlyMemberOwner(self, verifierId) {
-        uint256 round = IPhase(self.PHASE_ADDRESS).currentPhase();
+    ) external onlyMemberOwner(self, protocol, verifierId) {
+        uint256 round = IPhase(protocol.phaseAddress).currentPhase();
         uint256 applicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         if (applicationId == 0) {
             revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
@@ -210,7 +196,7 @@ library GroupActionVerify {
         // Load-bearing: staked is equivalent to holding a current application.
         uint256 stakeAmount = self.verifierStakeAmountByActionId[tokenAddress][actionId];
         if (stakeAmount != 0) {
-            IERC20(tokenAddress).safeTransfer(IMemberNFT(self.MEMBER_NFT_ADDRESS).ownerOf(verifierId), stakeAmount);
+            IERC20(tokenAddress).safeTransfer(IMemberNFT(protocol.memberNFTAddress).ownerOf(verifierId), stakeAmount);
             emit IGroupActionVerifyEvents.VerifierStakeRefunded({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
@@ -534,8 +520,8 @@ library GroupActionVerify {
         return memberSet.valuesByRound(round, offset, limit, false);
     }
 
-    function _currentVerifyRound(GroupActionStorage.Layout storage self) internal view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.verifyRound(self.PHASE_ADDRESS);
+    function currentVerifyRound(address phaseAddress) internal view returns (uint256) {
+        uint256 round = GroupActionRoundAxis.verifyRound(phaseAddress);
         if (round == 0) {
             revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }
@@ -544,6 +530,7 @@ library GroupActionVerify {
 
     function _requireOpenVerifier(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 round,
@@ -567,7 +554,7 @@ library GroupActionVerify {
             return;
         }
         uint256 splitIndex = rank - 1;
-        (uint256 startBlock, uint256 phaseBlocks) = IPhase(self.PHASE_ADDRESS).phaseInfo(round + 2);
+        (uint256 startBlock, uint256 phaseBlocks) = IPhase(protocol.phaseAddress).phaseInfo(round + 2);
         uint256 openOffset =
             Math.mulDiv(phaseBlocks, self.SPLITS[splitIndex], GroupActionStorage.PRECISION, Math.Rounding.Ceil);
         if (block.number < startBlock + openOffset) {
@@ -700,6 +687,7 @@ library GroupActionVerify {
     // forge-lint: disable-next-item(require-revert-in-loop)
     function _submitOriginScores(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         OriginSubmission memory submission,
         uint256[] calldata originScores
     ) private {
@@ -712,7 +700,7 @@ library GroupActionVerify {
             );
         }
 
-        uint256 round = _currentVerifyRound(self);
+        uint256 round = currentVerifyRound(protocol.phaseAddress);
         bool groupVerified;
         {
             uint256 lockedVerifier = self.lockedVerifierId[submission.tokenAddress][submission.actionId][round];
@@ -723,7 +711,7 @@ library GroupActionVerify {
                     );
                 }
             } else {
-                _requireOpenVerifier(self, submission.tokenAddress, submission.actionId, round, submission.verifierId);
+                _requireOpenVerifier(self, protocol, submission.tokenAddress, submission.actionId, round, submission.verifierId);
             }
 
             uint256 memberCount = self.memberIdsByGroupId[submission.tokenAddress][submission.actionId][submission.groupId]
@@ -822,6 +810,46 @@ library GroupActionVerify {
             verifierId: record.verifierId,
             voteAmountAdded: record.voteAmountAdded,
             voteAmountTotal: voteAmountTotal
+        });
+    }
+
+    function _requireApplicationWindow(
+        GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 verifierId,
+        string calldata description
+    ) private view returns (uint256 round) {
+        round = IPhase(protocol.phaseAddress).currentPhase();
+        if (IStake(protocol.stakeAddress).validGovVotes(tokenAddress, round, verifierId) == 0) {
+            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
+        }
+        uint256 descriptionLength = bytes(description).length;
+        if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
+            revert IGroupActionExecutorErrors.DescriptionTooLong(
+                descriptionLength, GroupActionStorage.MAX_DESCRIPTION_BYTES
+            );
+        }
+        if (self.createdRoundByActionId[tokenAddress][actionId] == 0) {
+            revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
+        }
+    }
+
+    function _depositVerifierStake(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 verifierId,
+        uint256 stakeAmount
+    ) private {
+        IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), stakeAmount);
+        emit IGroupActionVerifyEvents.VerifierStakeDeposited({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            verifierId: verifierId,
+            round: round,
+            amount: stakeAmount
         });
     }
 }

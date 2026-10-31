@@ -25,8 +25,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         }
     }
 
-    function testInitDerivesDependenciesFromStake() external {
-        require(lpExecutor.initialized(), "initialized");
+    function testConstructorDerivesDependenciesFromStake() external {
         require(lpExecutor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target bound");
         require(lpExecutor.MEMBER_NFT_ADDRESS() == address(memberNFT), "member nft bound");
         require(lpExecutor.PHASE_ADDRESS() == address(phase), "phase bound");
@@ -36,16 +35,14 @@ contract LpExecutorTest is LpExecutorTestBase {
         MockLpPhase otherPhase = new MockLpPhase();
         otherPhase.setCurrentPhase(7);
         stake.setPhaseAddress(address(otherPhase));
-        LpExecutor freshPhase = new LpExecutor();
-        freshPhase.init(address(actionTarget), address(stake));
+        LpExecutor freshPhase = new LpExecutor(address(actionTarget));
         require(freshPhase.currentJoinRound() == 6, "phase derived from stake");
         stake.setPhaseAddress(address(phase));
 
         MockLpMemberNFT otherMemberNFT = new MockLpMemberNFT();
         otherMemberNFT.setOwner(1, MEMBER2);
         stake.setMemberNFTAddress(address(otherMemberNFT));
-        LpExecutor freshMemberNFT = new LpExecutor();
-        freshMemberNFT.init(address(actionTarget), address(stake));
+        LpExecutor freshMemberNFT = new LpExecutor(address(actionTarget));
         vm.prank(address(actionTarget));
         freshMemberNFT.onProposalCreated(address(token), ACTION_ID, _targetData());
         vm.prank(MEMBER2);
@@ -60,26 +57,11 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         MockUniswapV2Factory emptyFactory = new MockUniswapV2Factory();
         stake.setPairFactoryAddress(address(emptyFactory));
-        LpExecutor freshFactory = new LpExecutor();
-        freshFactory.init(address(actionTarget), address(stake));
+        LpExecutor freshFactory = new LpExecutor(address(actionTarget));
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidJoinTokenFactory.selector, address(joinToken), address(emptyFactory)));
         freshFactory.onProposalCreated(address(token), ACTION_ID, _targetData());
         stake.setPairFactoryAddress(address(factory));
-    }
-
-    function testInitIsPermissionless() external {
-        LpExecutor fresh = new LpExecutor();
-        vm.prank(OUTSIDER);
-        fresh.init(address(actionTarget), address(stake));
-        require(fresh.initialized(), "outsider init succeeds");
-        require(fresh.ACTION_TARGET_ADDRESS() == address(actionTarget), "binding set");
-    }
-
-    function testInitRejectsSecondCall() external {
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.AlreadyInitialized.selector));
-        lpExecutor.init(address(actionTarget), address(stake));
-        require(lpExecutor.ACTION_TARGET_ADDRESS() == address(actionTarget), "binding unchanged");
     }
 
     function testCreateStoresConfig() external view {
@@ -167,8 +149,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testCreateRejectsRevertingFactory() external {
         address revertingFactory = address(new MockRevertingPairFactory());
         stake.setPairFactoryAddress(revertingFactory);
-        LpExecutor freshReverting = new LpExecutor();
-        freshReverting.init(address(actionTarget), address(stake));
+        LpExecutor freshReverting = new LpExecutor(address(actionTarget));
         vm.prank(address(actionTarget));
         vm.expectRevert(
             abi.encodeWithSelector(

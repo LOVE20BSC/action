@@ -114,8 +114,7 @@ contract LpExecutorRealIntegrationTest {
 
         actionTarget = new ActionTarget();
         actionTarget.init(address(mint));
-        lpExecutor = new LpExecutor();
-        lpExecutor.init(address(actionTarget), address(stake));
+        lpExecutor = new LpExecutor(address(actionTarget));
 
         otherToken = new MockERC20();
         lpPair = MockUniswapV2Pair(factory.createPair(address(token), address(otherToken)));

@@ -35,10 +35,10 @@ contract DeployAction is Script {
         _validateConfig(config);
 
         vm.startBroadcast();
-        addrs = _deployContracts(config.mint, config.stake, config.splits);
+        addrs = _deployContracts(config.mint, config.splits);
         vm.stopBroadcast();
 
-        _validateDeployment(config.mint, config.splits, addrs);
+        _validateDeployment(config.mint, config.stake, config.splits, addrs);
         _logDeploymentSummary(addrs);
     }
 
@@ -53,7 +53,7 @@ contract DeployAction is Script {
         require(block.chainid == config.chainId, "Chain ID mismatch");
 
         // Core 依赖必须是已部署合约：ActionTarget 从 Mint 派生 vote/submit/memberNFT/phase，
-        // 三个 Executor 从 Stake 派生 memberNFT/phase/vote/launch/pairFactory，
+        // 三个 Executor 只收 ActionTarget，Stake 经 ActionTarget.VOTE_ADDRESS() 反查后派生其余地址；
         // 地址配错时模拟阶段不会回滚，会白广播 4 个合约（要到 21_check.sh 才拦下）。
         require(config.mint.code.length != 0, "Mint must be a deployed contract");
         require(config.stake.code.length != 0, "Stake must be a deployed contract");
@@ -105,7 +105,7 @@ contract DeployAction is Script {
         }
     }
 
-    function _deployContracts(address mint, address stake, uint256[] memory groupActionSplits)
+    function _deployContracts(address mint, uint256[] memory groupActionSplits)
         internal
         returns (DeploymentAddresses memory addrs)
     {
@@ -114,26 +114,19 @@ contract DeployAction is Script {
         ActionTarget(addrs.actionTarget).init(mint);
         console2.log("ActionTarget initialized");
 
-        addrs.lpExecutor = address(new LpExecutor());
+        addrs.lpExecutor = address(new LpExecutor(addrs.actionTarget));
         console2.log("LpExecutor deployed at:", addrs.lpExecutor);
-        LpExecutor(addrs.lpExecutor).init(addrs.actionTarget, stake);
-        console2.log("LpExecutor initialized");
 
-        addrs.groupActionExecutor = address(new GroupActionExecutor());
+        addrs.groupActionExecutor = address(new GroupActionExecutor(addrs.actionTarget, groupActionSplits));
         console2.log("GroupActionExecutor deployed at:", addrs.groupActionExecutor);
-        GroupActionExecutor(addrs.groupActionExecutor).init(addrs.actionTarget, stake, groupActionSplits);
-        console2.log("GroupActionExecutor initialized");
 
-        addrs.groupServiceExecutor = address(new GroupServiceExecutor());
+        addrs.groupServiceExecutor = address(new GroupServiceExecutor(addrs.groupActionExecutor));
         console2.log("GroupServiceExecutor deployed at:", addrs.groupServiceExecutor);
-        GroupServiceExecutor(addrs.groupServiceExecutor).init(
-            addrs.actionTarget, stake, addrs.groupActionExecutor
-        );
-        console2.log("GroupServiceExecutor initialized");
     }
 
     function _validateDeployment(
         address mintAddress,
+        address stakeAddress,
         uint256[] memory expectedSplits,
         DeploymentAddresses memory addrs
     ) internal view {
@@ -147,15 +140,22 @@ contract DeployAction is Script {
         require(actionTarget.PHASE_ADDRESS() == mint.PHASE_ADDRESS(), "ActionTarget phase mismatch");
 
         LpExecutor lpExecutor = LpExecutor(addrs.lpExecutor);
-        require(lpExecutor.initialized(), "LpExecutor not initialized");
         require(lpExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget, "LpExecutor action target mismatch");
+        require(lpExecutor.STAKE_ADDRESS() == stakeAddress, "LpExecutor stake mismatch");
+        require(lpExecutor.MEMBER_NFT_ADDRESS() == mint.MEMBER_NFT_ADDRESS(), "LpExecutor member NFT mismatch");
+        require(lpExecutor.PHASE_ADDRESS() == mint.PHASE_ADDRESS(), "LpExecutor phase mismatch");
 
         GroupActionExecutor groupActionExecutor = GroupActionExecutor(addrs.groupActionExecutor);
-        require(groupActionExecutor.initialized(), "GroupActionExecutor not initialized");
         require(
             groupActionExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget,
             "GroupActionExecutor action target mismatch"
         );
+        require(groupActionExecutor.STAKE_ADDRESS() == stakeAddress, "GroupActionExecutor stake mismatch");
+        require(
+            groupActionExecutor.MEMBER_NFT_ADDRESS() == mint.MEMBER_NFT_ADDRESS(),
+            "GroupActionExecutor member NFT mismatch"
+        );
+        require(groupActionExecutor.PHASE_ADDRESS() == mint.PHASE_ADDRESS(), "GroupActionExecutor phase mismatch");
         uint256[] memory splits = groupActionExecutor.SPLITS();
         require(splits.length == expectedSplits.length, "GroupActionExecutor splits length mismatch");
         for (uint256 i = 0; i < splits.length; i++) {
@@ -164,10 +164,14 @@ contract DeployAction is Script {
         }
 
         GroupServiceExecutor groupServiceExecutor = GroupServiceExecutor(addrs.groupServiceExecutor);
-        require(groupServiceExecutor.initialized(), "GroupServiceExecutor not initialized");
         require(
             groupServiceExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget,
             "GroupServiceExecutor action target mismatch"
+        );
+        require(groupServiceExecutor.STAKE_ADDRESS() == stakeAddress, "GroupServiceExecutor stake mismatch");
+        require(
+            groupServiceExecutor.MEMBER_NFT_ADDRESS() == mint.MEMBER_NFT_ADDRESS(),
+            "GroupServiceExecutor member NFT mismatch"
         );
         require(
             groupServiceExecutor.GROUP_ACTION_EXECUTOR_ADDRESS() == addrs.groupActionExecutor,

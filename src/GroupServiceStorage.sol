@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
 import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
-import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 
 library GroupServiceStorage {
@@ -13,16 +11,13 @@ library GroupServiceStorage {
     uint256 constant DEFAULT_MAX_RECIPIENTS = 10;
     uint256 constant MAX_REMARK_BYTES = 256;
 
-    struct Layout {
-        address ACTION_TARGET_ADDRESS;
-        address STAKE_ADDRESS;
-        address GROUP_ACTION_EXECUTOR_ADDRESS;
-        address MEMBER_NFT_ADDRESS;
-        address PHASE_ADDRESS;
-        address LAUNCH_ADDRESS;
-        address MINT_ADDRESS;
-        bool initialized;
+    /// @dev Constructor-time bindings of the executor, passed to the libraries that need them.
+    struct Protocol {
+        address memberNFTAddress;
+        address groupActionExecutorAddress;
+    }
 
+    struct Layout {
         // serviceTokenAddress => serviceActionId => action token address
         mapping(address => mapping(uint256 => address)) actionTokenAddressByActionId;
         // serviceTokenAddress => serviceActionId => gov ratio multiplier for the group owner (1e18 precision)
@@ -51,22 +46,6 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) actionIdsWithRecipients;
     }
 
-    // Load-bearing: this must stay equal to ActionTarget's own join round (phase - 1). ActionTarget
-    // keys the join snapshot it writes by that round, and every `isJoinedByRound` / `joinedAmount`
-    // argument here is read in the same round space; if the two drift, the reported round and the
-    // recorded snapshot disagree without any revert.
-    function joinRound(Layout storage self) internal view returns (uint256) {
-        return GroupActionRoundAxis.joinRound(self.PHASE_ADDRESS);
-    }
-
-    function currentJoinRound(Layout storage self) internal view returns (uint256) {
-        uint256 round = joinRound(self);
-        if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted(1, 0);
-        }
-        return round;
-    }
-
     function cachedDenominator(
         Layout storage self,
         address actionTokenAddress,
@@ -89,13 +68,13 @@ library GroupServiceStorage {
     // window is open (verification closed); caching earlier pairs a frozen divisor with live weights
     // and pays a member twice without reverting.
     function groupReward(
-        Layout storage self,
+        address groupActionExecutorAddress,
         address actionTokenAddress,
         uint256 actionId,
         uint256 round,
         uint256 groupId
     ) internal view returns (uint256) {
-        return IGroupActionExecutor(self.GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionRewardByGroupId(
+        return IGroupActionExecutor(groupActionExecutorAddress).generatedActionRewardByGroupId(
             actionTokenAddress, actionId, round, groupId
         );
     }

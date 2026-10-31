@@ -7,7 +7,6 @@ import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol"
 import {IGroupActionJoinEvents, IGroupActionJoinErrors, JoinInfo} from "./interfaces/IGroupActionJoin.sol";
 import {IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
-import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -29,9 +28,10 @@ library GroupActionJoin {
 
     modifier onlyMemberOwner(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         uint256 memberId
     ) {
-        if (IMemberNFT(self.MEMBER_NFT_ADDRESS).ownerOf(memberId) != msg.sender) {
+        if (IMemberNFT(protocol.memberNFTAddress).ownerOf(memberId) != msg.sender) {
             revert IActionExecutorErrors.NotMemberOwner(memberId);
         }
         _;
@@ -40,6 +40,7 @@ library GroupActionJoin {
     // forge-lint: disable-next-item(missing-events-access-control)
     function join(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -47,12 +48,13 @@ library GroupActionJoin {
         uint256 amount,
         uint256 providerId,
         string[] calldata verificationValues
-    ) external onlyMemberOwner(self, memberId) {
-        _join(self, tokenAddress, actionId, groupId, memberId, amount, providerId, verificationValues);
+    ) external onlyMemberOwner(self, protocol, memberId) {
+        _join(self, protocol, tokenAddress, actionId, groupId, memberId, amount, providerId, verificationValues);
     }
 
     function _join(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -67,22 +69,22 @@ library GroupActionJoin {
         if (groupId == 0) {
             revert IGroupActionManagerErrors.GroupNotExist(0);
         }
-        GroupActionManager.groupOwnerOrRevert(self, groupId);
+        GroupActionManager.groupOwnerOrRevert(protocol, groupId);
 
         uint256 joinedGroupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].latestValue();
         if (joinedGroupId != 0 && joinedGroupId != groupId) {
             revert IGroupActionJoinErrors.AlreadyInOtherGroup(memberId, joinedGroupId, groupId);
         }
 
-        _validateGroupConstraints(self, tokenAddress, actionId, groupId, memberId, amount, joinedGroupId == 0);
+        _validateGroupConstraints(self, protocol, tokenAddress, actionId, groupId, memberId, amount, joinedGroupId == 0);
 
-        uint256 round = self.currentJoinRound();
+        uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
 
         if (joinedGroupId == 0) {
             _registerMembership(self, tokenAddress, actionId, round, groupId, memberId);
         }
-        if (!IActionTarget(self.ACTION_TARGET_ADDRESS).isJoined(tokenAddress, actionId, memberId)) {
-            IActionTarget(self.ACTION_TARGET_ADDRESS).registerJoinState(tokenAddress, actionId, memberId);
+        if (!IActionTarget(protocol.actionTargetAddress).isJoined(tokenAddress, actionId, memberId)) {
+            IActionTarget(protocol.actionTargetAddress).registerJoinState(tokenAddress, actionId, memberId);
         }
         _applyVerificationInfos(self, tokenAddress, actionId, round, memberId, verificationValues, joinedGroupId == 0);
         _increaseAmount(self, tokenAddress, actionId, round, groupId, memberId, amount, providerId);
@@ -115,16 +117,17 @@ library GroupActionJoin {
     // forge-lint: disable-next-item(missing-events-access-control)
     function withdraw(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 memberId,
         uint256 amount
-    ) external onlyMemberOwner(self, memberId) {
+    ) external onlyMemberOwner(self, protocol, memberId) {
         if (amount == 0) {
             revert IGroupActionJoinErrors.ZeroParticipationAmount();
         }
 
-        uint256 round = self.currentJoinRound();
+        uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
         uint256 ownAmount = self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue();
         if (amount > ownAmount) {
             revert IGroupActionJoinErrors.WithdrawAmountExceeded(amount, ownAmount);
@@ -146,60 +149,40 @@ library GroupActionJoin {
         });
 
         if (ownAmount - amount == 0 && self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0) {
-            _finalizeExit(self, tokenAddress, actionId, round, groupId, memberId);
+            _finalizeExit(self, protocol, tokenAddress, actionId, round, groupId, memberId);
         }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function withdrawProviderQuota(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         uint256 memberId,
         uint256 providerId,
         uint256 amount
-    ) external onlyMemberOwner(self, providerId) {
+    ) external onlyMemberOwner(self, protocol, providerId) {
         if (amount == 0) {
             revert IGroupActionJoinErrors.ZeroQuotaAmount(memberId);
         }
         if (groupId == 0) {
             revert IGroupActionManagerErrors.GroupNotExist(0);
         }
-        GroupActionManager.groupOwnerOrRevert(self, groupId);
-
-        uint256 quota = self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId];
-        uint256 available = quota - _quotaUsedAt(self, tokenAddress, actionId, groupId, providerId, memberId);
-        if (amount > available) {
-            revert IGroupActionJoinErrors.InsufficientProviderQuota(providerId, amount, available);
-        }
-        uint256 quotaAfter = quota - amount;
-        self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = quotaAfter;
-        if (quotaAfter == 0) {
-            self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].remove(memberId);
-        }
-
-        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
-
-        emit IGroupActionJoinEvents.ProviderQuotaRemoved({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            groupId: groupId,
-            providerId: providerId,
-            memberId: memberId,
-            amount: amount,
-            quotaTotal: quotaAfter
-        });
+        GroupActionManager.groupOwnerOrRevert(protocol, groupId);
+        _withdrawProviderQuota(self, tokenAddress, actionId, groupId, memberId, providerId, amount);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function exit(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 memberId
-    ) external onlyMemberOwner(self, memberId) {
-        uint256 round = self.currentJoinRound();
+    ) external onlyMemberOwner(self, protocol, memberId) {
+        uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
         uint256 groupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].latestValue();
         uint256 ownAmount = self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue();
         if (ownAmount == 0 && self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0) {
@@ -222,7 +205,7 @@ library GroupActionJoin {
 
         _restoreProviders(self, tokenAddress, actionId, round, groupId, memberId);
 
-        _finalizeExit(self, tokenAddress, actionId, round, groupId, memberId);
+        _finalizeExit(self, protocol, tokenAddress, actionId, round, groupId, memberId);
     }
 
     function _restoreProviders(
@@ -313,19 +296,21 @@ library GroupActionJoin {
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function addProviderQuota(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId,
         uint256[] calldata memberIds,
         uint256[] calldata amounts
-    ) external onlyMemberOwner(self, providerId) {
-        _addProviderQuota(self, tokenAddress, actionId, groupId, providerId, memberIds, amounts);
+    ) external onlyMemberOwner(self, protocol, providerId) {
+        _addProviderQuota(self, protocol, tokenAddress, actionId, groupId, providerId, memberIds, amounts);
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)
     function _addProviderQuota(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -339,7 +324,7 @@ library GroupActionJoin {
         if (groupId == 0) {
             revert IGroupActionManagerErrors.GroupNotExist(0);
         }
-        GroupActionManager.groupOwnerOrRevert(self, groupId);
+        GroupActionManager.groupOwnerOrRevert(protocol, groupId);
         if (!self.groupState[tokenAddress][actionId][groupId].active) {
             revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
@@ -356,7 +341,7 @@ library GroupActionJoin {
             if (amounts[i] == 0) {
                 revert IGroupActionJoinErrors.ZeroQuotaAmount(memberId);
             }
-            IMemberNFT(self.MEMBER_NFT_ADDRESS).ownerOf(memberId);
+            IMemberNFT(protocol.memberNFTAddress).ownerOf(memberId);
 
             uint256 quotaTotal = self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] + amounts[i];
             self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = quotaTotal;
@@ -380,24 +365,25 @@ library GroupActionJoin {
     // forge-lint: disable-next-item(missing-events-access-control)
     function removeProviderQuota(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId,
         uint256[] calldata memberIds
-    ) external onlyMemberOwner(self, providerId) {
+    ) external onlyMemberOwner(self, protocol, providerId) {
         if (groupId == 0) {
             revert IGroupActionManagerErrors.GroupNotExist(0);
         }
-        GroupActionManager.groupOwnerOrRevert(self, groupId);
+        GroupActionManager.groupOwnerOrRevert(protocol, groupId);
         if (memberIds.length == 0) {
             return;
         }
 
-        uint256 round = self.currentJoinRound();
+        uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
         uint256 totalRefund = 0;
         for (uint256 i = 0; i < memberIds.length; i++) {
-            totalRefund += _revokeQuota(self, tokenAddress, actionId, round, groupId, providerId, memberIds[i]);
+            totalRefund += _revokeQuota(self, protocol, tokenAddress, actionId, round, groupId, providerId, memberIds[i]);
         }
 
         IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, totalRefund);
@@ -405,6 +391,7 @@ library GroupActionJoin {
 
     function _revokeQuota(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 round,
@@ -441,7 +428,7 @@ library GroupActionJoin {
             used != 0 && self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0
                 && self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0
         ) {
-            _finalizeExit(self, tokenAddress, actionId, round, groupId, memberId);
+            _finalizeExit(self, protocol, tokenAddress, actionId, round, groupId, memberId);
         }
     }
 
@@ -636,6 +623,7 @@ library GroupActionJoin {
 
     function _validateGroupConstraints(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 groupId,
@@ -673,7 +661,7 @@ library GroupActionJoin {
             }
         }
 
-        uint256 actionMaxJoinAmount = GroupActionManager._maxJoinAmount(self, tokenAddress, actionId);
+        uint256 actionMaxJoinAmount = GroupActionManager._maxJoinAmount(self, protocol, tokenAddress, actionId);
         if (newTotal > actionMaxJoinAmount) {
             revert IGroupActionJoinErrors.ActionMaxJoinAmountExceeded(memberId, newTotal, actionMaxJoinAmount);
         }
@@ -785,6 +773,7 @@ library GroupActionJoin {
 
     function _finalizeExit(
         GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
         uint256 round,
@@ -814,7 +803,7 @@ library GroupActionJoin {
             self.joinedTokenAddressesByGroupIdByMemberId[groupId][memberId].remove(tokenAddress);
         }
 
-        IActionTarget(self.ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
+        IActionTarget(protocol.actionTargetAddress).clearJoinState(tokenAddress, actionId, memberId);
 
         emit IGroupActionJoinEvents.GroupActionExited({
             tokenAddress: tokenAddress,
@@ -822,6 +811,39 @@ library GroupActionJoin {
             memberId: memberId,
             round: round,
             groupId: groupId
+        });
+    }
+
+    function _withdrawProviderQuota(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 memberId,
+        uint256 providerId,
+        uint256 amount
+    ) private {
+        uint256 quota = self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId];
+        uint256 available = quota - _quotaUsedAt(self, tokenAddress, actionId, groupId, providerId, memberId);
+        if (amount > available) {
+            revert IGroupActionJoinErrors.InsufficientProviderQuota(providerId, amount, available);
+        }
+        uint256 quotaAfter = quota - amount;
+        self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = quotaAfter;
+        if (quotaAfter == 0) {
+            self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].remove(memberId);
+        }
+
+        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
+
+        emit IGroupActionJoinEvents.ProviderQuotaRemoved({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            groupId: groupId,
+            providerId: providerId,
+            memberId: memberId,
+            amount: amount,
+            quotaTotal: quotaAfter
         });
     }
 }

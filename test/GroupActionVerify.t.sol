@@ -34,6 +34,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     uint256 internal constant MEMBER_AMOUNT_C = 30e18;
 
     GroupActionStorage.Layout internal _layout;
+    GroupActionStorage.Protocol internal _protocol;
     MockGroupActionPhase internal phase;
     MockGroupActionMemberNFT internal memberNFT;
 
@@ -42,8 +43,8 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         phase.setCurrentPhase(3);
         memberNFT = new MockGroupActionMemberNFT();
 
-        _layout.MEMBER_NFT_ADDRESS = address(memberNFT);
-        _layout.PHASE_ADDRESS = address(phase);
+        _protocol.memberNFTAddress = address(memberNFT);
+        _protocol.phaseAddress = address(phase);
         _layout.lockedVerifierId[TOKEN][ACTION_ID][ROUND] = VERIFIER_ID;
 
         _seedMember(1, GROUP_A, MEMBER_AMOUNT_A);
@@ -339,7 +340,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     }
 
     function _submit(uint256 groupId, uint256 startIndex, uint256[] memory scores) internal {
-        GroupActionVerify.submitOriginScores(_layout, TOKEN, ACTION_ID, VERIFIER_ID, groupId, startIndex, scores);
+        GroupActionVerify.submitOriginScores(_layout, _protocol, TOKEN, ACTION_ID, VERIFIER_ID, groupId, startIndex, scores);
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

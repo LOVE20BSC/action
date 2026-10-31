@@ -106,6 +106,15 @@ contract MockGroupActionExecutorActionTarget {
     bool public emitClearEvent;
     uint256 public clearRound;
     uint256 public mintRewardCalls;
+    address public voteAddress;
+
+    function setVoteAddress(address voteAddress_) external {
+        voteAddress = voteAddress_;
+    }
+
+    function VOTE_ADDRESS() external view returns (address) {
+        return voteAddress;
+    }
     address public lastRegisterTokenAddress;
     uint256 public lastRegisterActionId;
     uint256 public lastRegisterMemberId;

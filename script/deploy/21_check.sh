@@ -157,6 +157,39 @@ verify_deployed() {
 }
 
 # 仅检查地址出现无法识别同一 Executor 内的库互换，故按链接后的完整运行时代码比对。
+# Executor 的协议地址在构造函数固化为 immutable：构建产物在这些槽位是全零，链上由构造参数
+# 写入真实值。只回填 deployedBytecode.immutableReferences；artifact 里的 linkReferences
+# 也有 start 字段，其中 creation link 的偏移可能落在 runtime 范围内，不能覆盖真实差异。
+apply_chain_immutables() {
+    local contract_name=$1
+    local expected=$2
+    local actual=$3
+
+    local artifact starts
+    artifact=$(forge inspect "$contract_name" artifact 2>/dev/null) || return 1
+    starts=$(printf '%s' "$artifact" | python3 -c '
+import json
+import sys
+
+artifact = json.load(sys.stdin)
+references = (artifact.get("deployedBytecode") or {}).get("immutableReferences") or {}
+for entries in references.values():
+    for entry in entries:
+        if entry.get("length") != 32:
+            raise SystemExit("immutable slot length is not 32")
+        print(entry["start"])
+' 2>/dev/null) || return 1
+
+    local offset begin
+    while IFS= read -r offset; do
+        [ -z "$offset" ] && continue
+        begin=$((offset * 2 + 2))
+        expected="${expected:0:$begin}${actual:$begin:64}${expected:$((begin + 64))}"
+    done <<< "$starts"
+
+    printf '%s' "$expected"
+}
+
 verify_runtime_matches_artifact() {
     local contract_name=$1
     local address=$2
@@ -172,6 +205,10 @@ verify_runtime_matches_artifact() {
 
     expected=$(printf '%s' "$expected" | tr 'A-F' 'a-f')
     actual=$(printf '%s' "$actual" | tr 'A-F' 'a-f')
+    if ! expected=$(apply_chain_immutables "$contract_name" "$expected" "$actual"); then
+        echo -e "${RED}✗ $contract_name artifact unavailable${NC}"
+        return 1
+    fi
     if [ "$expected" != "$actual" ]; then
         echo -e "${RED}✗ $contract_name runtime does not match its build artifact${NC}"
         echo -e "    ${GRAY}${address}${NC}"
@@ -180,6 +217,22 @@ verify_runtime_matches_artifact() {
 
     echo -e "  ${GREEN}✓${NC} ${contract_name} runtime matches build artifact"
     echo -e "    ${GRAY}${address}${NC}"
+}
+
+# immutable 回填会掩盖这些槽位的取值，故逐个回读构造函数派生的地址：
+# 三个 Executor 共有的 STAKE/MEMBER_NFT/PHASE，以及各自的协议地址（由调用方追加）。
+verify_executor_bindings() {
+    local name=$1
+    local address=$2
+    shift 2
+
+    local pair getter expected actual
+    for pair in "STAKE_ADDRESS:$STAKE_ADDRESS" "MEMBER_NFT_ADDRESS:$MEMBER_NFT_ADDRESS" "PHASE_ADDRESS:$PHASE_ADDRESS" "$@"; do
+        getter=${pair%%:*}
+        expected=${pair#*:}
+        actual=$(cast call "$address" "$getter()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
+        verify_value "$name.$getter" "$expected" "$actual" || ((FAILED+=1))
+    done
 }
 
 # 库的 runtime code 开头内嵌自身地址（部署时由 constructor 写入），编译产物里该位置是
@@ -271,8 +324,8 @@ verify_value "memberNFTAddress" "$MEMBER_NFT_ADDRESS" "$ACTUAL_MEMBER" || ((FAIL
 ACTUAL_PHASE=$(cast call "$ACTION_TARGET_ADDRESS" "PHASE_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "phaseAddress" "$PHASE_ADDRESS" "$ACTUAL_PHASE" || ((FAILED+=1))
 
-# Executor 的派生值在 init 时从 Stake 缓存且不可回读；核对 Stake 本身与 core 地址文件一致，
-# 才能证明三个 Executor 的 memberNFT/phase/vote/launch 派生源正确。
+# Executor 的 immutable 取值已由上面的 getter 复核；这里继续核对 Stake 本身与 core 地址文件一致，
+# 证明三个 Executor 的 memberNFT/phase/vote/launch 派生源未错配。
 print_contract_header "2" "Stake (derived bindings)" "$STAKE_ADDRESS"
 verify_deployed "Stake" "$STAKE_ADDRESS" || ((FAILED+=1))
 ACTUAL_STAKE_MEMBER=$(cast call "$STAKE_ADDRESS" "MEMBER_NFT_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
@@ -294,22 +347,18 @@ verify_deployed "Stake ROUTER_ADDRESS" "$ACTUAL_STAKE_ROUTER" || ((FAILED+=1))
 print_contract_header "3" "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 
-ACTUAL_INIT=$(cast call "$LP_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
-
 ACTUAL_TARGET=$(cast call "$LP_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+verify_executor_bindings "LpExecutor" "$LP_EXECUTOR_ADDRESS" "PAIR_FACTORY_ADDRESS:$ACTUAL_STAKE_FACTORY"
 
 # 4. 验证 GroupActionExecutor
 print_contract_header "4" "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" \
     "${GROUP_ACTION_LIBRARY_ARGS[@]}"
 
-ACTUAL_INIT=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
-
 ACTUAL_TARGET=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+verify_executor_bindings "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" "VOTE_ADDRESS:$VOTE_ADDRESS"
 
 # splits 以逗号分隔配置，cast 返回 "[a [1e17], b [4e17]]"：逐个元素去掉科学计数法标注与空格后比对
 # （标注形如 [1e17]，不会误伤数组外层括号）
@@ -340,11 +389,10 @@ print_contract_header "5" "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRES
 verify_deployed_and_runtime "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS" \
     "${GROUP_SERVICE_LIBRARY_ARGS[@]}"
 
-ACTUAL_INIT=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
-
 ACTUAL_TARGET=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
+verify_executor_bindings "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS" \
+    "LAUNCH_ADDRESS:$LAUNCH_ADDRESS" "MINT_ADDRESS:$MINT_ADDRESS"
 
 ACTUAL_GAE=$(cast call "$GROUP_SERVICE_EXECUTOR_ADDRESS" "GROUP_ACTION_EXECUTOR_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "groupActionExecutorAddress" "$GROUP_ACTION_EXECUTOR_ADDRESS" "$ACTUAL_GAE" || ((FAILED+=1))

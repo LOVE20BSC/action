@@ -2,13 +2,11 @@
 pragma solidity =0.8.37;
 
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
-import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
-import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
 library GroupActionStorage {
     using AddressSet for AddressSet.Storage;
@@ -31,14 +29,17 @@ library GroupActionStorage {
         uint256 deactivatedRound;
     }
 
+    /// @dev Constructor-time bindings of the executor, passed to the libraries that need them.
+    struct Protocol {
+        address actionTargetAddress;
+        address stakeAddress;
+        address memberNFTAddress;
+        address phaseAddress;
+        address voteAddress;
+    }
+
     struct Layout {
-        address ACTION_TARGET_ADDRESS;
-        address STAKE_ADDRESS;
-        address MEMBER_NFT_ADDRESS;
-        address PHASE_ADDRESS;
-        address VOTE_ADDRESS;
         uint256[] SPLITS;
-        bool initialized;
 
         // tokenAddress => actionId => join token address
         mapping(address => mapping(uint256 => address)) joinTokenAddressByActionId;
@@ -180,18 +181,6 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => applicationId => voterId => votes that voter cast
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))))
             voteAmountByApplicationIdByVoterId;
-    }
-
-    function joinRound(Layout storage self) internal view returns (uint256) {
-        return GroupActionRoundAxis.joinRound(self.PHASE_ADDRESS);
-    }
-
-    function currentJoinRound(Layout storage self) internal view returns (uint256) {
-        uint256 round = joinRound(self);
-        if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted(1, 0);
-        }
-        return round;
     }
 
     function memberAmountAt(

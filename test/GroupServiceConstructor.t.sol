@@ -1,25 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {GroupServiceExecutor} from "../src/GroupServiceExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
-import {MockGroupServiceStake, MockGroupServiceToken} from "./mocks/GroupServiceMocks.sol";
+import {MockGroupServiceToken} from "./mocks/GroupServiceMocks.sol";
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 
-contract GroupServiceInitTest is GroupServiceTestBase {
-    function testInitStoresAddressesAndDerivesDependencies() external view {
+contract GroupServiceConstructorTest is GroupServiceTestBase {
+    function testConstructorStoresAddressesAndDerivesDependencies() external view {
         require(executor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target stored");
         require(executor.GROUP_ACTION_EXECUTOR_ADDRESS() == address(groupAction), "group action executor stored");
-        require(executor.initialized(), "initialized");
         // Derived dependencies are read back through the round getters: they
         // only answer when phaseAddress is wired.
         require(executor.currentVoteRound() == CREATION_PHASE, "vote round derives phase");
-    }
-
-    function testInitCannotRunTwice() external {
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.AlreadyInitialized.selector));
-        executor.init(address(actionTarget), address(stake), address(groupAction));
     }
 
     function testRoundGetters() external {
@@ -213,19 +206,6 @@ contract GroupServiceInitTest is GroupServiceTestBase {
 
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, new bytes[](0));
-    }
-
-    function _expectInitRevert(
-        address actionTargetAddress,
-        address stakeAddress,
-        address groupActionExecutorAddress,
-        bytes memory expectedRevert
-    ) internal {
-        GroupServiceExecutor fresh = new GroupServiceExecutor();
-        vm.prank(address(fresh));
-        vm.expectRevert(expectedRevert);
-        fresh.init(actionTargetAddress, stakeAddress, groupActionExecutorAddress);
-        require(!fresh.initialized(), "zero init argument leaves the flag clear");
     }
 
     function _expectCreateRevert(

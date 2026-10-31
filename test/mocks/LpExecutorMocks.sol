@@ -136,6 +136,15 @@ contract MockLpActionTarget {
     bool public revertMint;
     bool public emitClearEvent;
     uint256 public mintReturnAmount;
+    address public voteAddress;
+
+    function setVoteAddress(address voteAddress_) external {
+        voteAddress = voteAddress_;
+    }
+
+    function VOTE_ADDRESS() external view returns (address) {
+        return voteAddress;
+    }
 
     uint256 public registerCalls;
     uint256 public clearCalls;

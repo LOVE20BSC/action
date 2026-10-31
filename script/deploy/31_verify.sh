@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 步骤三：合约开源验证。自包含——自行载入 network.params 与上次部署写入的 addresses.action.params，
-# 不依赖入口脚本在部署后刷新地址。用法：script/deploy/31_verify.sh <network>
+# 步骤三：合约开源验证。自包含——自行载入 network.params、action.params 与上次部署写入的
+# addresses.action.params，不依赖入口脚本在部署后刷新地址。
+# 用法：script/deploy/31_verify.sh <network>
 
 network="${1:?usage: script/deploy/31_verify.sh <network>}"
 
@@ -18,7 +19,9 @@ if [ ! -d "$NETWORK_DIR" ]; then
     exit 1
 fi
 
-for config in network.params addresses.action.params; do
+# 三个 Executor 的构造参数来自 addresses.action.params（ActionTarget、GroupActionExecutor）
+# 与 action.params（splits）。
+for config in network.params action.params addresses.action.params; do
     if [ ! -f "$NETWORK_DIR/$config" ]; then
         echo "Error: Missing required configuration: $NETWORK_DIR/$config"
         exit 1
@@ -26,6 +29,7 @@ for config in network.params addresses.action.params; do
 done
 
 params_load "$NETWORK_DIR/network.params"
+params_load "$NETWORK_DIR/action.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 
 cd "$PROJECT_ROOT"
@@ -80,7 +84,25 @@ for field in $CONTRACT_ADDRESS_FIELDS $GROUP_ACTION_LIBRARY_FIELDS $GROUP_SERVIC
     fi
 done
 
-# 均无构造函数参数（依赖经 init 绑定），直接提交验证。
+# 三个 Executor 的协议地址在构造函数里固化为 immutable，验证时必须回填构造参数。
+# 命令替换失败在 set -e 下会静默中止，故逐个显式判别，保证失败有明确输出，
+# 且全部编码在任何验证请求之前完成。
+if ! LP_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
+    "$ACTION_TARGET_ADDRESS"); then
+    echo "Error: Failed to encode LpExecutor constructor arguments"
+    exit 1
+fi
+if ! GROUP_ACTION_EXECUTOR_ARGS=$(cast abi-encode "constructor(address,uint256[])" \
+    "$ACTION_TARGET_ADDRESS" "[${GROUP_ACTION_SPLITS:-}]"); then
+    echo "Error: Failed to encode GroupActionExecutor constructor arguments"
+    exit 1
+fi
+if ! GROUP_SERVICE_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
+    "$GROUP_ACTION_EXECUTOR_ADDRESS"); then
+    echo "Error: Failed to encode GroupServiceExecutor constructor arguments"
+    exit 1
+fi
+
 COMMON_ARGS=(--chain "$CHAIN_ID" --verifier etherscan --verifier-url "https://api.etherscan.io/v2/api" --watch)
 verify_contract() {
     local address=$1 fqn=$2
@@ -90,9 +112,12 @@ verify_contract() {
 }
 
 verify_contract "$ACTION_TARGET_ADDRESS" "src/ActionTarget.sol:ActionTarget"
-verify_contract "$LP_EXECUTOR_ADDRESS" "src/LpExecutor.sol:LpExecutor"
-verify_contract "$GROUP_ACTION_EXECUTOR_ADDRESS" "src/GroupActionExecutor.sol:GroupActionExecutor" "${GROUP_ACTION_LIBRARY_ARGS[@]}"
-verify_contract "$GROUP_SERVICE_EXECUTOR_ADDRESS" "src/GroupServiceExecutor.sol:GroupServiceExecutor" "${GROUP_SERVICE_LIBRARY_ARGS[@]}"
+verify_contract "$LP_EXECUTOR_ADDRESS" "src/LpExecutor.sol:LpExecutor" \
+    --constructor-args "$LP_EXECUTOR_ARGS"
+verify_contract "$GROUP_ACTION_EXECUTOR_ADDRESS" "src/GroupActionExecutor.sol:GroupActionExecutor" \
+    --constructor-args "$GROUP_ACTION_EXECUTOR_ARGS" "${GROUP_ACTION_LIBRARY_ARGS[@]}"
+verify_contract "$GROUP_SERVICE_EXECUTOR_ADDRESS" "src/GroupServiceExecutor.sol:GroupServiceExecutor" \
+    --constructor-args "$GROUP_SERVICE_EXECUTOR_ARGS" "${GROUP_SERVICE_LIBRARY_ARGS[@]}"
 for i in "${!ALL_LIBRARY_FQNS[@]}"; do
     field=${ALL_LIBRARY_FIELDS[$i]}
     verify_contract "${!field}" "${ALL_LIBRARY_FQNS[$i]}"

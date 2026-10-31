@@ -25,11 +25,20 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
 
     GroupActionStorage.Layout internal _layout;
 
-    modifier onlyActionTarget() {
-        if (msg.sender != _layout.ACTION_TARGET_ADDRESS) {
-            revert NotActionTarget(msg.sender);
-        }
-        _;
+    address public immutable override VOTE_ADDRESS;
+
+    // forge-lint: disable-next-item(missing-zero-check)
+    constructor(address actionTargetAddress, uint256[] memory splits) ExecutorBase(actionTargetAddress) {
+        VOTE_ADDRESS = IStake(STAKE_ADDRESS).VOTE_ADDRESS();
+        _layout.SPLITS = splits;
+    }
+
+    function _protocol() internal view returns (GroupActionStorage.Protocol memory protocol) {
+        protocol.actionTargetAddress = ACTION_TARGET_ADDRESS;
+        protocol.stakeAddress = STAKE_ADDRESS;
+        protocol.memberNFTAddress = MEMBER_NFT_ADDRESS;
+        protocol.phaseAddress = PHASE_ADDRESS;
+        protocol.voteAddress = VOTE_ADDRESS;
     }
 
     function joinTokenAddress(
@@ -59,31 +68,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return _layout.SPLITS;
     }
 
-    function init(address actionTargetAddress, address stakeAddress, uint256[] calldata splits) external {
-        if (_layout.initialized) {
-            revert AlreadyInitialized();
-        }
-        _layout.initialized = true;
-
-        IStake stake = IStake(stakeAddress);
-        address memberNFTAddress = stake.MEMBER_NFT_ADDRESS();
-        address phaseAddress = stake.PHASE_ADDRESS();
-        address voteAddress = stake.VOTE_ADDRESS();
-
-        _layout.ACTION_TARGET_ADDRESS = actionTargetAddress;
-        _layout.STAKE_ADDRESS = stakeAddress;
-        _layout.MEMBER_NFT_ADDRESS = memberNFTAddress;
-        _layout.PHASE_ADDRESS = phaseAddress;
-        _layout.VOTE_ADDRESS = voteAddress;
-        _layout.SPLITS = splits;
-    }
-
     function currentVerifyRound() external view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.verifyRound(_layout.PHASE_ADDRESS);
-        if (round == 0) {
-            revert RoundNotStarted(1, 0);
-        }
-        return round;
+        return GroupActionVerify.currentVerifyRound(PHASE_ADDRESS);
     }
 
     function generatedActionRewardByGroupId(
@@ -99,7 +85,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         if (groupFinalScore == 0) {
             return 0;
         }
-        (uint256 proposalReward, ) = IActionTarget(_layout.ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
         return Math.mulDiv(proposalReward, groupFinalScore, _layout.totalFinalScore[tokenAddress][actionId][round]);
     }
 
@@ -111,7 +97,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         if (!_isRoundRewardable(tokenAddress, actionId, round)) {
             return 0;
         }
-        (uint256 proposalReward, ) = IActionTarget(_layout.ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
         return proposalReward;
     }
 
@@ -120,15 +106,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         override
         onlyActionTarget
     {
-        GroupActionManager.onProposalCreated(_layout, tokenAddress, actionId, targetData);
+        GroupActionManager.onProposalCreated(_layout, _protocol(), tokenAddress, actionId, targetData);
     }
-
-    function onProposalSubmitted(address, uint256, uint256, bytes[] calldata)
-        external
-        virtual
-        override
-        onlyActionTarget
-    {}
 
     function onProposalVoted(
         address tokenAddress,
@@ -155,12 +134,14 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 providerId,
         string[] calldata verificationValues
     ) external nonReentrant {
-        GroupActionJoin.join(_layout, tokenAddress, actionId, groupId, memberId, amount, providerId, verificationValues);
+        GroupActionJoin.join(
+            _layout, _protocol(), tokenAddress, actionId, groupId, memberId, amount, providerId, verificationValues
+        );
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function withdraw(address tokenAddress, uint256 actionId, uint256 memberId, uint256 amount) external nonReentrant {
-        GroupActionJoin.withdraw(_layout, tokenAddress, actionId, memberId, amount);
+        GroupActionJoin.withdraw(_layout, _protocol(), tokenAddress, actionId, memberId, amount);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -172,12 +153,14 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 providerId,
         uint256 amount
     ) external nonReentrant {
-        GroupActionJoin.withdrawProviderQuota(_layout, tokenAddress, actionId, groupId, memberId, providerId, amount);
+        GroupActionJoin.withdrawProviderQuota(
+            _layout, _protocol(), tokenAddress, actionId, groupId, memberId, providerId, amount
+        );
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function exit(address tokenAddress, uint256 actionId, uint256 memberId) external nonReentrant {
-        GroupActionJoin.exit(_layout, tokenAddress, actionId, memberId);
+        GroupActionJoin.exit(_layout, _protocol(), tokenAddress, actionId, memberId);
     }
 
     function joinInfo(
@@ -230,7 +213,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256[] calldata memberIds,
         uint256[] calldata amounts
     ) external nonReentrant {
-        GroupActionJoin.addProviderQuota(_layout, tokenAddress, actionId, groupId, providerId, memberIds, amounts);
+        GroupActionJoin.addProviderQuota(
+            _layout, _protocol(), tokenAddress, actionId, groupId, providerId, memberIds, amounts
+        );
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -241,7 +226,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 providerId,
         uint256[] calldata memberIds
     ) external nonReentrant {
-        GroupActionJoin.removeProviderQuota(_layout, tokenAddress, actionId, groupId, providerId, memberIds);
+        GroupActionJoin.removeProviderQuota(
+            _layout, _protocol(), tokenAddress, actionId, groupId, providerId, memberIds
+        );
     }
 
     function providerQuotas(
@@ -338,7 +325,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 startIndex,
         uint256[] calldata originScores
     ) external {
-        GroupActionVerify.submitOriginScores(_layout, tokenAddress, actionId, verifierId, groupId, startIndex, originScores);
+        GroupActionVerify.submitOriginScores(
+            _layout, _protocol(), tokenAddress, actionId, verifierId, groupId, startIndex, originScores
+        );
     }
 
     function originScore(
@@ -394,7 +383,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 verifierId,
         string calldata description
     ) external nonReentrant returns (uint256 applicationId) {
-        return GroupActionVerify.submitVerifierApplication(_layout, tokenAddress, actionId, verifierId, description);
+        return GroupActionVerify.submitVerifierApplication(
+            _layout, _protocol(), tokenAddress, actionId, verifierId, description
+        );
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -403,7 +394,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 actionId,
         uint256 verifierId
     ) external nonReentrant {
-        GroupActionVerify.cancelVerifierApplication(_layout, tokenAddress, actionId, verifierId);
+        GroupActionVerify.cancelVerifierApplication(_layout, _protocol(), tokenAddress, actionId, verifierId);
     }
 
     function verifierStake(
@@ -517,12 +508,12 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 groupId,
         GroupConfig calldata config
     ) external nonReentrant {
-        GroupActionManager.activateGroup(_layout, tokenAddress, actionId, groupId, config);
+        GroupActionManager.activateGroup(_layout, _protocol(), tokenAddress, actionId, groupId, config);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function deactivateGroup(address tokenAddress, uint256 actionId, uint256 groupId) external nonReentrant {
-        GroupActionManager.deactivateGroup(_layout, tokenAddress, actionId, groupId);
+        GroupActionManager.deactivateGroup(_layout, _protocol(), tokenAddress, actionId, groupId);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -532,7 +523,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 groupId,
         GroupConfig calldata config
     ) external {
-        GroupActionManager.updateGroupConfig(_layout, tokenAddress, actionId, groupId, config);
+        GroupActionManager.updateGroupConfig(_layout, _protocol(), tokenAddress, actionId, groupId, config);
     }
 
     function groupState(
@@ -576,7 +567,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     }
 
     function maxJoinAmount(address tokenAddress, uint256 actionId) external view returns (uint256) {
-        return GroupActionManager.maxJoinAmount(_layout, tokenAddress, actionId);
+        return GroupActionManager.maxJoinAmount(_layout, _protocol(), tokenAddress, actionId);
     }
 
     function staked(address tokenAddress, uint256 actionId) external view returns (uint256) {
@@ -623,16 +614,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionManager.hasActiveGroups(_layout, tokenAddress, memberId);
     }
 
-    function ACTION_TARGET_ADDRESS() external view returns (address) {
-        return _layout.ACTION_TARGET_ADDRESS;
-    }
-
-    function initialized() external view returns (bool) {
-        return _layout.initialized;
-    }
-
     function joinedAmountByActionId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256 amount) {
-        if (round > _layout.joinRound()) {
+        if (round > _joinRound()) {
             return 0;
         }
         return _layout.joinedAmountByActionId[tokenAddress][actionId].value(round);
@@ -644,7 +627,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 amount) {
-        if (round > _layout.joinRound()) {
+        if (round > _joinRound()) {
             return 0;
         }
         return _layout.memberAmountAt(tokenAddress, actionId, round, memberId);
@@ -681,7 +664,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
             // forge-lint: disable-next-line(boolean-cst)
             return (0, 0, false);
         }
-        (uint256 proposalReward, ) = IActionTarget(_layout.ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
         // forge-lint: disable-next-line(boolean-cst)
         return (Math.mulDiv(proposalReward, memberFinalScore, totalFinal), 0, false);
     }
@@ -705,20 +688,12 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return score;
     }
 
-    function _memberNFTAddress() internal view override returns (address) {
-        return _layout.MEMBER_NFT_ADDRESS;
-    }
-
-    function _phaseAddress() internal view override returns (address) {
-        return _layout.PHASE_ADDRESS;
-    }
-
     function _joinRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.joinRound(_layout.PHASE_ADDRESS);
+        return GroupActionRoundAxis.joinRound(PHASE_ADDRESS);
     }
 
     function _mintRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.mintRound(_layout.PHASE_ADDRESS);
+        return GroupActionRoundAxis.mintRound(PHASE_ADDRESS);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
@@ -728,31 +703,24 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
-        if (createdRound == 0) {
-            revert ActionNotCreated(tokenAddress, actionId);
-        }
-        if (round < createdRound) {
-            revert RoundBeforeActionCreated(round, createdRound);
-        }
-        uint256 mintRound = _mintRound();
-        if (round > mintRound) {
-            revert RoundAfterMintWindow(round, mintRound);
-        }
-
-        if (_layout.memberMinted[tokenAddress][actionId][round][memberId]) {
-            revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
-        }
+        _requireMintWindow(
+            tokenAddress,
+            actionId,
+            round,
+            memberId,
+            _layout.createdRoundByActionId[tokenAddress][actionId],
+            _layout.memberMinted[tokenAddress][actionId][round][memberId]
+        );
 
         uint256 totalFinal = _layout.totalFinalScore[tokenAddress][actionId][round];
         if (totalFinal != 0 && GroupActionVerify.isRoundVerified(_layout, tokenAddress, actionId, round)) {
             uint256 memberFinalScore = _memberFinalScore(tokenAddress, actionId, round, memberId);
             if (memberFinalScore != 0) {
                 (uint256 proposalReward, bool actionMinted) =
-                    IActionTarget(_layout.ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+                    IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
                 if (!actionMinted && proposalReward != 0) {
                     // forge-lint: disable-next-line(reentrancy-no-eth)
-                    proposalReward = IActionTarget(_layout.ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
+                    proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
                 }
                 mintAmount = Math.mulDiv(proposalReward, memberFinalScore, totalFinal);
             }

@@ -137,6 +137,7 @@ contract MockGroupServiceActionTarget {
 
     address public PHASE_ADDRESS;
     address public MINT_ADDRESS;
+    address public VOTE_ADDRESS;
 
     // tokenAddress => actionId => creation vote round
     mapping(address => mapping(uint256 => uint256)) internal _createdRound;
@@ -170,6 +171,10 @@ contract MockGroupServiceActionTarget {
 
     function setMintAddress(address mintAddress) external {
         MINT_ADDRESS = mintAddress;
+    }
+
+    function setVoteAddress(address voteAddress) external {
+        VOTE_ADDRESS = voteAddress;
     }
 
     function setBoundExecutor(address tokenAddress, uint256 actionId, address executor_) external {
@@ -306,6 +311,8 @@ contract MockGroupServiceActionTarget {
 /// @notice GroupActionExecutor mock: programmable per-round group ledger — the
 ///         served community data GroupService aggregates.
 contract MockGroupServiceGroupActionExecutor {
+    address public ACTION_TARGET_ADDRESS;
+
     // tokenAddress => memberId => the member owns an active group
     mapping(address => mapping(uint256 => bool)) internal _activeGroups;
     // tokenAddress => actionId => memberId => applicationId (0 = no application)
@@ -333,6 +340,10 @@ contract MockGroupServiceGroupActionExecutor {
 
     function setHasActiveGroups(address tokenAddress, uint256 memberId, bool active) external {
         _activeGroups[tokenAddress][memberId] = active;
+    }
+
+    function setActionTargetAddress(address actionTargetAddress) external {
+        ACTION_TARGET_ADDRESS = actionTargetAddress;
     }
 
     function setJoinTokenAddress(address tokenAddress, uint256 actionId, address joinTokenAddressValue) external {

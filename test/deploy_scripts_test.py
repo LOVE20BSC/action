@@ -29,13 +29,30 @@ def fake_tool(tool, args):
         elif args[0] == "code":
             if os.environ.get("RPC_CODE_ERROR"):
                 return 1
-            print(data["code"].get(args[1].lower(), "0x01"))
+            code = data["code"].get(args[1].lower(), "0x01")
+            if os.environ.get("BAD_CODE", "").lower() == args[1].lower():
+                print("0x" + "99" * 200)
+            else:
+                mutation = os.environ.get("MUTATE")
+                if mutation:
+                    mutate_address, offset = mutation.rsplit(":", 1)
+                    if mutate_address.lower() == args[1].lower():
+                        position = 2 + int(offset) * 2
+                        code = code[:position] + "99" + code[position + 2:]
+                print(code)
         elif args[0] == "call":
             if args[2] == "SPLITS()(uint256[])" and os.environ.get("MOCK_EMPTY_SPLITS"):
                 print("[]")
             else:
                 key = args[1].lower() + "/" + args[2]
                 print(os.environ.get("BAD_VALUE", "ERROR") if key == os.environ.get("BAD_CALL") else data["calls"][key])
+        elif args[0] == "abi-encode":
+            if os.environ.get("ABI_ENCODE_FAIL") == args[1]:
+                return 1
+            fail_arg = os.environ.get("ABI_ENCODE_FAIL_ARG")
+            if fail_arg and any(arg.lower() == fail_arg.lower() for arg in args[2:]):
+                return 1
+            print("0x1234")
         else:
             raise AssertionError(args)
     elif tool == "mktemp":
@@ -74,6 +91,18 @@ def fake_tool(tool, args):
         project_root = os.environ.get("MOCK_PROJECT_ROOT")
         if project_root and os.path.realpath(os.getcwd()) != os.path.realpath(project_root):
             return 1
+        if args[2] == "artifact":
+            refs = data.get("immutables", {}).get(args[1], {})
+            # 真实 artifact 同时带 creation 与 deployed 的 linkReferences，二者也有 start：
+            # 回填只能读取 deployedBytecode.immutableReferences，不能碰 link 偏移。
+            print(json.dumps({
+                "bytecode": {"linkReferences": {"src/Lib.sol": {"Lib": [{"start": 180, "length": 20}]}}},
+                "deployedBytecode": {
+                    "linkReferences": {"src/Lib.sol": {"Lib": [{"start": 150, "length": 20}]}},
+                    "immutableReferences": refs,
+                },
+            }))
+            return 0
         code = data["inspect"][args[1]]
         provided = {}
         for index, arg in enumerate(args):
@@ -163,8 +192,15 @@ def main():
                 "VOTE_ADDRESS()(address)": "VOTE_ADDRESS", "SUBMIT_ADDRESS()(address)": "SUBMIT_ADDRESS",
                 "MEMBER_NFT_ADDRESS()(address)": "MEMBER_NFT_ADDRESS", "PHASE_ADDRESS()(address)": "PHASE_ADDRESS"})
         for name in ("LP_EXECUTOR", "GROUP_ACTION_EXECUTOR", "GROUP_SERVICE_EXECUTOR"):
-            getters(name, {"initialized()(bool)": "true", "ACTION_TARGET_ADDRESS()(address)": "ACTION_TARGET_ADDRESS"})
+            getters(name, {"ACTION_TARGET_ADDRESS()(address)": "ACTION_TARGET_ADDRESS",
+                           "STAKE_ADDRESS()(address)": "STAKE_ADDRESS",
+                           "MEMBER_NFT_ADDRESS()(address)": "MEMBER_NFT_ADDRESS",
+                           "PHASE_ADDRESS()(address)": "PHASE_ADDRESS"})
+        getters("LP_EXECUTOR", {"PAIR_FACTORY_ADDRESS()(address)": "PAIR_FACTORY_ADDRESS"})
+        getters("GROUP_ACTION_EXECUTOR", {"VOTE_ADDRESS()(address)": "VOTE_ADDRESS"})
         getters("GROUP_SERVICE_EXECUTOR", {
+            "LAUNCH_ADDRESS()(address)": "LAUNCH_ADDRESS",
+            "MINT_ADDRESS()(address)": "MINT_ADDRESS",
             "GROUP_ACTION_EXECUTOR_ADDRESS()(address)": "GROUP_ACTION_EXECUTOR_ADDRESS"
         })
         # cast 的数组返回逐元素带科学计数法标注；21_check.sh 的 strip_sci_notation 会归一化。
@@ -185,16 +221,29 @@ def main():
             "GROUP_ACTION_EXECUTOR": "GroupActionExecutor",
             "GROUP_SERVICE_EXECUTOR": "GroupServiceExecutor",
         }
-        inspect = {
-            contract: code[env[executor + "_ADDRESS"].lower()]
-            for executor, contract in executor_contracts.items()
-        }
-        # 两个普通合约不链接库，产物与链上应直接一致，用于覆盖「无库也要逐字节比对」。
-        for field, contract, body in (("ACTION_TARGET_ADDRESS", "ActionTarget", "aa"),
-                                      ("LP_EXECUTOR_ADDRESS", "LpExecutor", "bb")):
-            address = env[field].lower()
-            code[address] = "0x" + body * 20
-            inspect[contract] = code[address]
+
+        # Executor 的协议地址在构造函数写入 immutable：产物槽位为零，链上是真实值。
+        # 在 byte 100 放一个 32 字节槽，覆盖 21_check 按 immutableReferences 回填的逻辑。
+        def with_immutable(body_hex, fill):
+            return body_hex[:200] + fill * 32 + body_hex[264:]
+
+        immutables = {}
+        inspect = {}
+        for executor, contract in executor_contracts.items():
+            address = env[executor + "_ADDRESS"].lower()
+            body = code[address][2:] + "ee" * (200 - len(code[address][2:]) // 2)
+            code[address] = "0x" + with_immutable(body, "11")
+            inspect[contract] = "0x" + with_immutable(body, "00")
+            immutables[contract] = {"0": [{"start": 100, "length": 32}]}
+        # ActionTarget 不链接库、无 immutable，产物与链上应直接一致。
+        address = env["ACTION_TARGET_ADDRESS"].lower()
+        code[address] = "0x" + "aa" * 200
+        inspect["ActionTarget"] = code[address]
+        # LpExecutor 无链接库，但有 immutable。
+        lp_body = "bb" * 200
+        code[env["LP_EXECUTOR_ADDRESS"].lower()] = "0x" + with_immutable(lp_body, "11")
+        inspect["LpExecutor"] = "0x" + with_immutable(lp_body, "00")
+        immutables["LpExecutor"] = {"0": [{"start": 100, "length": 32}]}
         # 库的 runtime code 内嵌自身地址（部署时由 constructor 写入），编译产物里该位置是
         # 20 字节零。21_check.sh 按入账地址替换这一处后再比对，故链上取真实地址、产物取零。
         library_placeholder = "73" + "0" * 40
@@ -210,7 +259,7 @@ def main():
         tmp_dir.mkdir()
         data_path.write_text(json.dumps({
             "env": env, "contracts": contracts, "calls": calls, "code": code,
-            "inspect": inspect, "library_canonical": library_canonical}))
+            "inspect": inspect, "immutables": immutables, "library_canonical": library_canonical}))
         network.joinpath("network.params").write_text("CHAIN_ID=97\nRPC_URL=http://invalid.local\n")
         core_names = ["LOVE20_TOKEN", "MEMBER_NFT", "PHASE", "LAUNCH", "MINT", "STAKE", "SUBMIT", "VOTE"]
         network.joinpath("addresses.core.params").write_text("\n".join(
@@ -346,6 +395,15 @@ def main():
         assert "GroupRecipients runtime does not match" in result.stdout + result.stderr, \
             result.stdout + result.stderr
         saved.write_text(address_file_text())
+        # 非 immutable 槽位仍须逐字节一致：回填逻辑不能掩盖其它差异。
+        result, _ = run("21_check.sh", False, ("test",), BAD_CODE=env["LP_EXECUTOR_ADDRESS"])
+        assert "LpExecutor runtime does not match" in result.stdout + result.stderr, \
+            result.stdout + result.stderr
+        # linkReferences 的 start 不是 immutable：落在该偏移的差异必须失败，不能被回填掩盖。
+        result, _ = run("21_check.sh", False, ("test",),
+                        MUTATE=f"{env['GROUP_ACTION_EXECUTOR_ADDRESS']}:150")
+        assert "GroupActionExecutor runtime does not match" in result.stdout + result.stderr, \
+            result.stdout + result.stderr
         # 空数组表示不分层：链上 SPLITS 也应为空时通过。
         params_path = network / "action.params"
         params_text = params_path.read_text()
@@ -355,7 +413,10 @@ def main():
         for contract, signature in [("ACTION_TARGET", "MINT_ADDRESS()(address)"), ("ACTION_TARGET", "VOTE_ADDRESS()(address)"),
                 ("ACTION_TARGET", "SUBMIT_ADDRESS()(address)"), ("ACTION_TARGET", "MEMBER_NFT_ADDRESS()(address)"),
                 ("ACTION_TARGET", "PHASE_ADDRESS()(address)"), ("LP_EXECUTOR", "ACTION_TARGET_ADDRESS()(address)"),
-                ("GROUP_SERVICE_EXECUTOR", "initialized()(bool)"),
+                ("LP_EXECUTOR", "STAKE_ADDRESS()(address)"), ("LP_EXECUTOR", "PAIR_FACTORY_ADDRESS()(address)"),
+                ("GROUP_ACTION_EXECUTOR", "VOTE_ADDRESS()(address)"),
+                ("GROUP_SERVICE_EXECUTOR", "LAUNCH_ADDRESS()(address)"),
+                ("GROUP_SERVICE_EXECUTOR", "MINT_ADDRESS()(address)"),
                 ("STAKE", "MEMBER_NFT_ADDRESS()(address)"),
                 ("LAUNCH", "PAIR_FACTORY_ADDRESS()(address)"),
                 ("GROUP_ACTION_EXECUTOR", "SPLITS()(uint256[])")]:
@@ -521,10 +582,31 @@ def main():
         result, log = run("31_verify.sh", False, ("test",), VERIFY_FAIL="src/GroupServiceExecutor.sol:GroupServiceExecutor")
         assert source_of(verify_calls(log)[-1]) == "src/GroupServiceExecutor.sol:GroupServiceExecutor", log
         result, log = run("31_verify.sh", False, ("test",), VERIFY_FAIL="src/GroupActionJoin.sol:GroupActionJoin")
-        assert any(source_of(call) == "src/GroupActionJoin.sol:GroupActionJoin" for call in log), log
+        assert any(source_of(call) == "src/GroupActionJoin.sol:GroupActionJoin" for call in verify_calls(log)), log
         assert "Source verification succeeded" not in result.stdout
         _, log = run("31_verify.sh", args=("test",))
         assert_verify_plan(log)
+        # 三个 Executor 的构造参数必须回填；GroupActionExecutor 的 splits 以数组字面量编码。
+        encoder_calls = [call for call in log if call[:2] == ["cast", "abi-encode"]]
+        assert len(encoder_calls) == 3, encoder_calls
+        splits_call = next(call for call in encoder_calls if "uint256[]" in call[2])
+        assert "[" + env["GROUP_ACTION_SPLITS"] + "]" in splits_call, splits_call
+        by_source = verifies_by_source(log)
+        for source in ("src/LpExecutor.sol:LpExecutor", "src/GroupActionExecutor.sol:GroupActionExecutor",
+                       "src/GroupServiceExecutor.sol:GroupServiceExecutor"):
+            assert by_source[source][by_source[source].index("--constructor-args") + 1] == "0x1234", by_source[source]
+        assert "--constructor-args" not in by_source["src/ActionTarget.sol:ActionTarget"]
+        # 编码失败：在任何验证请求之前显式中止。Lp 与 GroupService 的签名相同，
+        # 用入参地址区分两者的失败路径。
+        for signature, label in [("constructor(address)", "LpExecutor"),
+                                 ("constructor(address,uint256[])", "GroupActionExecutor")]:
+            result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL=signature)
+            assert f"Failed to encode {label}" in result.stdout, result.stdout
+            assert not any(call[0] == "forge" for call in log)
+        result, log = run("31_verify.sh", False, ("test",),
+                          ABI_ENCODE_FAIL_ARG=env["GROUP_ACTION_EXECUTOR_ADDRESS"])
+        assert "Failed to encode GroupServiceExecutor" in result.stdout, result.stdout
+        assert not any(call[0] == "forge" for call in log)
         # 缺 ETHERSCAN_API_KEY：验证步失败且不提交任何验证请求。
         with network.joinpath("network.params").open("a") as config:
             config.write("ETHERSCAN_API_KEY=\n")

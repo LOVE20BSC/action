@@ -10,6 +10,7 @@ import {
     MockLpStake
 } from "./mocks/LpExecutorMocks.sol";
 import {MockUniswapV2Factory, MockUniswapV2Pair} from "./mocks/UniswapV2Mocks.sol";
+import {MockStakeLocator} from "./mocks/StakeLocator.sol";
 
 interface LpExecutorVm {
     struct Log {
@@ -60,8 +61,7 @@ abstract contract LpExecutorTestBase {
 
     function setUp() public virtual {
         _deployMocks();
-        lpExecutor = new LpExecutor();
-        lpExecutor.init(address(actionTarget), address(stake));
+        lpExecutor = new LpExecutor(address(actionTarget));
         _configurePhase();
         _createAction(ACTION_ID);
         _atPhase(3);
@@ -83,6 +83,7 @@ abstract contract LpExecutorTestBase {
         stake.setMemberNFTAddress(address(memberNFT));
         stake.setPhaseAddress(address(phase));
         stake.setPairFactoryAddress(address(factory));
+        actionTarget.setVoteAddress(address(new MockStakeLocator(address(stake))));
         stake.setTotalValidGovVotes(address(token), 1000e18);
         stake.setValidGovVotes(address(token), 1, 100e18);
         stake.setValidGovVotes(address(token), 2, 200e18);

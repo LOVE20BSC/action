@@ -10,6 +10,7 @@ import {
     MockGroupActionVote
 } from "./mocks/GroupActionExecutorMocks.sol";
 import {MockGroupActionMemberNFT, MockGroupActionPhase} from "./mocks/GroupActionMocks.sol";
+import {MockStakeLocator} from "./mocks/StakeLocator.sol";
 
 interface GroupActionExecutorVm {
     struct Log {
@@ -69,10 +70,9 @@ abstract contract GroupActionExecutorTestBase {
 
     function setUp() public virtual {
         _deployMocks();
-        executor = new GroupActionExecutor();
         uint256[] memory splits = new uint256[](1);
         splits[0] = 5e17;
-        executor.init(address(actionTarget), address(stake), splits);
+        executor = new GroupActionExecutor(address(actionTarget), splits);
         _configurePhase();
         _createAction(ACTION_ID);
         _fundTokenFor(VERIFIER, VERIFIER_STAKE);
@@ -96,6 +96,7 @@ abstract contract GroupActionExecutorTestBase {
         stake.setMemberNFTAddress(address(memberNFT));
         stake.setPhaseAddress(address(phase));
         stake.setVoteAddress(address(vote));
+        actionTarget.setVoteAddress(address(new MockStakeLocator(address(stake))));
         stake.setTotalValidGovVotes(address(token), 1000e18);
         stake.setValidGovVotes(address(token), MEMBER1_ID, 100e18);
         stake.setValidGovVotes(address(token), VERIFIER_ID, 100e18);

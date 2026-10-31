@@ -12,6 +12,7 @@ import {
     MockGroupServiceGroupActionExecutor,
     MockGroupServiceToken
 } from "./mocks/GroupServiceMocks.sol";
+import {MockStakeLocator} from "./mocks/StakeLocator.sol";
 
 interface GroupServiceVm {
     struct Log {
@@ -88,6 +89,7 @@ abstract contract GroupServiceTestBase {
         actionTarget = new MockGroupServiceActionTarget();
         mint = new MockGroupServiceMint();
         groupAction = new MockGroupServiceGroupActionExecutor();
+        groupAction.setActionTargetAddress(address(actionTarget));
         token = new MockGroupServiceToken();
         childToken = new MockGroupServiceToken();
         grandChildToken = new MockGroupServiceToken();
@@ -103,6 +105,7 @@ abstract contract GroupServiceTestBase {
         stake.setLaunchAddress(address(launch));
         actionTarget.setPhaseAddress(address(phase));
         actionTarget.setMintAddress(address(mint));
+        actionTarget.setVoteAddress(address(new MockStakeLocator(address(stake))));
 
         launch.setParentToken(address(childToken), address(token));
         launch.setParentToken(address(grandChildToken), address(childToken));
@@ -118,9 +121,7 @@ abstract contract GroupServiceTestBase {
     }
 
     function _deployExecutor() internal returns (GroupServiceExecutor) {
-        GroupServiceExecutor deployed = new GroupServiceExecutor();
-        deployed.init(address(actionTarget), address(stake), address(groupAction));
-        return deployed;
+        return new GroupServiceExecutor(address(groupAction));
     }
 
 

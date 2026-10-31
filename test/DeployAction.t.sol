@@ -13,8 +13,8 @@ contract DeployActionHarness is DeployAction {
         external
         returns (DeploymentAddresses memory addrs)
     {
-        addrs = _deployContracts(mint, stake, splits);
-        _validateDeployment(mint, splits, addrs);
+        addrs = _deployContracts(mint, splits);
+        _validateDeployment(mint, stake, splits, addrs);
     }
 }
 

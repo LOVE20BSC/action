@@ -47,6 +47,7 @@ contract ServiceCoreRegressionTest is Test {
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 3), abi.encode(ALICE));
         _mock(NFT, abi.encodeWithSignature("ownerOf(uint256)", 4), abi.encode(BOB));
         _mock(VOTE, abi.encodeWithSignature("PHASE_ADDRESS()"), abi.encode(PHASE));
+        _mock(VOTE, abi.encodeWithSignature("STAKE_ADDRESS()"), abi.encode(STAKE));
         _mock(VOTE, abi.encodeWithSignature("totalVoteAmount(address,uint256)"), abi.encode(uint256(100)));
         _mock(VOTE, abi.encodeWithSignature("voteAmountByProposalId(address,uint256,uint256)"), abi.encode(uint256(100)));
         _mock(VOTE, abi.encodeWithSignature("isProposalIdVoted(address,uint256,uint256)"), abi.encode(true));
@@ -62,10 +63,8 @@ contract ServiceCoreRegressionTest is Test {
         parent = new LOVE20Token("Parent", "P", 100000, 1000000, address(this), address(mint), address(this));
         child = new LOVE20Token("Child", "C", 100000, 1000000, address(this), address(mint), address(parent));
         _mock(LAUNCH, abi.encodeWithSignature("parentToken(address)"), abi.encode(address(parent)));
-        group = new GroupActionExecutor();
-        group.init(address(target), STAKE, new uint256[](0));
-        service = new GroupServiceExecutor();
-        service.init(address(target), STAKE, address(group));
+        group = new GroupActionExecutor(address(target), new uint256[](0));
+        service = new GroupServiceExecutor(address(group));
         bytes[] memory data = new bytes[](6);
         data[0] = abi.encode(address(group));
         data[1] = abi.encode(address(child));

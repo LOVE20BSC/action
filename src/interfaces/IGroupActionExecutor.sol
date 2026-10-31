@@ -62,11 +62,7 @@ interface IGroupActionExecutor is
 
     function SPLITS() external view returns (uint256[] memory);
 
-    function init(
-        address actionTargetAddress,
-        address stakeAddress,
-        uint256[] calldata splits
-    ) external;
+    function VOTE_ADDRESS() external view returns (address);
 
     function currentVerifyRound() external view returns (uint256);
 

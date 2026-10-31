@@ -9,15 +9,13 @@ library MemberOwner {
     // authorization miss, or a `GroupNotExist` revert. If ownerOf ever returned a non-zero owner for
     // an absent id, the code-check callers would answer true and the views would silently report
     // live data for a group that does not exist. Other failures pass through unchanged.
-    function ownerOrZero(address memberNFTAddress, uint256 memberId) internal view returns (address owner) {
-        try IMemberNFT(memberNFTAddress).ownerOf(memberId) returns (address resolved) {
-            return resolved;
+    function ownerOrZero(address memberNFTAddress, uint256 memberId) internal view returns (address) {
+        try IMemberNFT(memberNFTAddress).ownerOf(memberId) returns (address owner) {
+            return owner;
         } catch (bytes memory err) {
-            bytes4 selector;
-            assembly ("memory-safe") {
-                selector := mload(add(err, 0x20))
-            }
-            if (err.length >= 4 && selector == IERC721Errors.ERC721NonexistentToken.selector) {
+            // casting to 'bytes4' is safe: the length check guarantees the first four bytes exist
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (err.length >= 4 && bytes4(err) == IERC721Errors.ERC721NonexistentToken.selector) {
                 return address(0);
             }
             assembly ("memory-safe") {

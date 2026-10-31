@@ -65,15 +65,10 @@ interface ILpExecutorEvents {
 }
 
 interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
-    function MEMBER_NFT_ADDRESS() external view returns (address);
-    function PHASE_ADDRESS() external view returns (address);
-    function STAKE_ADDRESS() external view returns (address);
     function PAIR_FACTORY_ADDRESS() external view returns (address);
 
     function govRatioMultiplier(address tokenAddress, uint256 actionId) external view returns (uint256);
     function minGovRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
-
-    function init(address actionTargetAddress, address stakeAddress) external;
 
     function join(
         address tokenAddress,
