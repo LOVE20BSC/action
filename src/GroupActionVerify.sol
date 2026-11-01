@@ -155,7 +155,7 @@ library GroupActionVerify {
         uint256 verifierId,
         string calldata description
     ) external onlyMemberOwner(self, protocol, verifierId) returns (uint256 applicationId) {
-        uint256 round = _checkApplicationWindow(self, protocol, tokenAddress, actionId, verifierId, description);
+        uint256 round = _checkApplicationSubmission(self, protocol, tokenAddress, actionId, verifierId, description);
 
         uint256 previousApplicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
@@ -811,7 +811,7 @@ library GroupActionVerify {
         });
     }
 
-    function _checkApplicationWindow(
+    function _checkApplicationSubmission(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
