@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -121,6 +122,21 @@ def fake_tool(tool, args):
     return 0
 
 
+# params.sh 是 core / action / group-chat / dex 四份逐字节相同的副本：每个仓都要能独立部署，
+# 文件无法共享，只能靠这个常量防止漂移。改动该文件时四个仓一起改，并同步这四个常量。
+PARAMS_SH_SHA256 = "b3a8f64dc87d9e823a364de92e3bc79144d246f1c1a861cdcf95616042b8f840"
+
+
+def params_shared_copy() -> None:
+    """params.sh 必须与四仓共享副本逐字节相同。"""
+    repo = Path(__file__).resolve().parents[1]
+    digest = hashlib.sha256((repo / "script/deploy/params.sh").read_bytes()).hexdigest()
+    assert digest == PARAMS_SH_SHA256, (
+        "script/deploy/params.sh 与四仓共享副本不一致（sha256 " + digest + "）；"
+        "把同一个文件同步到 core / action / group-chat / dex"
+    )
+
+
 def params_loader_cases() -> None:
     """params.sh：1e 写法展开、行尾注释、引号内 # 保留、逗号项去空格。"""
     repo = Path(__file__).resolve().parents[1]
@@ -143,9 +159,102 @@ def params_loader_cases() -> None:
             assert result.returncode == 0, (text, result.stderr)
             assert result.stdout == expected, (text, result.stdout)
 
+    # params_unset_all 的键集来自文件本身：文件定义的键必须被清掉，文件没定义的键不受影响。
+    with tempfile.TemporaryDirectory(prefix="params-unset-test-") as directory:
+        path = Path(directory) / "case.params"
+        path.write_text("A=1\n")
+        result = subprocess.run(
+            ["bash", "-c",
+             '. "$1"; A=inherited; B=inherited; params_unset_all "$2"; printf "%s|%s" "${A:-<unset>}" "${B:-<unset>}"',
+             "bash", str(repo / "script/deploy/params.sh"), str(path)],
+            text=True, capture_output=True)
+        assert result.returncode == 0, (result.stderr,)
+        assert result.stdout == "<unset>|inherited", result.stdout
+
+
+def params_unset_coverage() -> None:
+    """每个 source params.sh 的部署脚本都必须在首次 params_load 之前清掉继承值，
+    且 params_unset_all 的入参必须覆盖 params_load 读到的每个文件。"""
+    repo = Path(__file__).resolve().parents[1]
+    scripts = sorted((repo / "script/deploy").glob("*.sh"))
+    assert scripts
+    for script in scripts:
+        text = script.read_text()
+        if 'source "$SCRIPT_DIR/params.sh"' not in text:
+            continue
+        # 只看代码行：注释里出现同名字符串会让下面两条断言一起误通过。
+        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        assert "params_unset_all " in code, script
+        assert code.index("params_unset_all ") < code.index("params_load "), script
+        # 续行先拼回一行，否则只看得到首个参数。
+        joined = code.replace("\\\n", " ")
+        statement = re.search(r"params_unset_all(.*)", joined).group(1).split("\n")[0]
+        unset_files = set(re.findall(r'"([^"]+)"', statement))
+        load_files = set(re.findall(r'params_load\s+"([^"]+)"', joined))
+        assert not load_files - unset_files, (script, load_files - unset_files)
+
+
+def _params_required_pairs(text: str) -> set:
+    """脚本里 params_require_keys/values 声明的 (params 文件名, 键)。"""
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    joined = code.replace("\\\n", " ")
+    pairs = set()
+    for match in re.finditer(r'params_require_(?:keys|values)\s+"[^"]*/([^"/]+)"([^\n]*)', joined):
+        # 只看大写键名：尾部还有 `|| exit 1`。
+        pairs.update((match.group(1), key) for key in re.findall(r"\b[A-Z][A-Z0-9_]*\b", match.group(2)))
+    return pairs
+
+
+def _params_loaded_files(text: str) -> set:
+    """脚本里 params_load 读取的 params 文件名。"""
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    return set(re.findall(r'params_load\s+"[^"]*/([^"/]+)"', code))
+
+
+def params_required_consistency() -> None:
+    """必填键在调用点声明，没有中心键表：读取同一 params 文件的每个步骤必须声明同一组键。
+
+    11/21/31 各自独立执行，谁都可以单独补一个 params_require_*；漏一处会让该步骤在缺键时
+    拿空串继续、而另外两步仍然失败——半红半绿最难定位。
+    """
+    repo = Path(__file__).resolve().parents[1]
+    deploy = repo / "script/deploy"
+    assert not (deploy / "params-required.sh").exists(), (
+        "必填键在调用点用 params_require_keys/values 声明，不再单设 params-required.sh")
+    loaded = {}
+    required = {}
+    for script in sorted(deploy.glob("*.sh")):
+        text = script.read_text()
+        if 'source "$SCRIPT_DIR/params.sh"' not in text:
+            continue
+        for name in _params_loaded_files(text):
+            loaded.setdefault(name, set()).add(script.name)
+        for pair in _params_required_pairs(text):
+            required.setdefault(pair, set()).add(script.name)
+    for (file_name, key), scripts in sorted(required.items()):
+        missing = loaded.get(file_name, set()) - scripts
+        assert not missing, (file_name, key, sorted(missing))
+
+
+def verifier_skip_never_production() -> None:
+    """生产链不能出现在跳过列表：验证默认开启，跳过必须显式且只针对没有浏览器的链。"""
+    profile = Path(__file__).resolve().parents[1] / "script/network/verifier.params"
+    assert profile.is_file(), "script/network/verifier.params 缺失"
+    text = profile.read_text()
+    url = re.search(r"^ETHERSCAN_VERIFIER_URL=(.*)$", text, re.MULTILINE)
+    skip = re.search(r"^VERIFY_SKIP_CHAIN_IDS=(.*)$", text, re.MULTILINE)
+    assert url and url.group(1).strip(), (profile, "ETHERSCAN_VERIFIER_URL 为空")
+    assert skip, (profile, "缺少 VERIFY_SKIP_CHAIN_IDS")
+    skipped = {item.strip() for item in skip.group(1).split(",") if item.strip()}
+    assert not skipped & {"56", "97"}, (profile, sorted(skipped))
+
 
 def main():
+    params_shared_copy()
     params_loader_cases()
+    params_unset_coverage()
+    params_required_consistency()
+    verifier_skip_never_production()
     action = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="action-deploy-test-") as directory:
         root = Path(directory)
@@ -261,6 +370,8 @@ def main():
             "env": env, "contracts": contracts, "calls": calls, "code": code,
             "inspect": inspect, "immutables": immutables, "library_canonical": library_canonical}))
         network.joinpath("network.params").write_text("CHAIN_ID=97\nRPC_URL=http://invalid.local\n")
+        network.parent.joinpath("verifier.params").write_text(
+            "ETHERSCAN_VERIFIER_URL=https://api.etherscan.io/v2/api\nVERIFY_SKIP_CHAIN_IDS=31337\n")
         core_names = ["LOVE20_TOKEN", "MEMBER_NFT", "PHASE", "LAUNCH", "MINT", "STAKE", "SUBMIT", "VOTE"]
         network.joinpath("addresses.core.params").write_text("\n".join(
             name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in core_names) + "\n")
@@ -409,6 +520,11 @@ def main():
         params_text = params_path.read_text()
         params_path.write_text("GROUP_ACTION_SPLITS=\n")
         run("21_check.sh", args=("test",), MOCK_EMPTY_SPLITS="1")
+        # 键缺失不能被调用方注入的同名变量顶替：键存在性只看文件。
+        params_path.write_text("")
+        result, _ = run("21_check.sh", False, ("test",), GROUP_ACTION_SPLITS=env["GROUP_ACTION_SPLITS"])
+        assert "GROUP_ACTION_SPLITS must be set" in result.stdout + result.stderr, \
+            result.stdout + result.stderr
         params_path.write_text(params_text)
         for contract, signature in [("ACTION_TARGET", "MINT_ADDRESS()(address)"), ("ACTION_TARGET", "VOTE_ADDRESS()(address)"),
                 ("ACTION_TARGET", "SUBMIT_ADDRESS()(address)"), ("ACTION_TARGET", "MEMBER_NFT_ADDRESS()(address)"),
@@ -617,6 +733,16 @@ def main():
         result, log = run("31_verify.sh", args=("test",))
         assert "Skip" in result.stdout, result.stdout
         assert not any(call[0] == "forge" for call in log)
+        # 跳过必须显式声明：把 31337 从列表里去掉后，同一条链默认验证而不是静默跳过。
+        network.parent.joinpath("verifier.params").write_text(
+            "ETHERSCAN_VERIFIER_URL=https://api.etherscan.io/v2/api\nVERIFY_SKIP_CHAIN_IDS=\n")
+        result, log = run("31_verify.sh", args=("test",))
+        assert "Skip" not in result.stdout, result.stdout
+        assert [call for call in log if call[:2] == ["forge", "verify-contract"]], log
+        network.parent.joinpath("verifier.params").write_text(
+            "ETHERSCAN_VERIFIER_URL=https://api.etherscan.io/v2/api\nVERIFY_SKIP_CHAIN_IDS=31337\n")
+        network.parent.joinpath("verifier.params").write_text(
+            "ETHERSCAN_VERIFIER_URL=https://api.etherscan.io/v2/api\nVERIFY_SKIP_CHAIN_IDS=31337\n")
         # 结构约束：无 00_init；入口不 source 任何文件；步骤自行载入配置。
         def code_lines(path):
             return [ln.strip() for ln in path.read_text().splitlines()

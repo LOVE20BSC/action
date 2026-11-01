@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 步骤一：合约部署与初始化。自包含——自行加载并校验部署所需文件，不依赖调用方预载环境。
-# 用法：script/deploy/11_deploy.sh <network>
-# 部署产物 addresses.action.params 由本步骤写入，供 21_check.sh 与 31_verify.sh 自行载入。
+# Step 1: deploy and initialize the contracts. Self-contained: loads and validates every file
+# it needs, without relying on a preloaded caller environment.
+# Usage: script/deploy/11_deploy.sh <network>
+# This step writes addresses.action.params, which 21_check.sh and 31_verify.sh load on their own.
 
 network="${1:?usage: script/deploy/11_deploy.sh <network>}"
 
@@ -11,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 NETWORK_DIR="$PROJECT_ROOT/script/network/$network"
 
-# 参数文件载入器：1e17 / 1_000_000 这类写法在载入时展开为十进制（见 params.sh）。
+# Parameter file loader: 1e17 / 1_000_000 style literals are expanded to decimal on load (params.sh).
 source "$SCRIPT_DIR/params.sh"
 
 if [ ! -d "$NETWORK_DIR" ]; then
@@ -19,11 +20,13 @@ if [ ! -d "$NETWORK_DIR" ]; then
     exit 1
 fi
 
-# 上一次异常退出可能留下地址临时文件；只清理本模块的隐藏临时模式，不碰正式地址文件。
+# An abnormal previous exit may leave a hidden address temp file behind; only this module's temp
+# pattern is removed, never the real address file.
 rm -f "$NETWORK_DIR/.addresses.action.params."*
 
-# 必需配置。addresses.core.params 是被依赖方（core）已部署地址，由 core 部署后复制而来；
-# .account 提供 keystore 账户与密码，缺失即失败（本地链同样走 keystore 签名，不用 --unlocked）。
+# Required configuration. addresses.core.params holds the addresses already deployed by the
+# dependency (core) and is copied over after that deployment; .account provides the keystore account
+# and password and is mandatory (local chains also sign through the keystore, never --unlocked).
 for config in network.params addresses.core.params action.params .account; do
     if [ ! -f "$NETWORK_DIR/$config" ]; then
         echo "Error: Missing required configuration: $NETWORK_DIR/$config"
@@ -31,29 +34,40 @@ for config in network.params addresses.core.params action.params .account; do
     fi
 done
 
+# Parameters come from files only: clear every key the files define, so a value exported by the
+# caller cannot override a file value. GROUP_ACTION_SPLITS is the one key whose absence would change
+# behaviour silently (an empty value is legal and means "no tiers"), so its presence is asserted
+# against the file itself, never against the variable - an inherited value could satisfy that.
+params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
+
+params_unset_all "$NETWORK_DIR/network.params" "$NETWORK_DIR/addresses.core.params" \
+    "$NETWORK_DIR/action.params"
+
 env_password="${KEYSTORE_PASSWORD:-}"
 params_load "$NETWORK_DIR/network.params"
 params_load "$NETWORK_DIR/addresses.core.params"
 params_load "$NETWORK_DIR/action.params"
-# .account 走普通 source：密码可能含 "#"，不能经过参数展开。
+# .account is plain-sourced: the password may contain "#" and must not go through parameter expansion.
 set -a
 source "$NETWORK_DIR/.account"
 set +a
 
-# .account 里的空 KEYSTORE_PASSWORD 行不应清掉入口已导出的密码（避免重复弹窗）。
+# An empty KEYSTORE_PASSWORD line in .account must not clear a password exported by the entrypoint
+# (that would prompt a second time).
 [ -n "${KEYSTORE_PASSWORD:-}" ] || KEYSTORE_PASSWORD="$env_password"
 
 [ -n "${KEYSTORE_ACCOUNT:-}" ] && [ -n "${ACCOUNT_ADDRESS:-}" ] \
     || { echo "Error: KEYSTORE_ACCOUNT / ACCOUNT_ADDRESS is not set in $NETWORK_DIR/.account" >&2; exit 1; }
 
-# 确认实际链，不能只检查 RPC 是否可连接。
+# Verify the actual chain; being able to reach the RPC is not enough.
 ACTUAL_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL") || exit 1
 if [ "$ACTUAL_CHAIN_ID" != "$CHAIN_ID" ]; then
     echo "Error: RPC chain ID $ACTUAL_CHAIN_ID does not match configured CHAIN_ID $CHAIN_ID"
     exit 1
 fi
 
-# keystore 密码：已设则不弹窗（非交互调用用）；留空则 macOS 弹窗读取。
+# Keystore password: no prompt when already set (non-interactive use), otherwise read via the macOS
+# dialog.
 if [ -z "${KEYSTORE_PASSWORD:-}" ]; then
     if ! command -v osascript >/dev/null 2>&1; then
         echo "Error: KEYSTORE_PASSWORD is empty and osascript is unavailable; set it in $NETWORK_DIR/.account for non-interactive use." >&2
@@ -100,10 +114,13 @@ require_library_addresses() {
     done
 }
 
-# 准备部署日志与密码文件。广播一旦发出，后续任何校验失败都意味着「合约已上链但地址未记录」：
-# 此时必须留下日志与产物路径供人工恢复；广播前失败则只清理本次的临时文件，不误报已上链。
-# 密码经临时文件传给 forge：--password 会把明文放进进程参数，同机其他用户可直接读到。
-# trap 在写入密码之前安装，chmod/printf 失败也不会留下明文。
+# Prepare the deployment log and the password file. Once broadcast, any later validation failure
+# means "the contracts are on chain but the addresses were not recorded": the log and the artifact
+# path must survive for manual recovery; a pre-broadcast failure only removes this run's temp files
+# and never claims anything reached the chain. The password goes to forge through a temp file
+# because --password would put the plaintext into the process arguments, readable by every local
+# user. The trap is installed before the password is written, so a failing chmod/printf leaks
+# nothing.
 DEPLOY_LOG=$(mktemp)
 PASSWORD_FILE=$(mktemp)
 ADDRESS_TMP="$NETWORK_DIR/.addresses.action.params.$$"
@@ -120,13 +137,14 @@ fi' EXIT
 chmod 600 "$PASSWORD_FILE"
 printf '%s' "$KEYSTORE_PASSWORD" > "$PASSWORD_FILE"
 
-# GroupActionExecutor 的 splits 由 action.params 以逗号分隔提供，空值即空数组。
+# GroupActionExecutor splits come from action.params as a comma-separated list; empty means an empty
+# array.
 SPLITS_LITERAL="[${GROUP_ACTION_SPLITS:-}]"
 
-# 构建 forge script 命令：keystore 签名（本地链同样如此，不用 --unlocked）。
+# Build the forge script command: keystore signing (same on local chains, never --unlocked).
 FORGE_CMD=(forge script script/deploy/DeployAction.s.sol:DeployAction --sig "run(uint256[])" "$SPLITS_LITERAL" --rpc-url "$RPC_URL" --chain-id "$CHAIN_ID" --account "$KEYSTORE_ACCOUNT" --sender "$ACCOUNT_ADDRESS" --password-file "$PASSWORD_FILE" --broadcast --slow -vvv)
 
-# 执行部署
+# Run the deployment.
 cd "$PROJECT_ROOT"
 DEPLOY_START_EPOCH_SECONDS=$(date +%s)
 DEPLOY_ATTEMPTED=1
@@ -134,11 +152,13 @@ if ! { "${FORGE_CMD[@]}" 2>&1 | tee "$DEPLOY_LOG"; }; then
     echo "Error: Deployment failed."
     exit 1
 fi
-# 密码只在本次 forge 调用期间需要，广播结束立即删除，缩短暴露窗口。
+# The password is only needed for this forge call; delete it right after broadcast to shorten the
+# exposure window.
 rm -f "$PASSWORD_FILE"
 
-# 从部署输出中提取地址（DeployAction.s.sol 的 _logDeploymentSummary 输出）。
-# grep 无匹配会让管道在 set -e 下静默中止，故逐个容错取值，缺项交由 require_contract_addresses 报错。
+# Extract the addresses from the deployment output (_logDeploymentSummary in DeployAction.s.sol). A
+# non-matching grep would silently abort the pipeline under set -e, so every lookup tolerates
+# failure and missing entries are reported by require_contract_addresses.
 ACTION_TARGET_ADDRESS=$(grep "ACTION_TARGET_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
 LP_EXECUTOR_ADDRESS=$(grep "LP_EXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
 GROUP_ACTION_EXECUTOR_ADDRESS=$(grep "GROUP_ACTION_EXECUTOR_ADDRESS=" "$DEPLOY_LOG" | tail -1 | cut -d'=' -f2 | xargs || true)
@@ -210,7 +230,7 @@ if [ "$ACTUAL_LIBRARY_COUNT" -ne "$EXPECTED_LIBRARY_COUNT" ]; then
     exit 1
 fi
 
-# 写入地址文件
+# Write the address file.
 {
     printf 'ACTION_TARGET_ADDRESS=%s\n' "$ACTION_TARGET_ADDRESS"
     printf 'LP_EXECUTOR_ADDRESS=%s\n' "$LP_EXECUTOR_ADDRESS"

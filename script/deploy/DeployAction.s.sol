@@ -52,9 +52,11 @@ contract DeployAction is Script {
     function _validateConfig(ActionConfig memory config) internal view {
         require(block.chainid == config.chainId, "Chain ID mismatch");
 
-        // Core 依赖必须是已部署合约：ActionTarget 从 Mint 派生 vote/submit/memberNFT/phase，
-        // 三个 Executor 只收 ActionTarget，Stake 经 ActionTarget.VOTE_ADDRESS() 反查后派生其余地址；
-        // 地址配错时模拟阶段不会回滚，会白广播 4 个合约（要到 21_check.sh 才拦下）。
+        // Core dependencies must be deployed contracts: ActionTarget derives
+        // vote/submit/memberNFT/phase from Mint, the three Executors only take ActionTarget, and
+        // Stake is resolved through ActionTarget.VOTE_ADDRESS() before its remaining addresses are
+        // derived; a wrong address does not revert during simulation and would broadcast 4
+        // contracts for nothing (21_check.sh would only catch it afterwards).
         require(config.mint.code.length != 0, "Mint must be a deployed contract");
         require(config.stake.code.length != 0, "Stake must be a deployed contract");
 
@@ -69,7 +71,8 @@ contract DeployAction is Script {
         require(vote.code.length != 0, "Mint voteAddress must be a deployed contract");
         require(submit.code.length != 0, "Mint submitAddress must be a deployed contract");
 
-        // Executor 的派生值不可回读，部署前用 Stake 的 getter 与 Mint 的派生图逐项对齐。
+        // The Executor's derived values cannot be read back, so align the Stake getters with Mint's
+        // derivation graph item by item before deploying.
         require(stake.MEMBER_NFT_ADDRESS() == memberNFT, "Stake memberNFTAddress mismatch");
         require(stake.PHASE_ADDRESS() == phase, "Stake phaseAddress mismatch");
         require(stake.VOTE_ADDRESS() == vote, "Stake voteAddress mismatch");

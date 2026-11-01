@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 步骤三：合约开源验证。自包含——自行载入 network.params、action.params 与上次部署写入的
-# addresses.action.params，不依赖入口脚本在部署后刷新地址。
-# 用法：script/deploy/31_verify.sh <network>
+# Step 3: source verification. Self-contained: loads network.params, verifier.params, action.params
+# and the addresses.action.params written by the last deployment, without relying on the entrypoint
+# to refresh addresses afterwards.
+# Usage: script/deploy/31_verify.sh <network>
 
 network="${1:?usage: script/deploy/31_verify.sh <network>}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 NETWORK_DIR="$PROJECT_ROOT/script/network/$network"
+VERIFIER_PARAMS="$PROJECT_ROOT/script/network/verifier.params"
 
-# 参数文件载入器：1e17 / 1_000_000 这类写法在载入时展开为十进制（见 params.sh）。
+# Parameter file loader: 1e17 / 1_000_000 style literals are expanded to decimal on load (params.sh).
 source "$SCRIPT_DIR/params.sh"
 
 if [ ! -d "$NETWORK_DIR" ]; then
@@ -19,26 +21,48 @@ if [ ! -d "$NETWORK_DIR" ]; then
     exit 1
 fi
 
-# 三个 Executor 的构造参数来自 addresses.action.params（ActionTarget、GroupActionExecutor）
-# 与 action.params（splits）。
+# Constructor arguments for the three Executors come from addresses.action.params (ActionTarget,
+# GroupActionExecutor) and action.params (splits).
 for config in network.params action.params addresses.action.params; do
     if [ ! -f "$NETWORK_DIR/$config" ]; then
         echo "Error: Missing required configuration: $NETWORK_DIR/$config"
         exit 1
     fi
 done
+if [ ! -f "$VERIFIER_PARAMS" ]; then
+    echo "Error: Missing required configuration: $VERIFIER_PARAMS"
+    exit 1
+fi
+
+# Parameters come from files only: clear every key the files define, so a value exported by the
+# caller cannot override a file value. GROUP_ACTION_SPLITS is the one key whose absence would change
+# behaviour silently (an empty value is legal and means "no tiers"), so its presence is asserted
+# against the file itself, never against the variable - an inherited value could satisfy that.
+params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
+
+params_unset_all "$NETWORK_DIR/network.params" "$VERIFIER_PARAMS" \
+    "$NETWORK_DIR/action.params" "$NETWORK_DIR/addresses.action.params"
 
 params_load "$NETWORK_DIR/network.params"
+params_load "$VERIFIER_PARAMS"
 params_load "$NETWORK_DIR/action.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 
 cd "$PROJECT_ROOT"
 
-# 链不支持开源验证时跳过，不视为失败，使一键部署在本地/未接入浏览器的链上仍可跑通。
-case "$CHAIN_ID" in
-    56|97) ;;
-    *) echo "Skip: source verification is not configured for chain $CHAIN_ID"; exit 0 ;;
-esac
+# The opt-out list is mandatory as a key but may be empty: "verify every chain" is a legal answer.
+params_require_keys "$VERIFIER_PARAMS" VERIFY_SKIP_CHAIN_IDS || exit 1
+
+# Verification is attempted by default: only the chains listed here skip it, so a new production
+# chain fails loudly instead of passing unverified.
+skip_chains=",${VERIFY_SKIP_CHAIN_IDS:-},"
+if [ -n "${CHAIN_ID:-}" ] && [[ "$skip_chains" == *",$CHAIN_ID,"* ]]; then
+    echo "Skip: source verification is disabled for chain $CHAIN_ID in $VERIFIER_PARAMS"
+    exit 0
+fi
+
+# The endpoint is a mandatory key: an empty URL would be passed straight to forge.
+params_require_values "$VERIFIER_PARAMS" ETHERSCAN_VERIFIER_URL || exit 1
 : "${ETHERSCAN_API_KEY:?Set an Etherscan API key; source verification has not run.}"
 
 CONTRACT_ADDRESS_FIELDS="ACTION_TARGET_ADDRESS LP_EXECUTOR_ADDRESS GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS"
@@ -51,9 +75,10 @@ GROUP_SERVICE_LIBRARY_SPECS=(
     "GroupRecipients src/GroupRecipients.sol GROUP_RECIPIENTS_LIBRARY_ADDRESS"
 )
 
-# 库地址内嵌在 Executor 运行时字节码中：不传 --libraries 时 standard-json 的
-# settings.libraries 为空，字节码无法匹配。多个库必须重复传该参数：本版 Foundry
-# 不接受逗号拼接的单个值（会报 too many arguments passed）。
+# Library addresses are embedded in the Executor runtime bytecode: without --libraries the
+# standard-json settings.libraries is empty and the bytecode cannot match. Pass the flag once per
+# library: this Foundry version does not accept one comma-joined value (it reports too many
+# arguments passed).
 GROUP_ACTION_LIBRARY_FIELDS=""
 GROUP_ACTION_LIBRARY_ARGS=()
 GROUP_SERVICE_LIBRARY_FIELDS=""
@@ -84,9 +109,10 @@ for field in $CONTRACT_ADDRESS_FIELDS $GROUP_ACTION_LIBRARY_FIELDS $GROUP_SERVIC
     fi
 done
 
-# 三个 Executor 的协议地址在构造函数里固化为 immutable，验证时必须回填构造参数。
-# 命令替换失败在 set -e 下会静默中止，故逐个显式判别，保证失败有明确输出，
-# 且全部编码在任何验证请求之前完成。
+# The three Executors fix their protocol addresses as immutables in the constructor, so the
+# constructor arguments must be supplied when verifying. A failing command substitution would
+# silently abort under set -e, so each call is checked explicitly for a clear message, and every
+# encoding finishes before any verification request is sent.
 if ! LP_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
     "$ACTION_TARGET_ADDRESS"); then
     echo "Error: Failed to encode LpExecutor constructor arguments"
@@ -103,7 +129,7 @@ if ! GROUP_SERVICE_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
     exit 1
 fi
 
-COMMON_ARGS=(--chain "$CHAIN_ID" --verifier etherscan --verifier-url "https://api.etherscan.io/v2/api" --watch)
+COMMON_ARGS=(--chain "$CHAIN_ID" --verifier etherscan --verifier-url "$ETHERSCAN_VERIFIER_URL" --watch)
 verify_contract() {
     local address=$1 fqn=$2
     shift 2

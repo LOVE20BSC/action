@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 部署与初始化正确性校验：只读配置与链上状态，可重复运行（forge inspect 会在本地编译并
-# 刷新 out/cache，不写地址文件）。自行独立载入校验所需文件，
-# 不依赖调用方预载环境：network.params 提供 RPC 与链 ID，addresses.core.params 提供期望的
-# core 绑定，action.params 提供期望的 splits，addresses.action.params 提供待校验的已部署地址。
-# 用法：script/deploy/21_check.sh <network>
+# Deployment and initialization check: read-only over config and chain state (forge inspect
+# compiles locally and refreshes out/cache, never writes an address file). Loads its own
+# check inputs instead of relying on a preloaded environment: network.params provides RPC and
+# chain ID, addresses.core.params the expected core bindings, action.params the expected splits
+# and addresses.action.params the deployed addresses to verify.
+# Usage: script/deploy/21_check.sh <network>
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# forge inspect 靠当前目录定位 foundry.toml，与 cast 不同：不切到项目根时
-# 运行时代码比对会拿到空产物并误报「runtime unavailable」。
+# forge inspect locates foundry.toml through the current directory, unlike cast: without switching
+# to the project root the runtime comparison gets an empty artifact and falsely reports "runtime
+# unavailable".
 cd "$PROJECT_ROOT"
 
 network="${1:?usage: script/deploy/21_check.sh <network>}"
 NETWORK_DIR="$PROJECT_ROOT/script/network/$network"
 
-# 参数文件载入器：1e17 / 1_000_000 这类写法在载入时展开为十进制（见 params.sh）。
+# Parameter file loader: 1e17 / 1_000_000 style literals are expanded to decimal on load (params.sh).
 source "$SCRIPT_DIR/params.sh"
 
 if [ ! -d "$NETWORK_DIR" ]; then
@@ -30,13 +32,22 @@ if [ ! -f "$NETWORK_DIR/addresses.action.params" ]; then
     exit 1
 fi
 
+# Parameters come from files only: clear every key the files define, so a value exported by the
+# caller cannot override a file value. GROUP_ACTION_SPLITS is the one key whose absence would change
+# behaviour silently (an empty value is legal and means "no tiers"), so its presence is asserted
+# against the file itself, never against the variable - an inherited value could satisfy that.
+params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
+
+params_unset_all "$NETWORK_DIR/network.params" "$NETWORK_DIR/addresses.core.params" \
+    "$NETWORK_DIR/action.params" "$NETWORK_DIR/addresses.action.params"
+
 params_load "$NETWORK_DIR/network.params"
 params_load "$NETWORK_DIR/addresses.core.params"
 params_load "$NETWORK_DIR/action.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 
-# 地址文件的键集合必须与期望合约/库集合一致：键名漏改会让后续变量静默为空，
-# 逐项 cast 调用要到很后面才以难以定位的形式失败，故在此显式断言。
+# The address file's key set must equal the expected contract/library set: a renamed key would leave
+# later variables silently empty and fail much later with an unhelpful message, so assert it here.
 address_file="$NETWORK_DIR/addresses.action.params"
 CONTRACT_ADDRESS_FIELDS="ACTION_TARGET_ADDRESS GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS LP_EXECUTOR_ADDRESS"
 GROUP_ACTION_LIBRARY_SPECS=(
@@ -79,7 +90,7 @@ if [ "$actual_keys" != "$(printf '%s\n' $expected_keys | sort | tr '\n' ' ')" ];
     exit 1
 fi
 
-# 颜色定义
+# Colors.
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -94,8 +105,8 @@ echo -e "${CYAN}║     Verifying Action Deployment      ║${NC}"
 echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
 echo ""
 
-# 检查所有合约与库地址已设置且形如非零地址：格式错误留到逐项 cast 会以「未部署」的形式
-# 报错，掩盖真正原因。判据与 31_verify.sh 保持一致。
+# Every contract and library address must be set and look like a nonzero address: a malformed one
+# would surface as "not deployed" and hide the real cause. The predicate matches 31_verify.sh.
 for field in $expected_keys; do
     if [[ ! ${!field:-} =~ ^0x[0-9a-fA-F]{40}$ ]] || [[ ${!field:-} = 0x0000000000000000000000000000000000000000 ]]; then
         echo -e "${RED}✗ Error: $field is missing or invalid in $address_file${NC}"
@@ -103,24 +114,24 @@ for field in $expected_keys; do
     fi
 done
 
-# 辅助函数：标准化输出（去掉引号和科学计数法标记）
+# Helper: normalize output (strip quotes and the scientific-notation marker).
 normalize_output() {
     local value="$1"
-    # 去掉首尾引号
+    # strip surrounding quotes
     value="${value%\"}"
     value="${value#\"}"
-    # 去掉科学计数法标记 [1e18]
+    # strip the scientific-notation marker [1e18]
     value="${value% \[*\]}"
     echo "$value"
 }
 
-# 辅助函数：验证单个值
+# Helper: verify a single value.
 verify_value() {
     local field_name=$1
     local expected=$2
     local actual=$3
 
-    # 标准化两个值
+    # normalize both values
     expected=$(normalize_output "$expected")
     actual=$(normalize_output "$actual")
 
@@ -142,7 +153,7 @@ verify_value() {
     fi
 }
 
-# 辅助函数：验证合约是否部署
+# Helper: verify that a contract is deployed.
 verify_deployed() {
     local name=$1
     local address=$2
@@ -156,10 +167,12 @@ verify_deployed() {
     return 0
 }
 
-# 仅检查地址出现无法识别同一 Executor 内的库互换，故按链接后的完整运行时代码比对。
-# Executor 的协议地址在构造函数固化为 immutable：构建产物在这些槽位是全零，链上由构造参数
-# 写入真实值。只回填 deployedBytecode.immutableReferences；artifact 里的 linkReferences
-# 也有 start 字段，其中 creation link 的偏移可能落在 runtime 范围内，不能覆盖真实差异。
+# Checking addresses alone cannot detect a library swap inside one Executor, so compare the fully
+# linked runtime code. Executor protocol addresses are fixed as immutables in the constructor: the
+# build artifact has zeros in those slots and the chain fills them from the constructor arguments.
+# Only deployedBytecode.immutableReferences are backfilled; the artifact's linkReferences also carry
+# a start field whose creation-link offset may fall inside the runtime range, so they must not be
+# allowed to mask a real difference.
 apply_chain_immutables() {
     local contract_name=$1
     local expected=$2
@@ -219,8 +232,9 @@ verify_runtime_matches_artifact() {
     echo -e "    ${GRAY}${address}${NC}"
 }
 
-# immutable 回填会掩盖这些槽位的取值，故逐个回读构造函数派生的地址：
-# 三个 Executor 共有的 STAKE/MEMBER_NFT/PHASE，以及各自的协议地址（由调用方追加）。
+# The immutable backfill masks these slots' values, so read every constructor-derived address back:
+# STAKE/MEMBER_NFT/PHASE shared by all three Executors plus each one's own protocol addresses
+# (appended by the caller).
 verify_executor_bindings() {
     local name=$1
     local address=$2
@@ -235,8 +249,10 @@ verify_executor_bindings() {
     done
 }
 
-# 库的 runtime code 开头内嵌自身地址（部署时由 constructor 写入），编译产物里该位置是
-# 20 字节零。直接比对会把每座已部署的库都判成不匹配，故先按入账地址替换这一处。
+# A library's runtime code embeds its own address at the start (written by the constructor at
+# deployment) and the build artifact has twenty zero bytes there. Comparing directly would flag
+# every deployed library as mismatched, so substitute that single spot with the recorded address
+# first.
 verify_library_runtime_matches_artifact() {
     local contract_name=$1
     local address=$2
@@ -252,8 +268,9 @@ verify_library_runtime_matches_artifact() {
     expected=$(printf '%s' "$expected" | tr 'A-F' 'a-f')
     actual=$(printf '%s' "$actual" | tr 'A-F' 'a-f')
     placeholder="73$(printf '%040d' 0)"
-    # 只替换第一处：四个库当前都只有 1 处。数量变了说明编译器布局变了，
-    # 此时静默按第一处替换会把链上正确代码判成不匹配，故显式失败。
+    # Replace the first occurrence only: every one of the four libraries has exactly one today. A
+    # different count means the compiler layout changed, and silently substituting the first would
+    # flag correct on-chain code as mismatched, so fail loudly.
     local occurrences
     occurrences=$(printf '%s' "$expected" | grep -o "$placeholder" | wc -l | tr -d ' ' || true)
     if [ "$occurrences" -ne 1 ]; then
@@ -274,7 +291,7 @@ verify_library_runtime_matches_artifact() {
     echo -e "    ${GRAY}${address}${NC}"
 }
 
-# 辅助函数：打印合约头部
+# Helper: print a contract header.
 print_contract_header() {
     local num=$1
     local name=$2
@@ -286,8 +303,8 @@ print_contract_header() {
 
 FAILED=0
 
-# 地址上没有代码时不再跑 runtime 比对：同一个失败只计一次，避免「1 个合约未部署」
-# 被报成 2 项失败。库循环用同样的口径。
+# Skip the runtime comparison when an address has no code: one failure is counted once, so "1
+# contract not deployed" does not become two failed checks. The library loop uses the same rule.
 verify_deployed_and_runtime() {
     local contract_name=$1
     local address=$2
@@ -302,7 +319,7 @@ verify_deployed_and_runtime() {
 ACTUAL_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL")
 verify_value "CHAIN_ID" "$CHAIN_ID" "$ACTUAL_CHAIN_ID" || exit 1
 
-# 1. 验证 ActionTarget
+# 1. ActionTarget.
 print_contract_header "1" "ActionTarget" "$ACTION_TARGET_ADDRESS"
 verify_deployed_and_runtime "ActionTarget" "$ACTION_TARGET_ADDRESS"
 
@@ -324,8 +341,9 @@ verify_value "memberNFTAddress" "$MEMBER_NFT_ADDRESS" "$ACTUAL_MEMBER" || ((FAIL
 ACTUAL_PHASE=$(cast call "$ACTION_TARGET_ADDRESS" "PHASE_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "phaseAddress" "$PHASE_ADDRESS" "$ACTUAL_PHASE" || ((FAILED+=1))
 
-# Executor 的 immutable 取值已由上面的 getter 复核；这里继续核对 Stake 本身与 core 地址文件一致，
-# 证明三个 Executor 的 memberNFT/phase/vote/launch 派生源未错配。
+# The Executor immutables were verified through the getters above; also confirm Stake itself matches
+# the core address file, which proves the memberNFT/phase/vote/launch derivation source of all three
+# Executors is right.
 print_contract_header "2" "Stake (derived bindings)" "$STAKE_ADDRESS"
 verify_deployed "Stake" "$STAKE_ADDRESS" || ((FAILED+=1))
 ACTUAL_STAKE_MEMBER=$(cast call "$STAKE_ADDRESS" "MEMBER_NFT_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
@@ -343,7 +361,7 @@ verify_value "Stake/Launch PAIR_FACTORY_ADDRESS" "$ACTUAL_LAUNCH_FACTORY" "$ACTU
 ACTUAL_STAKE_ROUTER=$(cast call "$STAKE_ADDRESS" "ROUTER_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_deployed "Stake ROUTER_ADDRESS" "$ACTUAL_STAKE_ROUTER" || ((FAILED+=1))
 
-# 3. 验证 LpExecutor
+# 3. LpExecutor.
 print_contract_header "3" "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "LpExecutor" "$LP_EXECUTOR_ADDRESS"
 
@@ -351,7 +369,7 @@ ACTUAL_TARGET=$(cast call "$LP_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(addres
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 verify_executor_bindings "LpExecutor" "$LP_EXECUTOR_ADDRESS" "PAIR_FACTORY_ADDRESS:$ACTUAL_STAKE_FACTORY"
 
-# 4. 验证 GroupActionExecutor
+# 4. GroupActionExecutor.
 print_contract_header "4" "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" \
     "${GROUP_ACTION_LIBRARY_ARGS[@]}"
@@ -360,10 +378,11 @@ ACTUAL_TARGET=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRES
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 verify_executor_bindings "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" "VOTE_ADDRESS:$VOTE_ADDRESS"
 
-# splits 以逗号分隔配置，cast 返回 "[a [1e17], b [4e17]]"：逐个元素去掉科学计数法标注与空格后比对
-# （标注形如 [1e17]，不会误伤数组外层括号）
+# splits are configured comma-separated and cast returns "[a [1e17], b [4e17]]": strip the
+# scientific-notation markers and spaces element by element before comparing (a marker looks like
+# [1e17] and never touches the array's outer brackets).
 strip_sci_notation() {
-    echo "$1" | sed -E 's/\[[0-9]+e[0-9]+\]//g' | tr -d ' '
+    echo "$1" | sed -E 's/\[[0-9.]+e[0-9]+\]//g' | tr -d ' '
 }
 ACTUAL_SPLITS=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "SPLITS()(uint256[])" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 EXPECTED_SPLITS="[${GROUP_ACTION_SPLITS:-}]"
@@ -384,7 +403,7 @@ if [ -n "${GROUP_ACTION_SPLITS:-}" ]; then
     done
 fi
 
-# 5. 验证 GroupServiceExecutor
+# 5. GroupServiceExecutor.
 print_contract_header "5" "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS"
 verify_deployed_and_runtime "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS" \
     "${GROUP_SERVICE_LIBRARY_ARGS[@]}"
