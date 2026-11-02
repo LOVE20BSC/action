@@ -85,7 +85,7 @@ contract LpExecutorRealIntegrationTest {
                 rootParentTokenAddress: address(rootToken),
                 pairFactoryAddress: address(factory),
                 distributor: distributor,
-                launchRatio: 1e16,
+                launchCountThresholdRatio: 1e16,
                 maxLaunchCount: 1000,
                 tokenSymbolLength: 4,
                 launchAmount: 50000,
