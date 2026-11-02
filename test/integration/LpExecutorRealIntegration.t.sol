@@ -107,7 +107,7 @@ contract LpExecutorRealIntegrationTest {
             address(factory),
             1,
             100,
-            3e15 // fee settlement ratio: 0.3% of the withdrawable LP per settlement
+            3e15 // fee settlement ratio from the integration profile (0.3%)
         );
         vote.init(address(phase), address(stake), address(submit), address(memberNFT));
         mint.init(address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17, 2);
