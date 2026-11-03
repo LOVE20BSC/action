@@ -244,7 +244,7 @@ contract LpExecutorRealIntegrationTest {
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "split follows the cap");
         require(token.balanceOf(member1) - memberBefore == expectedMint, "member received the mint");
         require(token.balanceOf(address(lpExecutor)) == 0, "executor keeps no reward");
-        require(mint.rewardMinted(address(token)) == expectedReward, "mint ledger matches the action reward");
+        require(mint.totalRewardMinted(address(token)) == expectedReward, "mint ledger matches the action reward");
 
         (uint256 recordedMint, uint256 recordedBurn, bool minted) =
             lpExecutor.memberReward(address(token), proposalId, round, 1);

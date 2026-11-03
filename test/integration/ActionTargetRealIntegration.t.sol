@@ -262,7 +262,7 @@ contract ActionTargetRealIntegrationTest {
         uint256 amount = actionTarget.mintActionReward(address(token), proposalId, round);
         require(amount == expectedAmount, "minted amount matches quote");
         require(token.balanceOf(address(executor)) == amount, "executor received the full reward");
-        require(mint.rewardMinted(address(token)) == amount, "mint ledger matches");
+        require(mint.totalRewardMinted(address(token)) == amount, "mint ledger matches");
         (uint256 recorded, bool mintedFlag) = actionTarget.actionReward(address(token), proposalId, round);
         require(recorded == amount && mintedFlag, "action reward query");
 
