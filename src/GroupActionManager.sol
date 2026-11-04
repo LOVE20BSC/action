@@ -24,6 +24,9 @@ library GroupActionManager {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    uint256 private constant TARGET_DATA_MIN_LENGTH = 6;
+    uint256 private constant TARGET_DATA_MAX_LENGTH = 7;
+
     modifier onlyGroupOwner(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
@@ -54,13 +57,13 @@ library GroupActionManager {
         uint256 actionId,
         bytes[] calldata targetData
     ) external {
-        if (targetData.length < 6) {
-            revert IGroupActionExecutorErrors.InsufficientTargetDataItems(targetData.length, 6);
+        if (targetData.length < TARGET_DATA_MIN_LENGTH) {
+            revert IGroupActionExecutorErrors.InsufficientTargetDataItems(targetData.length, TARGET_DATA_MIN_LENGTH);
         }
-        if (targetData.length > 7) {
-            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, 7);
+        if (targetData.length > TARGET_DATA_MAX_LENGTH) {
+            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, TARGET_DATA_MAX_LENGTH);
         }
-        for (uint256 i = 1; i < 6; i++) {
+        for (uint256 i = 1; i < TARGET_DATA_MIN_LENGTH; i++) {
             if (targetData[i].length != 32) {
                 // forge-lint: disable-next-line(require-revert-in-loop)
                 revert IGroupActionExecutorErrors.InvalidTargetDataShape(i, targetData[i].length);
@@ -97,8 +100,9 @@ library GroupActionManager {
         self.activationMinGovRatioByActionId[tokenAddress][actionId] = activationMinGovRatio;
         self.verifierStakeAmountByActionId[tokenAddress][actionId] = verifierStakeAmount;
 
-        if (targetData.length == 7) {
-            (string[] memory keys, string[] memory descriptions) = abi.decode(targetData[6], (string[], string[]));
+        if (targetData.length == TARGET_DATA_MAX_LENGTH) {
+            (string[] memory keys, string[] memory descriptions) =
+                abi.decode(targetData[TARGET_DATA_MAX_LENGTH - 1], (string[], string[]));
             if (keys.length != descriptions.length) {
                 revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, descriptions.length);
             }

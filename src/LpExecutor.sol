@@ -20,6 +20,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     using SafeERC20 for IERC20;
 
     uint256 internal constant PRECISION = 1e18;
+    uint256 private constant TARGET_DATA_LENGTH = 4;
 
     address public immutable PAIR_FACTORY_ADDRESS;
 
@@ -91,14 +92,14 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 actionId,
         bytes[] calldata targetData
     ) external onlyActionTarget {
-        if (targetData.length < 4) {
-            revert InsufficientTargetDataItems(targetData.length, 4);
+        if (targetData.length < TARGET_DATA_LENGTH) {
+            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData.length > 4) {
-            revert TooManyTargetDataItems(targetData.length, 4);
+        if (targetData.length > TARGET_DATA_LENGTH) {
+            revert TooManyTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
         // forge-lint: disable-next-item(require-revert-in-loop)
-        for (uint256 i = 0; i < 4; i++) {
+        for (uint256 i = 0; i < TARGET_DATA_LENGTH; i++) {
             if (targetData[i].length != 32) {
                 revert InvalidTargetDataShape(i, targetData[i].length);
             }

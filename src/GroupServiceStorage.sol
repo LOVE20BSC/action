@@ -11,6 +11,12 @@ library GroupServiceStorage {
     uint256 constant DEFAULT_MAX_RECIPIENTS = 10;
     uint256 constant MAX_REMARK_BYTES = 256;
 
+    enum SettlementCause {
+        RoundedToZero,
+        NoEligibleWeight,
+        PoolEmpty
+    }
+
     struct Protocol {
         address memberNFTAddress;
         address groupActionExecutorAddress;

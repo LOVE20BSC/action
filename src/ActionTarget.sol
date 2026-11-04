@@ -16,6 +16,9 @@ contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
     using Uint256Set for Uint256Set.Storage;
 
+    uint256 private constant TARGET_DATA_LENGTH = 1;
+    uint256 private constant EXECUTOR_SLOT_INDEX = 0;
+
     address public MEMBER_NFT_ADDRESS;
     address public SUBMIT_ADDRESS;
     address public VOTE_ADDRESS;
@@ -425,13 +428,13 @@ contract ActionTarget is IActionTarget {
         uint256 proposalId,
         bytes[] calldata targetData
     ) external onlySubmit {
-        if (targetData.length == 0) {
-            revert InsufficientTargetDataItems(targetData.length, 1);
+        if (targetData.length < TARGET_DATA_LENGTH) {
+            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[0].length != 32) {
-            revert InvalidTargetDataShape(0, targetData[0].length);
+        if (targetData[EXECUTOR_SLOT_INDEX].length != 32) {
+            revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
         }
-        address executor = abi.decode(targetData[0], (address));
+        address executor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
         if (executor.code.length == 0) {
             revert ExecutorNotContract(executor);
         }
@@ -478,13 +481,13 @@ contract ActionTarget is IActionTarget {
         if (bound == address(0)) {
             revert UnboundProposal(tokenAddress, proposalId);
         }
-        if (targetData.length == 0) {
-            revert InsufficientTargetDataItems(targetData.length, 1);
+        if (targetData.length < TARGET_DATA_LENGTH) {
+            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[0].length != 32) {
-            revert InvalidTargetDataShape(0, targetData[0].length);
+        if (targetData[EXECUTOR_SLOT_INDEX].length != 32) {
+            revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
         }
-        address targetDataExecutor = abi.decode(targetData[0], (address));
+        address targetDataExecutor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
         if (targetDataExecutor != bound) {
             revert TargetDataExecutorMismatch(bound, targetDataExecutor);
         }
@@ -510,10 +513,10 @@ contract ActionTarget is IActionTarget {
             revert UnboundProposal(tokenAddress, proposalId);
         }
         if (targetData.length != 0) {
-            if (targetData[0].length != 32) {
-                revert InvalidTargetDataShape(0, targetData[0].length);
+            if (targetData[EXECUTOR_SLOT_INDEX].length != 32) {
+                revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
             }
-            address targetDataExecutor = abi.decode(targetData[0], (address));
+            address targetDataExecutor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
             if (targetDataExecutor != bound) {
                 revert TargetDataExecutorMismatch(bound, targetDataExecutor);
             }

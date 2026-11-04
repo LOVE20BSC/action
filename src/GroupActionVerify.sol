@@ -29,6 +29,8 @@ library GroupActionVerify {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    uint256 private constant VOTE_TARGET_DATA_MAX_LENGTH = 2;
+
     struct OriginSubmission {
         address tokenAddress;
         uint256 actionId;
@@ -378,11 +380,11 @@ library GroupActionVerify {
         uint256 voteAmount,
         bytes[] calldata targetData
     ) external {
-        if (targetData.length == 0 || targetData.length == 1) {
+        if (targetData.length < VOTE_TARGET_DATA_MAX_LENGTH) {
             return;
         }
-        if (targetData.length > 2) {
-            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, 2);
+        if (targetData.length > VOTE_TARGET_DATA_MAX_LENGTH) {
+            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, VOTE_TARGET_DATA_MAX_LENGTH);
         }
         if (targetData[1].length != 32) {
             revert IGroupActionExecutorErrors.InvalidTargetDataShape(1, targetData[1].length);

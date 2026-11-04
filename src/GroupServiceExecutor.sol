@@ -26,6 +26,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
     uint256 public constant DEFAULT_MAX_RECIPIENTS = GroupServiceStorage.DEFAULT_MAX_RECIPIENTS;
+    uint256 private constant TARGET_DATA_LENGTH = 4;
 
     GroupServiceStorage.Layout internal _layout;
 
@@ -45,7 +46,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 verifierReward;
         uint256 ownerReward;
         uint256 ownerBurned;
-        uint8 cause;
+        GroupServiceStorage.SettlementCause cause;
     }
 
     struct RoundActions {
@@ -399,14 +400,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 serviceActionId,
         bytes[] calldata targetData
     ) external override onlyActionTarget {
-        if (targetData.length < 4) {
-            revert InsufficientTargetDataItems(targetData.length, 4);
+        if (targetData.length < TARGET_DATA_LENGTH) {
+            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData.length > 4) {
-            revert TooManyTargetDataItems(targetData.length, 4);
+        if (targetData.length > TARGET_DATA_LENGTH) {
+            revert TooManyTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
         // forge-lint: disable-next-item(require-revert-in-loop)
-        for (uint256 i = 0; i < 4; i++) {
+        for (uint256 i = 0; i < TARGET_DATA_LENGTH; i++) {
             if (targetData[i].length != 32) {
                 revert InvalidTargetDataShape(i, targetData[i].length);
             }
@@ -494,14 +495,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     ) internal view returns (Settlement memory settlement) {
         settlement.actionTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
         if (!IActionTarget(ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, round, memberId)) {
-            settlement.cause = 1;
+            settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
             return settlement;
         }
 
         RoundActions memory scope = _roundActions(settlement.actionTokenAddress, round);
         (settlement.verifierWeight, settlement.ownerWeight) = _memberWeights(scope, memberId);
         if (settlement.verifierWeight == 0 && settlement.ownerWeight == 0) {
-            settlement.cause = 1;
+            settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
             return settlement;
         }
 
@@ -509,14 +510,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         settlement.govRatioMultiplier = _layout.govRatioMultiplierByActionId[serviceTokenAddress][serviceActionId];
         settlement.denominator = _denominator(scope);
         if (settlement.denominator == 0) {
-            settlement.cause = 2;
+            settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
             return settlement;
         }
 
         (settlement.serviceReward, settlement.actionMinted) =
             IActionTarget(ACTION_TARGET_ADDRESS).actionReward(serviceTokenAddress, serviceActionId, round);
         if (settlement.serviceReward == 0) {
-            settlement.cause = 2;
+            settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
             return settlement;
         }
 
@@ -721,10 +722,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         mintAmount = settlement.verifierReward + settlement.ownerReward;
         burnAmount = settlement.ownerBurned;
         if (mintAmount == 0 && burnAmount == 0) {
-            if (settlement.cause == 1) {
+            if (settlement.cause == GroupServiceStorage.SettlementCause.NoEligibleWeight) {
                 revert ZeroRewardWeight(tokenAddress, actionId, memberId);
             }
-            if (settlement.cause == 2) {
+            if (settlement.cause == GroupServiceStorage.SettlementCause.PoolEmpty) {
                 revert MemberRewardPoolEmpty(tokenAddress, round);
             }
             revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
