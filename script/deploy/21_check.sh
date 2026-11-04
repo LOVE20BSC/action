@@ -320,6 +320,10 @@ ACTUAL_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL")
 verify_value "CHAIN_ID" "$CHAIN_ID" "$ACTUAL_CHAIN_ID" || exit 1
 
 # 1. ActionTarget.
+# Its five post-init bindings — SUBMIT, VOTE, MEMBER_NFT, PHASE, MINT — are every write entry's
+# auth root. Checking all five plus initialized() is the deployment-side proof that init was the
+# first transaction to the address and derived from the expected Mint; the contract deliberately
+# does not restrict init's caller (see specs/action/01-action-target.md).
 print_contract_header "1" "ActionTarget" "$ACTION_TARGET_ADDRESS"
 verify_deployed_and_runtime "ActionTarget" "$ACTION_TARGET_ADDRESS"
 

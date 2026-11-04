@@ -114,7 +114,15 @@ contract DeployAction is Script {
     {
         addrs.actionTarget = address(new ActionTarget());
         console2.log("ActionTarget deployed at:", addrs.actionTarget);
+        // Init must be the first transaction sent to the new ActionTarget: it is broadcast
+        // immediately after the deployment from the same broadcaster, with nothing in between.
+        // This is the only ordering guarantee the contract itself cannot provide (init is
+        // permissionless by design, see specs/action/01-action-target.md). If any other
+        // transaction reaches the address first, either this init reverts (AlreadyInitialized)
+        // or the five binding checks in _validateDeployment fail — both abort the deployment.
+        require(!ActionTarget(addrs.actionTarget).initialized(), "ActionTarget already initialized");
         ActionTarget(addrs.actionTarget).init(mint);
+        require(ActionTarget(addrs.actionTarget).initialized(), "ActionTarget init did not take effect");
         console2.log("ActionTarget initialized");
 
         addrs.lpExecutor = address(new LpExecutor(addrs.actionTarget));
@@ -135,6 +143,10 @@ contract DeployAction is Script {
     ) internal view {
         IMint mint = IMint(mintAddress);
         IActionTarget actionTarget = IActionTarget(addrs.actionTarget);
+        // The five bindings below are every write entry's auth root: SUBMIT/VOTE gate the three
+        // core callbacks, MEMBER_NFT is the member-owner predicate, PHASE drives the join/settle
+        // rounds and MINT is the only mint outlet. Together they prove init ran first and derived
+        // from the expected Mint; a front-run init shows up as a mismatch here.
         require(actionTarget.initialized(), "ActionTarget not initialized");
         require(actionTarget.MINT_ADDRESS() == mintAddress, "ActionTarget mint mismatch");
         require(actionTarget.VOTE_ADDRESS() == mint.VOTE_ADDRESS(), "ActionTarget vote mismatch");
