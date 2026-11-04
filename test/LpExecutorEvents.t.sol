@@ -8,7 +8,7 @@ import {LpExecutorTestBase, LpExecutorVm} from "./LpExecutorTestBase.sol";
 contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionExecutorEvents {
     function testLpActionCreatedEvent() external {
         _atPhase(CREATION_PHASE);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(lpExecutor));
         emit LpActionCreated({
             tokenAddress: address(token),
             actionId: SECOND_ACTION_ID,
@@ -42,7 +42,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
 
     function testLpJoinedEvent() external {
         _atPhaseBlock(3, 3300);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(lpExecutor));
         emit LpJoined({
             tokenAddress: address(token),
             actionId: ACTION_ID,
@@ -76,7 +76,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
     function testLpWithdrawnEvent() external {
         _atPhaseBlock(3, 3300);
         _join(1, 100e18);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(lpExecutor));
         emit LpWithdrawn({
             tokenAddress: address(token),
             actionId: ACTION_ID,
@@ -193,7 +193,7 @@ contract LpExecutorEventsTest is LpExecutorTestBase, ILpExecutorEvents, IActionE
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
         _fundExecutor(PROPOSAL_REWARD);
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(lpExecutor));
         emit MemberRewardMinted({
             tokenAddress: address(token),
             actionId: ACTION_ID,

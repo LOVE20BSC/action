@@ -13,7 +13,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
         GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
 
-        // Two recipient transfers, then the paired settlement events.
+        // The detail transfers come first; the aggregate mint closes the settlement, and the role split follows it.
         GroupServiceVm.Log[] memory transfers = _logsWithTopic(
             logs, bytes32(keccak256("RecipientPaid(address,uint256,uint256,uint256,address,uint256,uint256,uint256)"))
         );
@@ -31,6 +31,12 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _assertRecipientTransfers(transfers, address(token));
         require(transfers[0].emitter == address(executor), "recipient event emitted by the executor");
         require(mintLogs.length == 1 && splitLogs.length == 1, "one settlement event pair");
+        require(mintLogs[0].emitter == address(executor), "mint event emitted by the executor");
+        require(splitLogs[0].emitter == address(executor), "role split emitted by the executor");
+        require(
+            _indexOf(logs, mintLogs[0]) > _indexOf(logs, transfers[transfers.length - 1]),
+            "aggregate mint follows the detail transfers"
+        );
         require(_indexOf(logs, mintLogs[0]) < _indexOf(logs, splitLogs[0]), "base event precedes the role split");
 
         (, uint256 loggedMintAmount, uint256 loggedBurnAmount) =
@@ -143,7 +149,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _prepareCappedTwoActionScenario();
         _settleService(GROUP_ID);
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(executor));
         emit MemberRewardMinted({
             tokenAddress: address(token),
             actionId: SERVICE_ACTION_ID,
@@ -170,7 +176,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _joinService(GROUP_ID);
         _atPhase(VERIFY_PHASE);
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(executor));
         emit ServiceExited({
             serviceTokenAddress: address(token),
             serviceActionId: SERVICE_ACTION_ID,

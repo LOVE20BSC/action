@@ -11,6 +11,7 @@ import {MockGroupActionMemberNFT, MockGroupActionPhase} from "./mocks/GroupActio
 interface GroupActionVerifyVm {
     function expectRevert(bytes calldata revertData) external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
+    function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
 }
 
 /// @dev Library-level suite: seeds the shared Layout directly and drives
@@ -208,7 +209,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     /// `roundVerified = false`），GROUP_B 收尾时两者都为 true，两个布尔写反即失败。
     function test_OriginScoresSubmittedSeparatesGroupAndRoundVerified() external {
         _bindVerifier();
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(this));
         emit OriginScoresSubmitted({
             tokenAddress: TOKEN,
             actionId: ACTION_ID,
@@ -224,7 +225,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         });
         _submit(GROUP_A, 0, _scores(100, 90, 80));
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(this));
         emit OriginScoresSubmitted({
             tokenAddress: TOKEN,
             actionId: ACTION_ID,

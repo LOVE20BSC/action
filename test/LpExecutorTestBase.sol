@@ -25,6 +25,7 @@ interface LpExecutorVm {
     function expectRevert(bytes calldata data) external;
     function expectRevert() external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
+    function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
     function assume(bool condition) external;
     function recordLogs() external;
     function getRecordedLogs() external returns (Log[] memory logs);

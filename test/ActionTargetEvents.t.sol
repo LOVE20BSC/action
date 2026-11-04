@@ -7,7 +7,7 @@ import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
 contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
     function testActionCreatedEvent() external {
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit ActionRegistered({
             tokenAddress: address(token),
             actionId: 11,
@@ -20,7 +20,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
     function testJoinStateRegisteredEvent() external {
         _createAction(11);
         phase.setPhase(2);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit JoinStateRegistered({
             tokenAddress: address(token),
             actionId: 11,
@@ -35,7 +35,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         phase.setPhase(2);
         _join(11, 1);
         phase.setPhase(3);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit JoinStateCleared({
             tokenAddress: address(token),
             actionId: 11,
@@ -51,7 +51,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         phase.setPhase(2);
         _join(11, 1);
         phase.setPhase(3);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit JoinStateCleared({
             tokenAddress: address(token),
             actionId: 11,
@@ -67,7 +67,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         uint256 round = 5;
         vote.setProposalVoted(address(token), round, 11, true);
         mint.setMintAmount(777);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit ActionRewardMinted({
             tokenAddress: address(token),
             actionId: 11,
@@ -103,7 +103,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
     function testEventsCarryJoinRoundNotVoteRound() external {
         _createAction(11);
         phase.setPhase(3);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit JoinStateRegistered({
             tokenAddress: address(token),
             actionId: 11,
@@ -112,7 +112,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
         });
         _join(11, 1);
         phase.setPhase(4);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit JoinStateCleared({
             tokenAddress: address(token),
             actionId: 11,
@@ -125,7 +125,7 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
 
     function testCreationEventRoundIsVoteRound() external {
         phase.setPhase(7);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(actionTarget));
         emit ActionRegistered({
             tokenAddress: address(token),
             actionId: 11,

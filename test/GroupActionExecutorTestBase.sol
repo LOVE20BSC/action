@@ -24,6 +24,7 @@ interface GroupActionExecutorVm {
     function expectRevert() external;
     function roll(uint256 blockNumber) external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
+    function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
     function recordLogs() external;
     function getRecordedLogs() external returns (Log[] memory logs);
 }

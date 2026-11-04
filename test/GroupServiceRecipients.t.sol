@@ -14,7 +14,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         string[] memory remarks = new string[](1);
         remarks[0] = "";
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(executor));
         emit RecipientsChanged({
             sourceTokenAddress: address(token),
             sourceActionId: GROUP_ACTION_ID,
@@ -46,7 +46,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         string[] memory remarks = new string[](1);
         remarks[0] = "second";
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(executor));
         emit RecipientsChanged({
             sourceTokenAddress: address(token),
             sourceActionId: GROUP_ACTION_ID,

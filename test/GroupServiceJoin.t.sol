@@ -13,7 +13,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
 
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(executor));
         emit ServiceJoined({
             serviceTokenAddress: address(token),
             serviceActionId: SERVICE_ACTION_ID,
@@ -161,7 +161,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _joinService(GROUP_ID);
 
         _atPhase(VERIFY_PHASE);
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, true, address(executor));
         emit ServiceExited({
             serviceTokenAddress: address(token),
             serviceActionId: SERVICE_ACTION_ID,

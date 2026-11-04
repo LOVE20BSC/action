@@ -13,6 +13,8 @@ Decl style: every event declaration under src/, test/, script/ must put `event E
 and `);` on their own lines with one parameter per line (event-standards §6.11).
 Emit keys: the key names and their order must equal one ABI declaration of that
 event, read from out/ (event-standards §6.1, §6.11).
+Emitter assertions: every `vm.expectEmit` under test/ must pass the 5th
+`address emitter` argument (event-standards §4.1).
 Only concrete contracts declared under src/ are included; interfaces, libraries,
 and abstract contracts are excluded. Requires forge on PATH unless --no-build is
 used with an existing out/ directory.
@@ -261,6 +263,7 @@ def mask_noncode(text):
 
 EMIT_RE = re.compile(r"\bemit\s+([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\(")
 EVENT_DECL_RE = re.compile(r"\bevent\s+([A-Za-z_]\w*)\s*\(")
+EXPECT_EMIT_RE = re.compile(r"\bvm\.expectEmit\s*\(")
 
 
 def bracket_entries(masked, text, start, opener, closer):
@@ -407,9 +410,36 @@ def check_emit_keys(event_params):
         sys.exit("emit key violations (event-standards §6.11):\n  " + "\n  ".join(problems))
 
 
+def check_emitter_assertions():
+    """Every `vm.expectEmit` in test/ must carry the 5th emitter argument (event-standards §4.1)."""
+    problems = []
+    calls = 0
+    base = REPO / "test"
+    if not base.exists():
+        return 0
+    for path in sorted(base.rglob("*.sol")):
+        text = path.read_text()
+        masked = mask_noncode(text)
+        for match in EXPECT_EMIT_RE.finditer(masked):
+            calls += 1
+            open_paren = match.end() - 1
+            end, _ = bracket_entries(masked, text, open_paren, "(", ")")
+            args = split_params(masked[open_paren + 1 : end])
+            if len(args) < 5:
+                line = text.count("\n", 0, match.start()) + 1
+                problems.append(
+                    f"{path.relative_to(REPO)}:{line}: expectEmit has {len(args)} args "
+                    "(use vm.expectEmit(..., address(emitter))"
+                )
+    if problems:
+        sys.exit("emitter assertion violations (event-standards §4.1):\n  " + "\n  ".join(problems))
+    return calls
+
+
 def main():
     check_decl_style()
     check_emit_style()
+    emitter_calls = check_emitter_assertions()
     lines, event_params = load_events()
     check_emit_keys(event_params)
     baseline = EVENTS_DIR / "events-baseline.txt"
@@ -419,7 +449,10 @@ def main():
         count = check_families(parsed)
         baseline.write_text("\n".join(lines) + "\n")
         print(f"wrote {len(lines)} events to {baseline}")
-        print(f"event families OK: {count} protocol events; declaration style OK; emit style OK; emit keys OK")
+        print(
+            f"event families OK: {count} protocol events; declaration style OK; emit style OK; "
+            f"emit keys OK; emitter assertions OK: {emitter_calls} expectEmit calls"
+        )
         return
 
     if not baseline.exists():
@@ -438,7 +471,10 @@ def main():
         sys.exit(1)
 
     check_families(parsed)
-    print(f"event manifest OK: {len(lines)} events; families OK; declaration style OK; emit style OK; emit keys OK")
+    print(
+        f"event manifest OK: {len(lines)} events; families OK; declaration style OK; emit style OK; "
+        f"emit keys OK; emitter assertions OK: {emitter_calls} expectEmit calls"
+    )
 
 
 if __name__ == "__main__":
