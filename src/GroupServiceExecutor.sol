@@ -722,7 +722,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         burnAmount = settlement.ownerBurned;
         if (mintAmount == 0 && burnAmount == 0) {
             if (settlement.cause == 1) {
-                revert MemberHasNoVote(tokenAddress, round, memberId);
+                revert ZeroRewardWeight(tokenAddress, actionId, memberId);
             }
             if (settlement.cause == 2) {
                 revert MemberRewardPoolEmpty(tokenAddress, round);

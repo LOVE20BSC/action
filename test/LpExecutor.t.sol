@@ -792,7 +792,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.prank(MEMBER2);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberHasNoVote.selector, address(token), 2, 2
+                IActionExecutorErrors.ZeroEffectiveJoinAmount.selector, address(token), ACTION_ID, 2
             )
         );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 2);

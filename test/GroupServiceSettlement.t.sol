@@ -446,9 +446,9 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberHasNoVote.selector,
+                IActionExecutorErrors.ZeroRewardWeight.selector,
                 address(token),
-                SERVICE_ROUND,
+                SERVICE_ACTION_ID,
                 GROUP_ID
             )
         );
@@ -487,9 +487,9 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberHasNoVote.selector,
+                IActionExecutorErrors.ZeroRewardWeight.selector,
                 address(token),
-                SERVICE_ROUND,
+                SERVICE_ACTION_ID,
                 MEMBER1_ID
             )
         );
@@ -503,9 +503,9 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(MEMBER2);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberHasNoVote.selector,
+                IActionExecutorErrors.ZeroRewardWeight.selector,
                 address(token),
-                SERVICE_ROUND,
+                SERVICE_ACTION_ID,
                 MEMBER2_ID
             )
         );

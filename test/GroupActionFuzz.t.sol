@@ -106,9 +106,9 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
             if (final1 == 0) {
                 vm.expectRevert(
                     abi.encodeWithSelector(
-                        IActionExecutorErrors.MemberHasNoVote.selector,
+                        IActionExecutorErrors.ZeroFinalScore.selector,
                         address(token),
-                        2,
+                        ACTION_ID,
                         MEMBER1_ID
                     )
                 );
@@ -133,9 +133,9 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
             if (final2 == 0) {
                 vm.expectRevert(
                     abi.encodeWithSelector(
-                        IActionExecutorErrors.MemberHasNoVote.selector,
+                        IActionExecutorErrors.ZeroFinalScore.selector,
                         address(token),
-                        2,
+                        ACTION_ID,
                         MEMBER2_ID
                     )
                 );

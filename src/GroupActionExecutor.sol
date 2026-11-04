@@ -729,7 +729,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
                 revert MemberRewardPoolEmpty(tokenAddress, round);
             }
             if (memberFinalScore == 0) {
-                revert MemberHasNoVote(tokenAddress, round, memberId);
+                revert ZeroFinalScore(tokenAddress, actionId, memberId);
             }
             revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
         }

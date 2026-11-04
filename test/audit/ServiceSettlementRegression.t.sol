@@ -94,9 +94,9 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER_B);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberHasNoVote.selector,
+                IActionExecutorErrors.ZeroRewardWeight.selector,
                 address(token),
-                SERVICE_ROUND,
+                SERVICE_ACTION_ID,
                 GROUP_OWNER_B_ID
             )
         );

@@ -27,11 +27,19 @@ interface IActionExecutorErrors {
         uint256 memberId,
         uint256 round
     );
-    // Payload mirrors core `IMintErrors` (tokenAddress, round[, memberId]) so one error name keeps one
-    // signature protocol-wide; the executor is already scoped to a single action.
-    error MemberHasNoVote(
+    error ZeroEffectiveJoinAmount(
         address tokenAddress,
-        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    );
+    error ZeroFinalScore(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 memberId
+    );
+    error ZeroRewardWeight(
+        address tokenAddress,
+        uint256 actionId,
         uint256 memberId
     );
     error MemberRewardPoolEmpty(

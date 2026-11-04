@@ -513,7 +513,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             uint256 effectiveAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(round)
                 - _deductionByMemberId[tokenAddress][actionId][round][memberId];
             if (effectiveAmount == 0) {
-                revert MemberHasNoVote(tokenAddress, round, memberId);
+                revert ZeroEffectiveJoinAmount(tokenAddress, actionId, memberId);
             }
             revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
         }
