@@ -16,8 +16,9 @@ contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
     using Uint256Set for Uint256Set.Storage;
 
-    uint256 private constant TARGET_DATA_LENGTH = 1;
+    uint256 private constant ABI_WORD_BYTES = 32;
     uint256 private constant EXECUTOR_SLOT_INDEX = 0;
+    uint256 private constant TARGET_DATA_LENGTH = 1;
 
     address public MEMBER_NFT_ADDRESS;
     address public SUBMIT_ADDRESS;
@@ -431,7 +432,7 @@ contract ActionTarget is IActionTarget {
         if (targetData.length < TARGET_DATA_LENGTH) {
             revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[EXECUTOR_SLOT_INDEX].length != 32) {
+        if (targetData[EXECUTOR_SLOT_INDEX].length != ABI_WORD_BYTES) {
             revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
         }
         address executor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
@@ -484,7 +485,7 @@ contract ActionTarget is IActionTarget {
         if (targetData.length < TARGET_DATA_LENGTH) {
             revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[EXECUTOR_SLOT_INDEX].length != 32) {
+        if (targetData[EXECUTOR_SLOT_INDEX].length != ABI_WORD_BYTES) {
             revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
         }
         address targetDataExecutor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
@@ -513,7 +514,7 @@ contract ActionTarget is IActionTarget {
             revert UnboundProposal(tokenAddress, proposalId);
         }
         if (targetData.length != 0) {
-            if (targetData[EXECUTOR_SLOT_INDEX].length != 32) {
+            if (targetData[EXECUTOR_SLOT_INDEX].length != ABI_WORD_BYTES) {
                 revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
             }
             address targetDataExecutor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));

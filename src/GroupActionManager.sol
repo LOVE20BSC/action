@@ -24,6 +24,14 @@ library GroupActionManager {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
+    uint256 private constant ABI_WORD_BYTES = 32;
+    uint256 private constant TARGET_DATA_PAYLOAD_START_INDEX = 1;
+    uint256 private constant JOIN_TOKEN_SLOT_INDEX = 1;
+    uint256 private constant ACTIVATION_STAKE_AMOUNT_SLOT_INDEX = 2;
+    uint256 private constant MAX_JOIN_AMOUNT_RATIO_SLOT_INDEX = 3;
+    uint256 private constant ACTIVATION_MIN_GOV_RATIO_SLOT_INDEX = 4;
+    uint256 private constant VERIFIER_STAKE_AMOUNT_SLOT_INDEX = 5;
+    uint256 private constant VERIFICATION_INFO_SLOT_INDEX = 6;
     uint256 private constant TARGET_DATA_MIN_LENGTH = 6;
     uint256 private constant TARGET_DATA_MAX_LENGTH = 7;
 
@@ -63,18 +71,18 @@ library GroupActionManager {
         if (targetData.length > TARGET_DATA_MAX_LENGTH) {
             revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, TARGET_DATA_MAX_LENGTH);
         }
-        for (uint256 i = 1; i < TARGET_DATA_MIN_LENGTH; i++) {
-            if (targetData[i].length != 32) {
+        for (uint256 i = TARGET_DATA_PAYLOAD_START_INDEX; i < TARGET_DATA_MIN_LENGTH; i++) {
+            if (targetData[i].length != ABI_WORD_BYTES) {
                 // forge-lint: disable-next-line(require-revert-in-loop)
                 revert IGroupActionExecutorErrors.InvalidTargetDataShape(i, targetData[i].length);
             }
         }
 
-        address joinTokenAddress = abi.decode(targetData[1], (address));
-        uint256 activationStakeAmount = abi.decode(targetData[2], (uint256));
-        uint256 maxJoinAmountRatio = abi.decode(targetData[3], (uint256));
-        uint256 activationMinGovRatio = abi.decode(targetData[4], (uint256));
-        uint256 verifierStakeAmount = abi.decode(targetData[5], (uint256));
+        address joinTokenAddress = abi.decode(targetData[JOIN_TOKEN_SLOT_INDEX], (address));
+        uint256 activationStakeAmount = abi.decode(targetData[ACTIVATION_STAKE_AMOUNT_SLOT_INDEX], (uint256));
+        uint256 maxJoinAmountRatio = abi.decode(targetData[MAX_JOIN_AMOUNT_RATIO_SLOT_INDEX], (uint256));
+        uint256 activationMinGovRatio = abi.decode(targetData[ACTIVATION_MIN_GOV_RATIO_SLOT_INDEX], (uint256));
+        uint256 verifierStakeAmount = abi.decode(targetData[VERIFIER_STAKE_AMOUNT_SLOT_INDEX], (uint256));
         if (joinTokenAddress == address(0)) {
             revert IGroupActionExecutorErrors.ZeroJoinTokenAddress();
         }
@@ -102,7 +110,7 @@ library GroupActionManager {
 
         if (targetData.length == TARGET_DATA_MAX_LENGTH) {
             (string[] memory keys, string[] memory descriptions) =
-                abi.decode(targetData[TARGET_DATA_MAX_LENGTH - 1], (string[], string[]));
+                abi.decode(targetData[VERIFICATION_INFO_SLOT_INDEX], (string[], string[]));
             if (keys.length != descriptions.length) {
                 revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, descriptions.length);
             }

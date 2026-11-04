@@ -29,7 +29,9 @@ library GroupActionVerify {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
-    uint256 private constant VOTE_TARGET_DATA_MAX_LENGTH = 2;
+    uint256 private constant ABI_WORD_BYTES = 32;
+    uint256 private constant VERIFIER_ID_SLOT_INDEX = 1;
+    uint256 private constant VOTE_TARGET_DATA_LENGTH = 2;
 
     struct OriginSubmission {
         address tokenAddress;
@@ -380,17 +382,19 @@ library GroupActionVerify {
         uint256 voteAmount,
         bytes[] calldata targetData
     ) external {
-        if (targetData.length < VOTE_TARGET_DATA_MAX_LENGTH) {
+        if (targetData.length < VOTE_TARGET_DATA_LENGTH) {
             return;
         }
-        if (targetData.length > VOTE_TARGET_DATA_MAX_LENGTH) {
-            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, VOTE_TARGET_DATA_MAX_LENGTH);
+        if (targetData.length > VOTE_TARGET_DATA_LENGTH) {
+            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, VOTE_TARGET_DATA_LENGTH);
         }
-        if (targetData[1].length != 32) {
-            revert IGroupActionExecutorErrors.InvalidTargetDataShape(1, targetData[1].length);
+        if (targetData[VERIFIER_ID_SLOT_INDEX].length != ABI_WORD_BYTES) {
+            revert IGroupActionExecutorErrors.InvalidTargetDataShape(
+                VERIFIER_ID_SLOT_INDEX, targetData[VERIFIER_ID_SLOT_INDEX].length
+            );
         }
 
-        uint256 verifierId = abi.decode(targetData[1], (uint256));
+        uint256 verifierId = abi.decode(targetData[VERIFIER_ID_SLOT_INDEX], (uint256));
         uint256 applicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         if (applicationId == 0) {
             revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
