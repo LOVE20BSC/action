@@ -51,7 +51,7 @@ interface IGroupActionManagerErrors {
     error GroupAlreadyActivated(uint256 groupId);
     error GroupNotActive(uint256 groupId);
     error GroupNotExist(uint256 groupId);
-    error InvalidMinJoinAmount(uint256 minAmount);
+    error ZeroMinJoinAmount();
     error InvalidMaxJoinAmount(
         uint256 minAmount,
         uint256 maxAmount

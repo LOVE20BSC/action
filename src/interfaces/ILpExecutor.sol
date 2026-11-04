@@ -14,9 +14,13 @@ interface ILpExecutorErrors {
         uint256 required,
         uint256 actual
     );
-    error TargetDataLengthMismatch(
-        uint256 expected,
-        uint256 actual
+    error InsufficientTargetDataItems(
+        uint256 count,
+        uint256 minCount
+    );
+    error TooManyTargetDataItems(
+        uint256 count,
+        uint256 maxCount
     );
     error InvalidTargetDataShape(
         uint256 index,

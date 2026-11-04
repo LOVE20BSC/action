@@ -77,7 +77,7 @@ contract ActionTargetTest is ActionTargetTestBase {
     function testCreateRejectsInvalidExecutorData() external {
         vm.prank(submitAddress);
         vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.TargetDataLengthMismatch.selector, 1, 0)
+            abi.encodeWithSelector(IActionTargetErrors.InsufficientTargetDataItems.selector, 0, 1)
         );
         actionTarget.onProposalCreated(address(token), 11, new bytes[](0));
 
@@ -172,7 +172,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         _createAction(11);
         vm.prank(submitAddress);
         vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.TargetDataLengthMismatch.selector, 1, 0)
+            abi.encodeWithSelector(IActionTargetErrors.InsufficientTargetDataItems.selector, 0, 1)
         );
         actionTarget.onProposalSubmitted(address(token), 11, 7, new bytes[](0));
 

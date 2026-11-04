@@ -45,6 +45,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 verifierReward;
         uint256 ownerReward;
         uint256 ownerBurned;
+        uint8 cause;
     }
 
     struct RoundActions {
@@ -117,6 +118,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     ) external nonReentrant onlyMemberOwner(memberId) {
         uint256 round = currentJoinRound();
 
+        if (_layout.createdRoundByActionId[serviceTokenAddress][serviceActionId] == 0) {
+            revert ActionNotCreated(serviceTokenAddress, serviceActionId);
+        }
         if (IActionTarget(ACTION_TARGET_ADDRESS).isJoined(serviceTokenAddress, serviceActionId, memberId)) {
             revert AlreadyJoined(serviceTokenAddress, serviceActionId, memberId);
         }
@@ -374,11 +378,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 actionId,
         uint256 memberId
     ) external nonReentrant onlyMemberOwner(memberId) {
+        uint256 round = currentJoinRound();
         if (!IActionTarget(ACTION_TARGET_ADDRESS).isJoined(tokenAddress, actionId, memberId)) {
             revert NotJoined(tokenAddress, actionId, memberId);
         }
 
-        uint256 round = currentJoinRound();
         IActionTarget(ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
 
         emit ServiceExited({
@@ -395,8 +399,11 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 serviceActionId,
         bytes[] calldata targetData
     ) external override onlyActionTarget {
-        if (targetData.length != 4) {
-            revert TargetDataLengthMismatch(4, targetData.length);
+        if (targetData.length < 4) {
+            revert InsufficientTargetDataItems(targetData.length, 4);
+        }
+        if (targetData.length > 4) {
+            revert TooManyTargetDataItems(targetData.length, 4);
         }
         // forge-lint: disable-next-item(require-revert-in-loop)
         for (uint256 i = 0; i < 4; i++) {
@@ -445,7 +452,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         bytes[] calldata targetData
     ) external virtual override onlyActionTarget {
         if (targetData.length > 1) {
-            revert TargetDataLengthMismatch(1, targetData.length);
+            revert TooManyTargetDataItems(targetData.length, 1);
         }
     }
 
@@ -487,12 +494,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     ) internal view returns (Settlement memory settlement) {
         settlement.actionTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
         if (!IActionTarget(ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, round, memberId)) {
+            settlement.cause = 1;
             return settlement;
         }
 
         RoundActions memory scope = _roundActions(settlement.actionTokenAddress, round);
         (settlement.verifierWeight, settlement.ownerWeight) = _memberWeights(scope, memberId);
         if (settlement.verifierWeight == 0 && settlement.ownerWeight == 0) {
+            settlement.cause = 1;
             return settlement;
         }
 
@@ -500,12 +509,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         settlement.govRatioMultiplier = _layout.govRatioMultiplierByActionId[serviceTokenAddress][serviceActionId];
         settlement.denominator = _denominator(scope);
         if (settlement.denominator == 0) {
+            settlement.cause = 2;
             return settlement;
         }
 
         (settlement.serviceReward, settlement.actionMinted) =
             IActionTarget(ACTION_TARGET_ADDRESS).actionReward(serviceTokenAddress, serviceActionId, round);
         if (settlement.serviceReward == 0) {
+            settlement.cause = 2;
             return settlement;
         }
 
@@ -710,7 +721,13 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         mintAmount = settlement.verifierReward + settlement.ownerReward;
         burnAmount = settlement.ownerBurned;
         if (mintAmount == 0 && burnAmount == 0) {
-            revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
+            if (settlement.cause == 1) {
+                revert MemberHasNoVote(tokenAddress, round, memberId);
+            }
+            if (settlement.cause == 2) {
+                revert MemberRewardPoolEmpty(tokenAddress, round);
+            }
+            revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
         }
 
         if (!settlement.actionMinted) {
@@ -719,9 +736,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             _applyFormulas(settlement, memberId);
             mintAmount = settlement.verifierReward + settlement.ownerReward;
             burnAmount = settlement.ownerBurned;
-            if (mintAmount == 0 && burnAmount == 0) {
-                revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
-            }
         }
 
         // Load-bearing: the cache key is the action token's round, not the service token's; a parent

@@ -52,11 +52,11 @@ interface IActionTargetErrors {
     );
     error ProposalNotVoted(
         address tokenAddress,
-        uint256 proposalId
+        uint256 actionId
     );
-    error TargetDataLengthMismatch(
-        uint256 expected,
-        uint256 actual
+    error InsufficientTargetDataItems(
+        uint256 count,
+        uint256 minCount
     );
     error InvalidTargetDataShape(
         uint256 index,

@@ -26,9 +26,13 @@ interface IGroupActionExecutorErrors {
     error InvalidJoinTokenAddress(address joinTokenAddress);
     error InvalidMaxJoinAmountRatio(uint256 value);
     error InvalidActivationMinGovRatio(uint256 value);
-    error TargetDataLengthMismatch(
-        uint256 expected,
-        uint256 actual
+    error InsufficientTargetDataItems(
+        uint256 count,
+        uint256 minCount
+    );
+    error TooManyTargetDataItems(
+        uint256 count,
+        uint256 maxCount
     );
     error InvalidTargetDataShape(
         uint256 index,

@@ -298,7 +298,7 @@ contract LpExecutorRealIntegrationTest {
         vm.prank(member1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), proposalId, 1, round
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), round
             )
         );
         lpExecutor.mintMemberReward(address(token), proposalId, round, 1);

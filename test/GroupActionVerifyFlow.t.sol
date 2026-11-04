@@ -171,10 +171,16 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER2);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IGroupActionVerifyErrors.VerifierAlreadyLocked.selector, address(token), ACTION_ID, 2
+                IGroupActionVerifyErrors.RoundVerifierLocked.selector, address(token), ACTION_ID, 2, VERIFIER_ID
             )
         );
         executor.submitOriginScores(address(token), ACTION_ID, MEMBER2_ID, GROUP_ID, 1, _scores(90));
+
+        uint256[] memory overMaxByOther = new uint256[](1);
+        overMaxByOther[0] = 101;
+        vm.prank(MEMBER2);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ScoreLimitExceeded.selector, 0, 101, 100));
+        executor.submitOriginScores(address(token), ACTION_ID, MEMBER2_ID, GROUP_ID, 0, overMaxByOther);
 
         uint256[] memory secondBatch = new uint256[](1);
         secondBatch[0] = 90;
@@ -285,7 +291,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         three[1] = votedData[1];
         three[2] = votedData[1];
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TargetDataLengthMismatch.selector, 2, 3));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TooManyTargetDataItems.selector, 3, 2));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, three);
 
         vm.prank(address(actionTarget));
@@ -606,6 +612,16 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, string(limitDescription));
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "staked at limit");
         require(token.balanceOf(VERIFIER) == before - VERIFIER_STAKE, "charged at limit");
+    }
+
+    function testApplicationChecksDescriptionBeforeActionExistence() external {
+        bytes memory longDescription = new bytes(1025);
+        for (uint256 i = 0; i < longDescription.length; i++) {
+            longDescription[i] = 0x61;
+        }
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.DescriptionTooLong.selector, 1025, 1024));
+        executor.submitVerifierApplication(address(token), uint256(99), VERIFIER_ID, string(longDescription));
     }
 
     function testVerifierStakeCancelWithoutApplicationReverts() external {

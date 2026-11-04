@@ -67,7 +67,7 @@ library GroupActionJoin {
             revert IGroupActionJoinErrors.ZeroParticipationAmount();
         }
         if (groupId == 0) {
-            revert IGroupActionManagerErrors.GroupNotExist(0);
+            revert IGroupActionJoinErrors.ZeroGroupId();
         }
         GroupActionManager.groupOwnerOrRevert(protocol, groupId);
 
@@ -168,7 +168,7 @@ library GroupActionJoin {
             revert IGroupActionJoinErrors.ZeroQuotaAmount(memberId);
         }
         if (groupId == 0) {
-            revert IGroupActionManagerErrors.GroupNotExist(0);
+            revert IGroupActionJoinErrors.ZeroGroupId();
         }
         GroupActionManager.groupOwnerOrRevert(protocol, groupId);
         _withdrawProviderQuota(self, tokenAddress, actionId, groupId, memberId, providerId, amount);
@@ -322,7 +322,7 @@ library GroupActionJoin {
             revert IGroupActionJoinErrors.QuotaArrayLengthMismatch(memberIds.length, amounts.length);
         }
         if (groupId == 0) {
-            revert IGroupActionManagerErrors.GroupNotExist(0);
+            revert IGroupActionJoinErrors.ZeroGroupId();
         }
         GroupActionManager.groupOwnerOrRevert(protocol, groupId);
         if (!self.groupState[tokenAddress][actionId][groupId].active) {
@@ -373,7 +373,7 @@ library GroupActionJoin {
         uint256[] calldata memberIds
     ) external onlyMemberOwner(self, protocol, providerId) {
         if (groupId == 0) {
-            revert IGroupActionManagerErrors.GroupNotExist(0);
+            revert IGroupActionJoinErrors.ZeroGroupId();
         }
         GroupActionManager.groupOwnerOrRevert(protocol, groupId);
         if (memberIds.length == 0) {

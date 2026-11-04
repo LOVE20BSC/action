@@ -90,9 +90,15 @@ contract LpExecutorTest is LpExecutorTestBase {
                 targetData[i] = abi.encode(uint256(i));
             }
             vm.prank(address(actionTarget));
-            vm.expectRevert(
-                abi.encodeWithSelector(ILpExecutorErrors.TargetDataLengthMismatch.selector, 4, counts[c])
-            );
+            if (counts[c] < 4) {
+                vm.expectRevert(
+                    abi.encodeWithSelector(ILpExecutorErrors.InsufficientTargetDataItems.selector, counts[c], 4)
+                );
+            } else {
+                vm.expectRevert(
+                    abi.encodeWithSelector(ILpExecutorErrors.TooManyTargetDataItems.selector, counts[c], 4)
+                );
+            }
             lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
         }
         require(
@@ -229,7 +235,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         twoItems[0] = abi.encode(address(lpExecutor));
         twoItems[1] = abi.encode(uint256(1));
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.TargetDataLengthMismatch.selector, 1, 2));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.TooManyTargetDataItems.selector, 2, 1));
         lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, twoItems);
 
         vm.prank(OUTSIDER);
@@ -767,7 +773,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), 2
             )
         );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
@@ -786,7 +792,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.prank(MEMBER2);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 2, 2
+                IActionExecutorErrors.MemberHasNoVote.selector, address(token), 2, 2
             )
         );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 2);
@@ -804,7 +810,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), 2
             )
         );
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
@@ -1160,7 +1166,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         // Nobody joined the creation round, so its reserved share has no distribution path.
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector, address(token), ACTION_ID, 1, 2
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), 2
             )
         );
         _mintMemberReward(2, 1);

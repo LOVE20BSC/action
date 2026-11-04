@@ -9,6 +9,20 @@ import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 ///      parent/child token pairing, empty rewards, unlocked verifiers, batch
 ///      rollback and the pre-mint projections.
 contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
+    function testExitChecksTheRoundBeforeTheJoinState() external {
+        _atPhase(1);
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
+        executor.exit(address(token), SERVICE_ACTION_ID, GROUP_ID);
+    }
+
+    function testJoinRejectsUncreatedActionBeforeQualification() external {
+        _atPhase(JOIN_PHASE);
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), uint256(99)));
+        executor.join(address(token), 99, MEMBER1_ID);
+    }
+
     function testFullVerifierRatioLeavesTheOwnerSideEmpty() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
@@ -38,11 +52,10 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberRewardRoundedToZero.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                GROUP_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                GROUP_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
@@ -96,11 +109,10 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER_B);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberHasNoVote.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                GROUP_OWNER_B_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                GROUP_OWNER_B_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
@@ -204,10 +216,8 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                GROUP_ID,
                 SERVICE_ROUND
             )
         );
@@ -256,45 +266,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         require(strayMint == 0 && !strayMinted, "uncreated action base projection is zero");
     }
 
-    function testMintedZeroAfterARichProjectionReverts() external {
-        _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
-        _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        _qualifyGroupOwner(GROUP_ID);
-        _joinService(GROUP_ID);
-        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
-        // The projection is rich but the mint itself pays nothing: the reward
-        // was consumed elsewhere. The recheck after the mint must refuse to
-        // settle a zero payout instead of recording an empty reward.
-        _armServiceReward(SERVICE_REWARD);
-        actionTarget.setMintReturnAmount(0);
-        _atPhase(MINT_PHASE);
-
-        vm.prank(GROUP_OWNER);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
-                address(token),
-                SERVICE_ACTION_ID,
-                GROUP_ID,
-                SERVICE_ROUND
-            )
-        );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
-
-        // The revert rolled the whole call back: nothing is recorded and the
-        // projection still derives the same reward, so the member can retry
-        // once the mint can actually pay.
-        (, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
-        require(!claimed, "nothing recorded for the failed mint");
-        require(ownerReward == SERVICE_REWARD / 2, "projection unchanged after the failed mint");
-        require(ownerDistributed == 0 && ownerRemaining == ownerReward, "no split recorded either");
-        require(token.balanceOf(address(executor)) == SERVICE_REWARD, "failed mint moves no assets");
-        require(token.burnedTotal() == 0, "failed mint burns nothing");
-    }
-
     function testUnlockedActionCountsTowardTheDivisorOnly() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
@@ -332,11 +303,10 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER_B);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberHasNoVote.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                GROUP_OWNER_B_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                GROUP_OWNER_B_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);

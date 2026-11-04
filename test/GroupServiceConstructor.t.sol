@@ -92,13 +92,13 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
             address(token),
             _serviceTargetData(address(token), 0, 0),
             3,
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.TargetDataLengthMismatch.selector, 4, 3)
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InsufficientTargetDataItems.selector, 3, 4)
         );
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(token), 0, 0),
             5,
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.TargetDataLengthMismatch.selector, 4, 5)
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.TooManyTargetDataItems.selector, 5, 4)
         );
         _expectCreateRevert(
             address(token),
@@ -196,7 +196,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, tooMany);
 
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.TargetDataLengthMismatch.selector, 1, 2));
+        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.TooManyTargetDataItems.selector, 2, 1));
         executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, tooMany);
 
         bytes[] memory single = new bytes[](1);

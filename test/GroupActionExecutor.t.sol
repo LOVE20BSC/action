@@ -88,10 +88,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector,
                 address(token),
-                ACTION_ID,
-                MEMBER1_ID,
                 2
             )
         );
@@ -123,10 +121,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector,
                 address(token),
-                ACTION_ID,
-                MEMBER1_ID,
                 2
             )
         );
@@ -310,10 +306,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberRewardPoolEmpty.selector,
                 address(token),
-                ACTION_ID,
-                MEMBER1_ID,
                 2
             )
         );

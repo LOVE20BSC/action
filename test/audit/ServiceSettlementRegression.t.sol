@@ -94,11 +94,10 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER_B);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberHasNoVote.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                GROUP_OWNER_B_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                GROUP_OWNER_B_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);

@@ -382,7 +382,7 @@ library GroupActionVerify {
             return;
         }
         if (targetData.length > 2) {
-            revert IGroupActionExecutorErrors.TargetDataLengthMismatch(2, targetData.length);
+            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, 2);
         }
         if (targetData[1].length != 32) {
             revert IGroupActionExecutorErrors.InvalidTargetDataShape(1, targetData[1].length);
@@ -697,6 +697,13 @@ library GroupActionVerify {
                 originScores.length, GroupActionStorage.MAX_VERIFICATION_BATCH
             );
         }
+        for (uint256 i = 0; i < originScores.length; i++) {
+            if (originScores[i] > GroupActionStorage.MAX_ORIGIN_SCORE) {
+                revert IGroupActionVerifyErrors.ScoreLimitExceeded(
+                    i, originScores[i], GroupActionStorage.MAX_ORIGIN_SCORE
+                );
+            }
+        }
 
         uint256 round = currentVerifyRound(protocol.phaseAddress);
         bool groupVerified;
@@ -704,8 +711,8 @@ library GroupActionVerify {
             uint256 lockedVerifier = self.lockedVerifierId[submission.tokenAddress][submission.actionId][round];
             if (lockedVerifier != 0) {
                 if (lockedVerifier != submission.verifierId) {
-                    revert IGroupActionVerifyErrors.VerifierAlreadyLocked(
-                        submission.tokenAddress, submission.actionId, round
+                    revert IGroupActionVerifyErrors.RoundVerifierLocked(
+                        submission.tokenAddress, submission.actionId, round, lockedVerifier
                     );
                 }
             } else {
@@ -726,13 +733,6 @@ library GroupActionVerify {
                 revert IGroupActionVerifyErrors.ScoreCountExceeded(
                     submission.startIndex, originScores.length, memberCount
                 );
-            }
-            for (uint256 i = 0; i < originScores.length; i++) {
-                if (originScores[i] > GroupActionStorage.MAX_ORIGIN_SCORE) {
-                    revert IGroupActionVerifyErrors.ScoreLimitExceeded(
-                        i, originScores[i], GroupActionStorage.MAX_ORIGIN_SCORE
-                    );
-                }
             }
 
             if (lockedVerifier == 0) {
@@ -820,9 +820,6 @@ library GroupActionVerify {
         string calldata description
     ) private view returns (uint256 round) {
         round = IPhase(protocol.phaseAddress).currentPhase();
-        if (IStake(protocol.stakeAddress).validGovVotes(tokenAddress, round, verifierId) == 0) {
-            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
-        }
         uint256 descriptionLength = bytes(description).length;
         if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
             revert IGroupActionExecutorErrors.DescriptionTooLong(
@@ -831,6 +828,9 @@ library GroupActionVerify {
         }
         if (self.createdRoundByActionId[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
+        }
+        if (IStake(protocol.stakeAddress).validGovVotes(tokenAddress, round, verifierId) == 0) {
+            revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
         }
     }
 

@@ -75,6 +75,12 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         executor.setRecipients(
             address(token), unknownActionId, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
         );
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.DuplicateMemberId.selector, MEMBER1_ID));
+        executor.setRecipients(
+            address(token), unknownActionId, GROUP_ID, _ids(MEMBER1_ID, MEMBER1_ID), _ratios(1, 1), new string[](2)
+        );
     }
 
     function testSetRecipientsRejectsNonOwner() external {

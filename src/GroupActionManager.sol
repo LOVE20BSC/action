@@ -55,10 +55,10 @@ library GroupActionManager {
         bytes[] calldata targetData
     ) external {
         if (targetData.length < 6) {
-            revert IGroupActionExecutorErrors.TargetDataLengthMismatch(6, targetData.length);
+            revert IGroupActionExecutorErrors.InsufficientTargetDataItems(targetData.length, 6);
         }
         if (targetData.length > 7) {
-            revert IGroupActionExecutorErrors.TargetDataLengthMismatch(7, targetData.length);
+            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, 7);
         }
         for (uint256 i = 1; i < 6; i++) {
             if (targetData[i].length != 32) {
@@ -141,6 +141,8 @@ library GroupActionManager {
         uint256 groupId,
         GroupConfig calldata config
     ) external onlyGroupOwner(self, protocol, groupId) {
+        _checkGroupConfig(config);
+
         if (self.createdRoundByActionId[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }
@@ -150,10 +152,8 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.GroupAlreadyActivated(groupId);
         }
 
-        _checkGroupConfig(config);
-        _checkActivationMinGovRatio(self, protocol, tokenAddress, actionId, groupId);
-
         uint256 round = currentJoinRound(protocol.phaseAddress);
+        _checkActivationMinGovRatio(self, protocol, tokenAddress, actionId, groupId);
 
         group.config = config;
         group.active = true;
@@ -233,12 +233,12 @@ library GroupActionManager {
         uint256 groupId,
         GroupConfig calldata config
     ) external onlyGroupOwner(self, protocol, groupId) {
+        _checkGroupConfig(config);
+
         GroupActionStorage.GroupState storage group = self.groupState[tokenAddress][actionId][groupId];
         if (!group.active) {
             revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
-
-        _checkGroupConfig(config);
 
         GroupConfig memory previousConfig = group.config;
 
@@ -398,7 +398,7 @@ library GroupActionManager {
 
     function _checkGroupConfig(GroupConfig calldata config) internal pure {
         if (config.minJoinAmount == 0) {
-            revert IGroupActionManagerErrors.InvalidMinJoinAmount(config.minJoinAmount);
+            revert IGroupActionManagerErrors.ZeroMinJoinAmount();
         }
         if (config.maxJoinAmount != 0 && config.maxJoinAmount < config.minJoinAmount) {
             revert IGroupActionManagerErrors.InvalidMaxJoinAmount(config.minJoinAmount, config.maxJoinAmount);

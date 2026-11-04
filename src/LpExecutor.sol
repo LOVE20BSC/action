@@ -91,8 +91,11 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 actionId,
         bytes[] calldata targetData
     ) external onlyActionTarget {
-        if (targetData.length != 4) {
-            revert TargetDataLengthMismatch(4, targetData.length);
+        if (targetData.length < 4) {
+            revert InsufficientTargetDataItems(targetData.length, 4);
+        }
+        if (targetData.length > 4) {
+            revert TooManyTargetDataItems(targetData.length, 4);
         }
         // forge-lint: disable-next-item(require-revert-in-loop)
         for (uint256 i = 0; i < 4; i++) {
@@ -136,7 +139,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         onlyActionTarget
     {
         if (targetData.length > 1) {
-            revert TargetDataLengthMismatch(1, targetData.length);
+            revert TooManyTargetDataItems(targetData.length, 1);
         }
     }
 
@@ -489,19 +492,30 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         );
 
         uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
-        if (totalEffectiveAmount != 0) {
-            (uint256 proposalReward, bool actionMinted) =
-                IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
-            if (!actionMinted && proposalReward != 0) {
-                // forge-lint: disable-next-line(reentrancy-no-eth)
-                proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
-            }
-            (mintAmount, burnAmount) =
-                _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
+        if (totalEffectiveAmount == 0) {
+            revert MemberRewardPoolEmpty(tokenAddress, round);
         }
 
+        (uint256 proposalReward, bool actionMinted) =
+            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+        if (!actionMinted && proposalReward != 0) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
+        }
+        if (proposalReward == 0) {
+            revert MemberRewardPoolEmpty(tokenAddress, round);
+        }
+
+        (mintAmount, burnAmount) =
+            _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
+
         if (mintAmount == 0 && burnAmount == 0) {
-            revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
+            uint256 effectiveAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(round)
+                - _deductionByMemberId[tokenAddress][actionId][round][memberId];
+            if (effectiveAmount == 0) {
+                revert MemberHasNoVote(tokenAddress, round, memberId);
+            }
+            revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
         }
 
         _memberMinted[tokenAddress][actionId][round][memberId] = true;

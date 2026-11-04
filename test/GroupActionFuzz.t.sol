@@ -88,10 +88,8 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
             vm.prank(MEMBER1);
             vm.expectRevert(
                 abi.encodeWithSelector(
-                    IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                    IActionExecutorErrors.MemberRewardPoolEmpty.selector,
                     address(token),
-                    ACTION_ID,
-                    MEMBER1_ID,
                     2
                 )
             );
@@ -105,15 +103,25 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         uint256 mint1;
         if (expected1 == 0) {
             vm.prank(MEMBER1);
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    IActionExecutorErrors.MemberActionRewardUnavailable.selector,
-                    address(token),
-                    ACTION_ID,
-                    MEMBER1_ID,
-                    2
-                )
-            );
+            if (final1 == 0) {
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        IActionExecutorErrors.MemberHasNoVote.selector,
+                        address(token),
+                        2,
+                        MEMBER1_ID
+                    )
+                );
+            } else {
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        IActionExecutorErrors.MemberRewardRoundedToZero.selector,
+                        address(token),
+                        2,
+                        MEMBER1_ID
+                    )
+                );
+            }
             executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
         } else {
             (mint1,) = _settle(2, MEMBER1_ID);
@@ -122,15 +130,25 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         uint256 mint2;
         if (expected2 == 0) {
             vm.prank(MEMBER2);
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    IActionExecutorErrors.MemberActionRewardUnavailable.selector,
-                    address(token),
-                    ACTION_ID,
-                    MEMBER2_ID,
-                    2
-                )
-            );
+            if (final2 == 0) {
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        IActionExecutorErrors.MemberHasNoVote.selector,
+                        address(token),
+                        2,
+                        MEMBER2_ID
+                    )
+                );
+            } else {
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        IActionExecutorErrors.MemberRewardRoundedToZero.selector,
+                        address(token),
+                        2,
+                        MEMBER2_ID
+                    )
+                );
+            }
             executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER2_ID);
         } else {
             (mint2,) = _settle(2, MEMBER2_ID);

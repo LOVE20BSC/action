@@ -19,7 +19,7 @@ interface IGroupRecipientsEvents {
 interface IGroupRecipientsErrors {
     error DistributionOverflow(
         uint256 configured,
-        uint256 available
+        uint256 limit
     );
     error UnknownSourceAction(
         address sourceTokenAddress,

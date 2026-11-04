@@ -426,7 +426,7 @@ contract ActionTarget is IActionTarget {
         bytes[] calldata targetData
     ) external onlySubmit {
         if (targetData.length == 0) {
-            revert TargetDataLengthMismatch(1, 0);
+            revert InsufficientTargetDataItems(targetData.length, 1);
         }
         if (targetData[0].length != 32) {
             revert InvalidTargetDataShape(0, targetData[0].length);
@@ -479,7 +479,7 @@ contract ActionTarget is IActionTarget {
             revert UnboundProposal(tokenAddress, proposalId);
         }
         if (targetData.length == 0) {
-            revert TargetDataLengthMismatch(1, 0);
+            revert InsufficientTargetDataItems(targetData.length, 1);
         }
         if (targetData[0].length != 32) {
             revert InvalidTargetDataShape(0, targetData[0].length);

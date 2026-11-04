@@ -102,17 +102,18 @@ interface IGroupActionVerifyErrors {
     error ScoreCountExceeded(
         uint256 startIndex,
         uint256 count,
-        uint256 memberCount
+        uint256 maxCount
     );
     error ZeroVerifyVotes(
         address tokenAddress,
         uint256 verifierId
     );
     error NoActiveApplication(uint256 verifierId);
-    error VerifierAlreadyLocked(
+    error RoundVerifierLocked(
         address tokenAddress,
         uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 lockedVerifierId
     );
 }
 

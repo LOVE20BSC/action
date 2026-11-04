@@ -368,7 +368,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 0, 0, new string[](0));
 
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(0)));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroGroupId.selector));
         executor.join(address(token), ACTION_ID, 0, MEMBER1_ID, 1e18, 0, new string[](0));
 
         vm.prank(MEMBER1);
@@ -460,11 +460,11 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(PROVIDER, 100e18);
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(0)));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroGroupId.selector));
         executor.addProviderQuota(address(token), ACTION_ID, 0, PROVIDER_ID, _ids(MEMBER2_ID), _ids(1e18));
 
         vm.prank(PROVIDER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotExist.selector, uint256(0)));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.ZeroGroupId.selector));
         executor.removeProviderQuota(address(token), ACTION_ID, 0, PROVIDER_ID, _ids(MEMBER2_ID));
 
         uint256[] memory memberIds = new uint256[](2);

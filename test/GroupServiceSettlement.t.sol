@@ -446,11 +446,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberHasNoVote.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                GROUP_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                GROUP_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
@@ -488,11 +487,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberHasNoVote.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                MEMBER1_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                MEMBER1_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER1_ID);
@@ -505,11 +503,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.prank(MEMBER2);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberActionRewardUnavailable.selector,
+                IActionExecutorErrors.MemberHasNoVote.selector,
                 address(token),
-                SERVICE_ACTION_ID,
-                MEMBER2_ID,
-                SERVICE_ROUND
+                SERVICE_ROUND,
+                MEMBER2_ID
             )
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER2_ID);

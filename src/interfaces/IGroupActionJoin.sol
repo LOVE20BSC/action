@@ -108,6 +108,7 @@ interface IGroupActionJoinErrors {
         uint256 amountsLength
     );
     error QuotaMemberIsProvider(uint256 providerId);
+    error ZeroGroupId();
     error ZeroQuotaAmount(uint256 memberId);
     error QuotaNotGranted(
         uint256 groupId,

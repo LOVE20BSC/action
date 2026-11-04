@@ -77,6 +77,8 @@ library GroupRecipients {
         RecipientTable memory table
     ) private {
 
+        _checkRecipients(protocol, table, groupId);
+
         // Load-bearing: settlement only reads configs for actions this executor created, so any other
         // key is silently ignored and the owner keeps the whole slice.
         if (
@@ -85,8 +87,6 @@ library GroupRecipients {
         ) {
             revert IGroupRecipientsErrors.UnknownSourceAction(sourceTokenAddress, sourceActionId);
         }
-
-        _checkRecipients(protocol, table, groupId);
 
         uint256[] memory prevRecipientIds =
             self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);

@@ -709,21 +709,29 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         );
 
         uint256 totalFinal = _layout.totalFinalScore[tokenAddress][actionId][round];
-        if (totalFinal != 0 && GroupActionVerify.isRoundVerified(_layout, tokenAddress, actionId, round)) {
-            uint256 memberFinalScore = _memberFinalScore(tokenAddress, actionId, round, memberId);
-            if (memberFinalScore != 0) {
-                (uint256 proposalReward, bool actionMinted) =
-                    IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
-                if (!actionMinted && proposalReward != 0) {
-                    // forge-lint: disable-next-line(reentrancy-no-eth)
-                    proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
-                }
-                mintAmount = Math.mulDiv(proposalReward, memberFinalScore, totalFinal);
+        bool verified = GroupActionVerify.isRoundVerified(_layout, tokenAddress, actionId, round);
+        uint256 memberFinalScore = _memberFinalScore(tokenAddress, actionId, round, memberId);
+        if (verified && totalFinal != 0 && memberFinalScore != 0) {
+            (uint256 proposalReward, bool actionMinted) =
+                IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+            if (!actionMinted && proposalReward != 0) {
+                // forge-lint: disable-next-line(reentrancy-no-eth)
+                proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
             }
+            if (proposalReward == 0) {
+                revert MemberRewardPoolEmpty(tokenAddress, round);
+            }
+            mintAmount = Math.mulDiv(proposalReward, memberFinalScore, totalFinal);
         }
 
         if (mintAmount == 0 && burnAmount == 0) {
-            revert MemberActionRewardUnavailable(tokenAddress, actionId, memberId, round);
+            if (!verified || totalFinal == 0) {
+                revert MemberRewardPoolEmpty(tokenAddress, round);
+            }
+            if (memberFinalScore == 0) {
+                revert MemberHasNoVote(tokenAddress, round, memberId);
+            }
+            revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
         }
 
         _layout.memberMinted[tokenAddress][actionId][round][memberId] = true;
