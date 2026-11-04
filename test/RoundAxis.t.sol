@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {ActionRoundAxis} from "../src/ActionRoundAxis.sol";
 import {GroupActionRoundAxis} from "../src/GroupActionRoundAxis.sol";
 import {GroupActionManager} from "../src/GroupActionManager.sol";
 import {GroupActionVerify} from "../src/GroupActionVerify.sol";
@@ -19,11 +20,13 @@ interface RoundAxisVm {
     function expectRevert(bytes calldata data) external;
 }
 
-contract GroupActionRoundAxisHarness {
+contract ActionRoundAxisHarness {
     function joinRound(address phaseAddress) external view returns (uint256) {
-        return GroupActionRoundAxis.joinRound(phaseAddress);
+        return ActionRoundAxis.joinRound(phaseAddress);
     }
+}
 
+contract GroupActionRoundAxisHarness {
     function verifyRound(address phaseAddress) external view returns (uint256) {
         return GroupActionRoundAxis.verifyRound(phaseAddress);
     }
@@ -46,10 +49,6 @@ contract GroupActionVerifyGuardHarness {
 }
 
 contract LpRoundAxisHarness {
-    function joinRound(address phaseAddress) external view returns (uint256) {
-        return LpRoundAxis.joinRound(phaseAddress);
-    }
-
     function mintRound(address phaseAddress) external view returns (uint256) {
         return LpRoundAxis.mintRound(phaseAddress);
     }
@@ -59,6 +58,7 @@ contract RoundAxisTest {
     RoundAxisVm internal constant vm = RoundAxisVm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     MockRoundAxisPhase private phase;
+    ActionRoundAxisHarness private axis;
     GroupActionRoundAxisHarness private group;
     GroupActionManagerGuardHarness private manager;
     GroupActionVerifyGuardHarness private verify;
@@ -66,6 +66,7 @@ contract RoundAxisTest {
 
     function setUp() public {
         phase = new MockRoundAxisPhase();
+        axis = new ActionRoundAxisHarness();
         group = new GroupActionRoundAxisHarness();
         manager = new GroupActionManagerGuardHarness();
         verify = new GroupActionVerifyGuardHarness();
@@ -73,14 +74,14 @@ contract RoundAxisTest {
     }
 
     function testGroupActionAxis() external {
-        require(group.joinRound(address(phase)) == 0);
+        require(axis.joinRound(address(phase)) == 0);
         phase.setPhase(1);
-        require(group.joinRound(address(phase)) == 0);
+        require(axis.joinRound(address(phase)) == 0);
         phase.setPhase(2);
-        require(group.joinRound(address(phase)) == 1);
+        require(axis.joinRound(address(phase)) == 1);
         require(group.verifyRound(address(phase)) == 0);
         phase.setPhase(3);
-        require(group.joinRound(address(phase)) == 2);
+        require(axis.joinRound(address(phase)) == 2);
         require(group.verifyRound(address(phase)) == 1);
         require(group.mintRound(address(phase)) == 0);
         phase.setPhase(4);
@@ -89,10 +90,10 @@ contract RoundAxisTest {
     }
 
     function testLpAxis() external {
-        require(lp.joinRound(address(phase)) == 0);
+        require(axis.joinRound(address(phase)) == 0);
         require(lp.mintRound(address(phase)) == 0);
         phase.setPhase(2);
-        require(lp.joinRound(address(phase)) == 1);
+        require(axis.joinRound(address(phase)) == 1);
         require(lp.mintRound(address(phase)) == 0);
         phase.setPhase(3);
         require(lp.mintRound(address(phase)) == 1);
@@ -101,7 +102,7 @@ contract RoundAxisTest {
     function testGroupStepsStayOrdered() external {
         for (uint256 p = 4; p < 40; p++) {
             phase.setPhase(p);
-            require(group.joinRound(address(phase)) == group.verifyRound(address(phase)) + 1);
+            require(axis.joinRound(address(phase)) == group.verifyRound(address(phase)) + 1);
             require(group.verifyRound(address(phase)) == group.mintRound(address(phase)) + 1);
         }
     }
@@ -109,7 +110,6 @@ contract RoundAxisTest {
     function testLpMintsOnePhaseEarlierThanGroup() external {
         for (uint256 p = 4; p < 40; p++) {
             phase.setPhase(p);
-            require(lp.joinRound(address(phase)) == group.joinRound(address(phase)));
             require(lp.mintRound(address(phase)) == group.mintRound(address(phase)) + 1);
         }
     }

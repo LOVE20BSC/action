@@ -164,8 +164,6 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) memberMinted;
         // tokenAddress => actionId => round => memberId => minted amount
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberMintedReward;
-        // tokenAddress => actionId => round => memberId => burned amount
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberBurnedReward;
 
         // tokenAddress => actionId => round => applicationId => voter ids, in first-vote order
         // Load-bearing: append-only, never removed — a round's tally stops growing when its vote

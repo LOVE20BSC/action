@@ -23,6 +23,7 @@ interface IGroupActionExecutorEvents {
 
 interface IGroupActionExecutorErrors {
     error ZeroJoinTokenAddress();
+    error InvalidJoinTokenAddress(address joinTokenAddress);
     error InvalidMaxJoinAmountRatio(uint256 value);
     error InvalidActivationMinGovRatio(uint256 value);
     error TargetDataLengthMismatch(

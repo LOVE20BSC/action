@@ -268,6 +268,19 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.maxJoinAmount(address(token), ACTION_2) == 0, "zero ratio");
     }
 
+    function testJoinTokenWithoutTotalSupplyIsRejected() external {
+        bytes[] memory wrongToken = _targetDataWith(address(0xdead), 0, 0, 0, 0);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidJoinTokenAddress.selector, address(0xdead))
+        );
+        executor.onProposalCreated(address(token), ACTION_2, wrongToken);
+
+        // A mistyped token never becomes the stored join token, so the derived cap view stays callable.
+        _openJoinPhase();
+        require(executor.maxJoinAmount(address(token), ACTION_2) == 0, "uncreated action caps at zero");
+    }
+
     function testOnProposalCreatedReverts() external {
         bytes[] memory data = _targetData();
 

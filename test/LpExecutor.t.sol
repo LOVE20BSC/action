@@ -830,7 +830,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         _atPhase(2);
         vm.prank(MEMBER1);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 2, 0));
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         lpExecutor.mintMemberReward(address(token), ACTION_ID, 2, 1);
     }
 

@@ -439,10 +439,6 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
     }
 
-    function _joinRound() internal view override returns (uint256) {
-        return LpRoundAxis.joinRound(PHASE_ADDRESS);
-    }
-
     function _mintRound() internal view override returns (uint256) {
         return LpRoundAxis.mintRound(PHASE_ADDRESS);
     }

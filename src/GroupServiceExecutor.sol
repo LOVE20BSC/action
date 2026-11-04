@@ -3,7 +3,7 @@ pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {GroupRecipients} from "./GroupRecipients.sol";
-import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
+import {GroupServiceRoundAxis} from "./GroupServiceRoundAxis.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {MemberOwner} from "./MemberOwner.sol";
@@ -687,16 +687,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return createdRound != 0 && round >= createdRound && round <= _mintRound();
     }
 
-    // Load-bearing: this must stay equal to ActionTarget's own join round (phase - 1). ActionTarget
-    // keys the join snapshot it writes by that round, and every `isJoinedByRound` / `joinedAmount`
-    // argument here is read in the same round space; if the two drift, the reported round and the
-    // recorded snapshot disagree without any revert.
-    function _joinRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.joinRound(PHASE_ADDRESS);
-    }
-
     function _mintRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.mintRound(PHASE_ADDRESS);
+        return GroupServiceRoundAxis.mintRound(PHASE_ADDRESS);
     }
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function _mintMemberReward(

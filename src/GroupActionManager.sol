@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
-import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
+import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
@@ -74,6 +74,13 @@ library GroupActionManager {
         uint256 verifierStakeAmount = abi.decode(targetData[5], (uint256));
         if (joinTokenAddress == address(0)) {
             revert IGroupActionExecutorErrors.ZeroJoinTokenAddress();
+        }
+        if (joinTokenAddress.code.length == 0) {
+            revert IGroupActionExecutorErrors.InvalidJoinTokenAddress(joinTokenAddress);
+        }
+        try IERC20(joinTokenAddress).totalSupply() {
+        } catch {
+            revert IGroupActionExecutorErrors.InvalidJoinTokenAddress(joinTokenAddress);
         }
         if (maxJoinAmountRatio > GroupActionStorage.PRECISION) {
             revert IGroupActionExecutorErrors.InvalidMaxJoinAmountRatio(maxJoinAmountRatio);
@@ -368,7 +375,7 @@ library GroupActionManager {
         address tokenAddress,
         uint256 actionId
     ) internal view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.joinRound(protocol.phaseAddress);
+        uint256 round = ActionRoundAxis.joinRound(protocol.phaseAddress);
         if (round == 0) {
             return 0;
         }
@@ -475,7 +482,7 @@ library GroupActionManager {
     }
 
     function currentJoinRound(address phaseAddress) internal view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.joinRound(phaseAddress);
+        uint256 round = ActionRoundAxis.joinRound(phaseAddress);
         if (round == 0) {
             revert IActionExecutorErrors.RoundNotStarted(1, 0);
         }

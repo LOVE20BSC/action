@@ -643,7 +643,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         if (minted) {
             return (
                 _layout.memberMintedReward[tokenAddress][actionId][round][memberId],
-                _layout.memberBurnedReward[tokenAddress][actionId][round][memberId],
+                0,
                 // forge-lint: disable-next-line(boolean-cst)
                 true
             );
@@ -688,10 +688,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return score;
     }
 
-    function _joinRound() internal view override returns (uint256) {
-        return GroupActionRoundAxis.joinRound(PHASE_ADDRESS);
-    }
-
     function _mintRound() internal view override returns (uint256) {
         return GroupActionRoundAxis.mintRound(PHASE_ADDRESS);
     }
@@ -732,7 +728,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
 
         _layout.memberMinted[tokenAddress][actionId][round][memberId] = true;
         _layout.memberMintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
-        _layout.memberBurnedReward[tokenAddress][actionId][round][memberId] = burnAmount;
 
         if (mintAmount != 0) {
             IERC20(tokenAddress).safeTransfer(msg.sender, mintAmount);

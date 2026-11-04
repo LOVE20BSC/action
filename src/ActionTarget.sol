@@ -10,6 +10,7 @@ import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IMint} from "@core/interfaces/IMint.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IVote} from "@core/interfaces/IVote.sol";
+import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 
 contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
@@ -124,7 +125,7 @@ contract ActionTarget is IActionTarget {
             return;
         }
 
-        uint256 joinRound = currentRound - 1;
+        uint256 joinRound = _joinRound();
 
         _memberIdsByActionId[tokenAddress][actionId].add(
             joinRound,
@@ -380,8 +381,7 @@ contract ActionTarget is IActionTarget {
     }
 
     function _joinRound() internal view returns (uint256) {
-        uint256 currentRound = _currentRound();
-        return currentRound == 0 ? 0 : currentRound - 1;
+        return ActionRoundAxis.joinRound(PHASE_ADDRESS);
     }
 
     function _boundActions(

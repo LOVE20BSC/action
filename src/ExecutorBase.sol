@@ -8,6 +8,7 @@ import {IVote} from "@core/interfaces/IVote.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IActionExecutor, IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
+import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 
 abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
     address public immutable ACTION_TARGET_ADDRESS;
@@ -119,6 +120,9 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
             revert IActionExecutorErrors.RoundBeforeActionCreated(round, createdRound);
         }
         uint256 mintRound = _mintRound();
+        if (mintRound == 0) {
+            revert IActionExecutorErrors.RoundNotStarted(1, 0);
+        }
         if (round > mintRound) {
             revert IActionExecutorErrors.RoundAfterMintWindow(round, mintRound);
         }
@@ -127,7 +131,9 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         }
     }
 
-    function _joinRound() internal view virtual returns (uint256);
+    function _joinRound() internal view returns (uint256) {
+        return ActionRoundAxis.joinRound(PHASE_ADDRESS);
+    }
 
     function _mintRound() internal view virtual returns (uint256);
 
