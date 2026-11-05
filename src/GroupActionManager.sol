@@ -79,11 +79,16 @@ library GroupActionManager {
             }
         }
 
-        address joinTokenAddress = abi.decode(targetData[SLOT_JOIN_TOKEN], (address));
-        uint256 activationStakeAmount = abi.decode(targetData[SLOT_ACTIVATION_STAKE_AMOUNT], (uint256));
-        uint256 maxJoinAmountRatio = abi.decode(targetData[SLOT_MAX_JOIN_AMOUNT_RATIO], (uint256));
-        uint256 activationMinGovRatio = abi.decode(targetData[SLOT_ACTIVATION_MIN_GOV_RATIO], (uint256));
-        uint256 verifierStakeAmount = abi.decode(targetData[SLOT_VERIFIER_STAKE_AMOUNT], (uint256));
+        address joinTokenAddress =
+            abi.decode(targetData[SLOT_JOIN_TOKEN], (address));
+        uint256 activationStakeAmount =
+            abi.decode(targetData[SLOT_ACTIVATION_STAKE_AMOUNT], (uint256));
+        uint256 maxJoinAmountRatio =
+            abi.decode(targetData[SLOT_MAX_JOIN_AMOUNT_RATIO], (uint256));
+        uint256 activationMinGovRatio =
+            abi.decode(targetData[SLOT_ACTIVATION_MIN_GOV_RATIO], (uint256));
+        uint256 verifierStakeAmount =
+            abi.decode(targetData[SLOT_VERIFIER_STAKE_AMOUNT], (uint256));
         if (joinTokenAddress == address(0)) {
             revert IGroupActionExecutorErrors.ZeroJoinTokenAddress();
         }

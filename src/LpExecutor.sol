@@ -110,9 +110,12 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             }
         }
 
-        address lpTokenAddress = abi.decode(targetData[SLOT_LP_TOKEN], (address));
-        uint256 govRatioMultiplierValue = abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
-        uint256 minGovRatioValue = abi.decode(targetData[SLOT_MIN_GOV_RATIO], (uint256));
+        address lpTokenAddress =
+            abi.decode(targetData[SLOT_LP_TOKEN], (address));
+        uint256 govRatioMultiplierValue =
+            abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
+        uint256 minGovRatioValue =
+            abi.decode(targetData[SLOT_MIN_GOV_RATIO], (uint256));
 
         if (lpTokenAddress == address(0)) {
             revert ZeroJoinTokenAddress();

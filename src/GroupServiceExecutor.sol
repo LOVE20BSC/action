@@ -418,9 +418,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             }
         }
 
-        address sourceTokenAddress = abi.decode(targetData[SLOT_SOURCE_TOKEN], (address));
-        uint256 govRatioMultiplierValue = abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
-        uint256 publicVerifierRatioValue = abi.decode(targetData[SLOT_PUBLIC_VERIFIER_RATIO], (uint256));
+        address sourceTokenAddress =
+            abi.decode(targetData[SLOT_SOURCE_TOKEN], (address));
+        uint256 govRatioMultiplierValue =
+            abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
+        uint256 publicVerifierRatioValue =
+            abi.decode(targetData[SLOT_PUBLIC_VERIFIER_RATIO], (uint256));
 
         if (sourceTokenAddress == address(0)) {
             revert ZeroActionTokenAddress();
