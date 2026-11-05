@@ -597,7 +597,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(total == 2 && page[0] == 33 && page[1] == 31, "reverse order");
     }
 
-    function testVotedActionsFiltersUnboundAndPaginates() external {
+    function testVotedActionIdsFiltersUnboundAndPaginates() external {
         MockExecutor second = new MockExecutor(address(actionTarget));
         _createAction(41);
         _createAction(42, second);
@@ -611,19 +611,19 @@ contract ActionTargetTest is ActionTargetTestBase {
         vote.setVotedProposalIds(address(token), round, votedIds);
 
         (uint256[] memory actionIds, address[] memory executors, uint256 total) =
-            actionTarget.votedActions(address(token), round, 0, 10, false);
+            actionTarget.votedActionIds(address(token), round, 0, 10, false);
         require(total == 2 && actionIds.length == 2, "unbound filtered out");
         require(actionIds[0] == 41 && actionIds[1] == 42, "voted order retained");
         require(executors[0] == address(executor) && executors[1] == address(second), "executors aligned");
-        (actionIds, executors, total) = actionTarget.votedActions(address(token), round, 1, 10, false);
+        (actionIds, executors, total) = actionTarget.votedActionIds(address(token), round, 1, 10, false);
         require(total == 2 && actionIds.length == 1 && actionIds[0] == 42, "offset within filtered list");
-        (actionIds,, total) = actionTarget.votedActions(address(token), round, 0, 10, true);
+        (actionIds,, total) = actionTarget.votedActionIds(address(token), round, 0, 10, true);
         require(total == 2 && actionIds[0] == 42 && actionIds[1] == 41, "reverse order");
-        (actionIds,, total) = actionTarget.votedActions(address(token), round + 1, 0, 10, false);
+        (actionIds,, total) = actionTarget.votedActionIds(address(token), round + 1, 0, 10, false);
         require(total == 0 && actionIds.length == 0, "empty round");
     }
 
-    function testVotedActionsReadsFullRoundListBeforeFiltering() external {
+    function testVotedActionIdsReadsFullRoundListBeforeFiltering() external {
         _createAction(2);
         _createAction(4);
         uint256 round = 3;
@@ -634,9 +634,71 @@ contract ActionTargetTest is ActionTargetTestBase {
         votedIds[3] = 4;
         vote.setVotedProposalIds(address(token), round, votedIds);
 
-        (uint256[] memory actionIds,, uint256 total) = actionTarget.votedActions(address(token), round, 0, 2, false);
+        (uint256[] memory actionIds,, uint256 total) = actionTarget.votedActionIds(address(token), round, 0, 2, false);
         require(total == 2 && actionIds.length == 2, "filtered total");
         require(actionIds[0] == 2 && actionIds[1] == 4, "filtering precedes the caller window");
+    }
+
+    function testVotedActionIdsByExecutorsFiltersWithinTheVotedRound() external {
+        MockExecutor second = new MockExecutor(address(actionTarget));
+        MockExecutor third = new MockExecutor(address(actionTarget));
+        _createAction(51);
+        _createAction(52, second);
+        _createAction(53);
+        _createAction(54, second);
+        _createAction(56, third);
+
+        uint256 round = 4;
+        uint256[] memory votedIds = new uint256[](7);
+        votedIds[0] = 51;
+        votedIds[1] = 999;
+        votedIds[2] = 52;
+        votedIds[3] = 53;
+        votedIds[4] = 54;
+        votedIds[5] = 55;
+        votedIds[6] = 56;
+        vote.setVotedProposalIds(address(token), round, votedIds);
+
+        address[] memory twoExecutors = new address[](2);
+        twoExecutors[0] = address(executor);
+        twoExecutors[1] = address(second);
+        (uint256[] memory actionIds, address[] memory actionExecutors) =
+            actionTarget.votedActionIdsByExecutors(address(token), round, twoExecutors);
+        require(actionIds.length == 4, "mixed executors length");
+        require(actionIds[0] == 51 && actionIds[1] == 52 && actionIds[2] == 53 && actionIds[3] == 54, "mixed order");
+        require(
+            actionExecutors[0] == address(executor) && actionExecutors[1] == address(second)
+                && actionExecutors[2] == address(executor) && actionExecutors[3] == address(second),
+            "mixed alignment"
+        );
+
+        address[] memory oneExecutor = new address[](1);
+        oneExecutor[0] = address(executor);
+        (actionIds, actionExecutors) = actionTarget.votedActionIdsByExecutors(address(token), round, oneExecutor);
+        require(actionIds.length == 2 && actionIds[0] == 51 && actionIds[1] == 53, "single executor ids");
+        require(
+            actionExecutors[0] == address(executor) && actionExecutors[1] == address(executor),
+            "single executor alignment"
+        );
+
+        address[] memory duplicated = new address[](2);
+        duplicated[0] = address(executor);
+        duplicated[1] = address(executor);
+        (actionIds, actionExecutors) = actionTarget.votedActionIdsByExecutors(address(token), round, duplicated);
+        require(actionIds.length == 2 && actionIds[0] == 51 && actionIds[1] == 53, "duplicate selector does not repeat");
+
+        address[] memory outsider = new address[](1);
+        outsider[0] = OUTSIDER;
+        (actionIds, actionExecutors) = actionTarget.votedActionIdsByExecutors(address(token), round, outsider);
+        require(actionIds.length == 0 && actionExecutors.length == 0, "executor with no action");
+
+        address[] memory none = new address[](0);
+        (actionIds, actionExecutors) = actionTarget.votedActionIdsByExecutors(address(token), round, none);
+        require(actionIds.length == 0 && actionExecutors.length == 0, "empty selector");
+
+        (actionIds, actionExecutors) =
+            actionTarget.votedActionIdsByExecutors(address(token), round + 1, oneExecutor);
+        require(actionIds.length == 0 && actionExecutors.length == 0, "other round stays empty");
     }
 
     function testMintActionRewardMintsOnceToExecutor() external {

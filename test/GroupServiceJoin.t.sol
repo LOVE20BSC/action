@@ -46,8 +46,8 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         address[] memory executors = new address[](1);
         executors[0] = address(groupAction);
-        actionTarget.setVotedActions(address(token), JOIN_PHASE, _ids(GROUP_ACTION_ID), executors);
-        actionTarget.setVotedActions(address(token), JOIN_PHASE + 1, _ids(GROUP_ACTION_ID), executors);
+        actionTarget.setVotedActionIds(address(token), JOIN_PHASE, _ids(GROUP_ACTION_ID), executors);
+        actionTarget.setVotedActionIds(address(token), JOIN_PHASE + 1, _ids(GROUP_ACTION_ID), executors);
 
         // The application starts standing at round JOIN_PHASE + 1, i.e. the round joined at phase JOIN_PHASE + 2.
         groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, VERIFIER_ID, 1, JOIN_PHASE + 1);

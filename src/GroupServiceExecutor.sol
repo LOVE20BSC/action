@@ -668,26 +668,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function _votedGroupActions(
         address sourceTokenAddress,
         uint256 round
-    ) internal view returns (uint256[] memory) {
-        (uint256[] memory actionIds, address[] memory executors, ) =
-            IActionTarget(ACTION_TARGET_ADDRESS).votedActions(sourceTokenAddress, round, 0, type(uint256).max, false);
-
-        uint256 count = 0;
-        for (uint256 i = 0; i < actionIds.length; i++) {
-            if (executors[i] == GROUP_ACTION_EXECUTOR_ADDRESS) {
-                count++;
-            }
-        }
-
-        uint256[] memory groupActionIds = new uint256[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < actionIds.length; i++) {
-            if (executors[i] == GROUP_ACTION_EXECUTOR_ADDRESS) {
-                groupActionIds[index] = actionIds[i];
-                index++;
-            }
-        }
-        return groupActionIds;
+    ) internal view returns (uint256[] memory actionIds) {
+        address[] memory executors = new address[](1);
+        executors[0] = GROUP_ACTION_EXECUTOR_ADDRESS;
+        (actionIds, ) = IActionTarget(ACTION_TARGET_ADDRESS).votedActionIdsByExecutors(
+            sourceTokenAddress, round, executors
+        );
     }
 
     function _lockedVerifierId(

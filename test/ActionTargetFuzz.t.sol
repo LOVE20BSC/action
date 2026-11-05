@@ -159,7 +159,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         actionTarget.mintActionReward(address(token), 11, roundA);
     }
 
-    function testFuzzVotedActionsFiltering(uint256 idA, uint256 idB, uint256 idC) external {
+    function testFuzzVotedActionIdsFiltering(uint256 idA, uint256 idB, uint256 idC) external {
         MockExecutor second = new MockExecutor(address(actionTarget));
         _createAction(1, second);
         _createAction(2);
@@ -172,7 +172,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         vm.assume(votedIds[0] != votedIds[1] && votedIds[0] != votedIds[2] && votedIds[1] != votedIds[2]);
         vote.setVotedProposalIds(address(token), 3, votedIds);
 
-        (uint256[] memory page,, uint256 total) = actionTarget.votedActions(address(token), 3, 0, 10, false);
+        (uint256[] memory page,, uint256 total) = actionTarget.votedActionIds(address(token), 3, 0, 10, false);
         uint256 expectedTotal;
         for (uint256 i = 0; i < votedIds.length; i++) {
             if (votedIds[i] >= 1 && votedIds[i] <= 3) expectedTotal++;
@@ -184,6 +184,53 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
                 require(page[expectedIndex] == votedIds[i], "order preserved");
                 expectedIndex++;
             }
+        }
+    }
+
+    function testFuzzVotedActionIdsByExecutorsMatchesFullListProjection(
+        uint256 idA,
+        uint256 idB,
+        uint256 idC,
+        bool includeFirst,
+        bool includeSecond
+    ) external {
+        MockExecutor second = new MockExecutor(address(actionTarget));
+        _createAction(1, second);
+        _createAction(2);
+        _createAction(3);
+
+        uint256[] memory votedIds = new uint256[](3);
+        votedIds[0] = idA % 5;
+        votedIds[1] = idB % 5;
+        votedIds[2] = idC % 5;
+        vm.assume(votedIds[0] != votedIds[1] && votedIds[0] != votedIds[2] && votedIds[1] != votedIds[2]);
+        vote.setVotedProposalIds(address(token), 3, votedIds);
+
+        uint256 selectedCount = (includeFirst ? 1 : 0) + (includeSecond ? 1 : 0);
+        address[] memory selected = new address[](selectedCount);
+        uint256 cursor = 0;
+        if (includeFirst) selected[cursor++] = address(executor);
+        if (includeSecond) selected[cursor++] = address(second);
+
+        (uint256[] memory fullIds, address[] memory fullExecutors, ) =
+            actionTarget.votedActionIds(address(token), 3, 0, 10, false);
+        (uint256[] memory page, address[] memory pageExecutors) =
+            actionTarget.votedActionIdsByExecutors(address(token), 3, selected);
+
+        uint256[] memory expectedIds = new uint256[](fullIds.length);
+        address[] memory expectedExecutors = new address[](fullIds.length);
+        uint256 expectedCount = 0;
+        for (uint256 i = 0; i < fullIds.length; i++) {
+            address candidate = fullExecutors[i];
+            if ((candidate == address(executor) && includeFirst) || (candidate == address(second) && includeSecond)) {
+                expectedIds[expectedCount] = fullIds[i];
+                expectedExecutors[expectedCount] = candidate;
+                expectedCount++;
+            }
+        }
+        require(page.length == expectedCount && pageExecutors.length == expectedCount, "matched length");
+        for (uint256 i = 0; i < expectedCount; i++) {
+            require(page[i] == expectedIds[i] && pageExecutors[i] == expectedExecutors[i], "matched projection");
         }
     }
 

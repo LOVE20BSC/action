@@ -395,6 +395,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         for (uint256 i = 0; i < actionIds.length; i++) {
             executors[i] = address(groupAction);
         }
-        actionTarget.setVotedActions(actionTokenAddress, SERVICE_ROUND, actionIds, executors);
+        actionTarget.setVotedActionIds(actionTokenAddress, SERVICE_ROUND, actionIds, executors);
     }
 }

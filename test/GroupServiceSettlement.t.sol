@@ -224,7 +224,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         // A non-group executor action and an unverified action add nothing.
-        actionTarget.setVotedActions(
+        actionTarget.setVotedActionIds(
             address(token),
             SERVICE_ROUND,
             _ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B),
@@ -295,7 +295,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(JOIN_PHASE);
         address[] memory executors = new address[](1);
         executors[0] = address(groupAction);
-        actionTarget.setVotedActions(actionTokenAddress, SERVICE_ROUND, _ids(GROUP_ACTION_ID), executors);
+        actionTarget.setVotedActionIds(actionTokenAddress, SERVICE_ROUND, _ids(GROUP_ACTION_ID), executors);
         groupAction.setHasActiveGroups(actionTokenAddress, GROUP_ID, true);
         groupAction.setVerifierApplication(actionTokenAddress, GROUP_ACTION_ID, VERIFIER_ID, 1, 0);
         _joinService(GROUP_ID);

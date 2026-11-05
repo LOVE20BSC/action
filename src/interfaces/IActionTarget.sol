@@ -169,7 +169,7 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
             address[] memory executors,
             uint256 totalCount
         );
-    function votedActions(
+    function votedActionIds(
         address tokenAddress,
         uint256 round,
         uint256 offset,
@@ -183,4 +183,12 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
             address[] memory executors,
             uint256 totalCount
         );
+    function votedActionIdsByExecutors(
+        address tokenAddress,
+        uint256 round,
+        address[] calldata executors
+    )
+        external
+        view
+        returns (uint256[] memory actionIds, address[] memory actionExecutors);
 }

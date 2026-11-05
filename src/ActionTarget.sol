@@ -344,7 +344,7 @@ contract ActionTarget is IActionTarget {
         }
     }
 
-    function votedActions(
+    function votedActionIds(
         address tokenAddress,
         uint256 round,
         uint256 offset,
@@ -379,6 +379,64 @@ contract ActionTarget is IActionTarget {
             }
         }
         totalCount = count;
+    }
+
+    function votedActionIdsByExecutors(
+        address tokenAddress,
+        uint256 round,
+        address[] calldata executors
+    )
+        external
+        view
+        returns (uint256[] memory actionIds, address[] memory actionExecutors)
+    {
+        (
+            uint256[] memory boundIds,
+            address[] memory boundExecutors,
+            uint256 count
+        ) = _boundActions(tokenAddress, round);
+
+        uint256[] memory matchedIds = new uint256[](count);
+        address[] memory matchedExecutors = new address[](count);
+        uint256 matchedCount = 0;
+        for (uint256 i = 0; i < count; ) {
+            if (_containsExecutor(executors, boundExecutors[i])) {
+                matchedIds[matchedCount] = boundIds[i];
+                matchedExecutors[matchedCount] = boundExecutors[i];
+                matchedCount++;
+            }
+
+            unchecked {
+                i++;
+            }
+        }
+
+        actionIds = new uint256[](matchedCount);
+        actionExecutors = new address[](matchedCount);
+        for (uint256 i = 0; i < matchedCount; ) {
+            actionIds[i] = matchedIds[i];
+            actionExecutors[i] = matchedExecutors[i];
+
+            unchecked {
+                i++;
+            }
+        }
+    }
+
+    function _containsExecutor(
+        address[] calldata executors,
+        address executor
+    ) private pure returns (bool) {
+        for (uint256 i = 0; i < executors.length; ) {
+            if (executors[i] == executor) {
+                return true;
+            }
+
+            unchecked {
+                i++;
+            }
+        }
+        return false;
     }
 
     function _currentRound() internal view returns (uint256) {

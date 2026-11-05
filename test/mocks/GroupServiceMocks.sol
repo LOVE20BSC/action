@@ -185,7 +185,7 @@ contract MockGroupServiceActionTarget {
         _createdRound[tokenAddress][actionId] = createdRound;
     }
 
-    function setVotedActions(
+    function setVotedActionIds(
         address tokenAddress,
         uint256 round,
         uint256[] calldata actionIds,
@@ -254,26 +254,41 @@ contract MockGroupServiceActionTarget {
         return mintReturnAmount;
     }
 
-    function votedActions(address tokenAddress, uint256 round, uint256 offset, uint256 limit, bool reverse)
-        external
-        view
-        returns (uint256[] memory actionIds, address[] memory executors, uint256 total)
-    {
+    function votedActionIdsByExecutors(
+        address tokenAddress,
+        uint256 round,
+        address[] calldata executors
+    ) external view returns (uint256[] memory actionIds, address[] memory actionExecutors) {
         uint256[] storage ids = _votedActionIds[tokenAddress][round];
         address[] storage exes = _votedExecutors[tokenAddress][round];
-        total = ids.length;
-        if (offset >= total) {
-            return (new uint256[](0), new address[](0), total);
+
+        uint256 count = 0;
+        for (uint256 i = 0; i < ids.length; i++) {
+            if (exes[i] != address(0) && _containsExecutor(executors, exes[i])) {
+                count++;
+            }
         }
-        uint256 remaining = total - offset;
-        uint256 size = limit < remaining ? limit : remaining;
-        actionIds = new uint256[](size);
-        executors = new address[](size);
-        for (uint256 i = 0; i < size; i++) {
-            uint256 index = reverse ? total - 1 - offset - i : offset + i;
-            actionIds[i] = ids[index];
-            executors[i] = exes[index];
+
+        actionIds = new uint256[](count);
+        actionExecutors = new address[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < ids.length; i++) {
+            if (exes[i] != address(0) && _containsExecutor(executors, exes[i])) {
+                actionIds[index] = ids[i];
+                actionExecutors[index] = exes[i];
+                index++;
+            }
         }
+    }
+
+    function _containsExecutor(
+        address[] calldata executors,
+        address executor
+    ) private pure returns (bool) {
+        for (uint256 i = 0; i < executors.length; i++) {
+            if (executors[i] == executor) return true;
+        }
+        return false;
     }
 
     function _joinRound() internal view returns (uint256) {

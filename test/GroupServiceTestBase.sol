@@ -252,7 +252,7 @@ abstract contract GroupServiceTestBase {
         for (uint256 i = 0; i < actionIds.length; i++) {
             executors[i] = address(groupAction);
         }
-        actionTarget.setVotedActions(address(token), SERVICE_ROUND, actionIds, executors);
+        actionTarget.setVotedActionIds(address(token), SERVICE_ROUND, actionIds, executors);
     }
 
     function _setGroupLedger(uint256 actionId, uint256[] memory groupIds, uint256[] memory rewards, uint256 verifierId)

@@ -246,7 +246,7 @@ contract ActionTargetRealIntegrationTest {
         _voteOne(1, plainId, 10, new bytes[](0));
 
         (uint256[] memory actionIds, address[] memory executors, uint256 total) =
-            actionTarget.votedActions(address(token), round, 0, 10, false);
+            actionTarget.votedActionIds(address(token), round, 0, 10, false);
         require(total == 1 && actionIds.length == 1, "only bound voted actions");
         require(actionIds[0] == 1, "bound action id");
         require(executors[0] == address(executor), "executor aligned");
