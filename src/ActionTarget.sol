@@ -389,6 +389,13 @@ contract ActionTarget is IActionTarget {
         return ActionRoundAxis.joinRound(PHASE_ADDRESS);
     }
 
+    function _executorFromSlot(bytes calldata item) internal pure returns (address) {
+        if (item.length != ABI_WORD_BYTES) {
+            revert InvalidTargetDataShape(SLOT_EXECUTOR, item.length);
+        }
+        return abi.decode(item, (address));
+    }
+
     function _boundActions(
         address tokenAddress,
         uint256 round
@@ -433,10 +440,7 @@ contract ActionTarget is IActionTarget {
         if (targetData.length < TARGET_DATA_LENGTH) {
             revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[SLOT_EXECUTOR].length != ABI_WORD_BYTES) {
-            revert InvalidTargetDataShape(SLOT_EXECUTOR, targetData[SLOT_EXECUTOR].length);
-        }
-        address executor = abi.decode(targetData[SLOT_EXECUTOR], (address));
+        address executor = _executorFromSlot(targetData[SLOT_EXECUTOR]);
         if (executor.code.length == 0) {
             revert ExecutorNotContract(executor);
         }
@@ -486,10 +490,7 @@ contract ActionTarget is IActionTarget {
         if (targetData.length < TARGET_DATA_LENGTH) {
             revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[SLOT_EXECUTOR].length != ABI_WORD_BYTES) {
-            revert InvalidTargetDataShape(SLOT_EXECUTOR, targetData[SLOT_EXECUTOR].length);
-        }
-        address targetDataExecutor = abi.decode(targetData[SLOT_EXECUTOR], (address));
+        address targetDataExecutor = _executorFromSlot(targetData[SLOT_EXECUTOR]);
         if (targetDataExecutor != bound) {
             revert TargetDataExecutorMismatch(bound, targetDataExecutor);
         }
@@ -515,10 +516,7 @@ contract ActionTarget is IActionTarget {
             revert UnboundProposal(tokenAddress, proposalId);
         }
         if (targetData.length != 0) {
-            if (targetData[SLOT_EXECUTOR].length != ABI_WORD_BYTES) {
-                revert InvalidTargetDataShape(SLOT_EXECUTOR, targetData[SLOT_EXECUTOR].length);
-            }
-            address targetDataExecutor = abi.decode(targetData[SLOT_EXECUTOR], (address));
+            address targetDataExecutor = _executorFromSlot(targetData[SLOT_EXECUTOR]);
             if (targetDataExecutor != bound) {
                 revert TargetDataExecutorMismatch(bound, targetDataExecutor);
             }
