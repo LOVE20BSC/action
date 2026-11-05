@@ -309,6 +309,42 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "vote ranks the verifier");
     }
 
+    function testVerifierIdItemLengthZeroReverts() external {
+        bytes[] memory votedData = new bytes[](2);
+        votedData[0] = abi.encode(address(executor));
+        votedData[1] = new bytes(0);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 0));
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
+    }
+
+    function testVerifierIdItemLength31Reverts() external {
+        bytes[] memory votedData = new bytes[](2);
+        votedData[0] = abi.encode(address(executor));
+        votedData[1] = new bytes(31);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 31));
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
+    }
+
+    function testVerifierIdItemLength33Reverts() external {
+        bytes[] memory votedData = new bytes[](2);
+        votedData[0] = abi.encode(address(executor));
+        votedData[1] = new bytes(33);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 33));
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
+    }
+
+    function testVerifierIdItemLength64Reverts() external {
+        bytes[] memory votedData = new bytes[](2);
+        votedData[0] = abi.encode(address(executor));
+        votedData[1] = new bytes(64);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 64));
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
+    }
+
     function testRankCapacityAndReplacement() external {
         // Board capacity is SPLITS().length + 1 = 2 with splits = [5e17].
         _submitApplication();
