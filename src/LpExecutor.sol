@@ -21,9 +21,10 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     uint256 internal constant PRECISION = 1e18;
     uint256 private constant ABI_WORD_BYTES = 32;
-    uint256 private constant LP_TOKEN_SLOT_INDEX = 1;
-    uint256 private constant GOV_RATIO_MULTIPLIER_SLOT_INDEX = 2;
-    uint256 private constant MIN_GOV_RATIO_SLOT_INDEX = 3;
+
+    uint256 private constant SLOT_LP_TOKEN = 1;
+    uint256 private constant SLOT_GOV_RATIO_MULTIPLIER = 2;
+    uint256 private constant SLOT_MIN_GOV_RATIO = 3;
     uint256 private constant TARGET_DATA_LENGTH = 4;
 
     address public immutable PAIR_FACTORY_ADDRESS;
@@ -109,9 +110,9 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             }
         }
 
-        address lpTokenAddress = abi.decode(targetData[LP_TOKEN_SLOT_INDEX], (address));
-        uint256 govRatioMultiplierValue = abi.decode(targetData[GOV_RATIO_MULTIPLIER_SLOT_INDEX], (uint256));
-        uint256 minGovRatioValue = abi.decode(targetData[MIN_GOV_RATIO_SLOT_INDEX], (uint256));
+        address lpTokenAddress = abi.decode(targetData[SLOT_LP_TOKEN], (address));
+        uint256 govRatioMultiplierValue = abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
+        uint256 minGovRatioValue = abi.decode(targetData[SLOT_MIN_GOV_RATIO], (uint256));
 
         if (lpTokenAddress == address(0)) {
             revert ZeroJoinTokenAddress();

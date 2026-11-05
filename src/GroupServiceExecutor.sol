@@ -27,9 +27,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
     uint256 public constant DEFAULT_MAX_RECIPIENTS = GroupServiceStorage.DEFAULT_MAX_RECIPIENTS;
     uint256 private constant ABI_WORD_BYTES = 32;
-    uint256 private constant SOURCE_TOKEN_SLOT_INDEX = 1;
-    uint256 private constant GOV_RATIO_MULTIPLIER_SLOT_INDEX = 2;
-    uint256 private constant PUBLIC_VERIFIER_RATIO_SLOT_INDEX = 3;
+
+    uint256 private constant SLOT_SOURCE_TOKEN = 1;
+    uint256 private constant SLOT_GOV_RATIO_MULTIPLIER = 2;
+    uint256 private constant SLOT_PUBLIC_VERIFIER_RATIO = 3;
     uint256 private constant TARGET_DATA_LENGTH = 4;
 
     GroupServiceStorage.Layout internal _layout;
@@ -417,9 +418,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             }
         }
 
-        address sourceTokenAddress = abi.decode(targetData[SOURCE_TOKEN_SLOT_INDEX], (address));
-        uint256 govRatioMultiplierValue = abi.decode(targetData[GOV_RATIO_MULTIPLIER_SLOT_INDEX], (uint256));
-        uint256 publicVerifierRatioValue = abi.decode(targetData[PUBLIC_VERIFIER_RATIO_SLOT_INDEX], (uint256));
+        address sourceTokenAddress = abi.decode(targetData[SLOT_SOURCE_TOKEN], (address));
+        uint256 govRatioMultiplierValue = abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
+        uint256 publicVerifierRatioValue = abi.decode(targetData[SLOT_PUBLIC_VERIFIER_RATIO], (uint256));
 
         if (sourceTokenAddress == address(0)) {
             revert ZeroActionTokenAddress();

@@ -17,7 +17,8 @@ contract ActionTarget is IActionTarget {
     using Uint256Set for Uint256Set.Storage;
 
     uint256 private constant ABI_WORD_BYTES = 32;
-    uint256 private constant EXECUTOR_SLOT_INDEX = 0;
+
+    uint256 private constant SLOT_EXECUTOR = 0;
     uint256 private constant TARGET_DATA_LENGTH = 1;
 
     address public MEMBER_NFT_ADDRESS;
@@ -432,10 +433,10 @@ contract ActionTarget is IActionTarget {
         if (targetData.length < TARGET_DATA_LENGTH) {
             revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[EXECUTOR_SLOT_INDEX].length != ABI_WORD_BYTES) {
-            revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
+        if (targetData[SLOT_EXECUTOR].length != ABI_WORD_BYTES) {
+            revert InvalidTargetDataShape(SLOT_EXECUTOR, targetData[SLOT_EXECUTOR].length);
         }
-        address executor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
+        address executor = abi.decode(targetData[SLOT_EXECUTOR], (address));
         if (executor.code.length == 0) {
             revert ExecutorNotContract(executor);
         }
@@ -485,10 +486,10 @@ contract ActionTarget is IActionTarget {
         if (targetData.length < TARGET_DATA_LENGTH) {
             revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
         }
-        if (targetData[EXECUTOR_SLOT_INDEX].length != ABI_WORD_BYTES) {
-            revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
+        if (targetData[SLOT_EXECUTOR].length != ABI_WORD_BYTES) {
+            revert InvalidTargetDataShape(SLOT_EXECUTOR, targetData[SLOT_EXECUTOR].length);
         }
-        address targetDataExecutor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
+        address targetDataExecutor = abi.decode(targetData[SLOT_EXECUTOR], (address));
         if (targetDataExecutor != bound) {
             revert TargetDataExecutorMismatch(bound, targetDataExecutor);
         }
@@ -514,10 +515,10 @@ contract ActionTarget is IActionTarget {
             revert UnboundProposal(tokenAddress, proposalId);
         }
         if (targetData.length != 0) {
-            if (targetData[EXECUTOR_SLOT_INDEX].length != ABI_WORD_BYTES) {
-                revert InvalidTargetDataShape(EXECUTOR_SLOT_INDEX, targetData[EXECUTOR_SLOT_INDEX].length);
+            if (targetData[SLOT_EXECUTOR].length != ABI_WORD_BYTES) {
+                revert InvalidTargetDataShape(SLOT_EXECUTOR, targetData[SLOT_EXECUTOR].length);
             }
-            address targetDataExecutor = abi.decode(targetData[EXECUTOR_SLOT_INDEX], (address));
+            address targetDataExecutor = abi.decode(targetData[SLOT_EXECUTOR], (address));
             if (targetDataExecutor != bound) {
                 revert TargetDataExecutorMismatch(bound, targetDataExecutor);
             }

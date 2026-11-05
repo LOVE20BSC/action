@@ -30,7 +30,8 @@ library GroupActionVerify {
     using Uint256Set for Uint256Set.Storage;
 
     uint256 private constant ABI_WORD_BYTES = 32;
-    uint256 private constant VERIFIER_ID_SLOT_INDEX = 1;
+
+    uint256 private constant SLOT_VERIFIER_ID = 1;
     uint256 private constant VOTE_TARGET_DATA_LENGTH = 2;
 
     struct OriginSubmission {
@@ -388,13 +389,13 @@ library GroupActionVerify {
         if (targetData.length > VOTE_TARGET_DATA_LENGTH) {
             revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, VOTE_TARGET_DATA_LENGTH);
         }
-        if (targetData[VERIFIER_ID_SLOT_INDEX].length != ABI_WORD_BYTES) {
+        if (targetData[SLOT_VERIFIER_ID].length != ABI_WORD_BYTES) {
             revert IGroupActionExecutorErrors.InvalidTargetDataShape(
-                VERIFIER_ID_SLOT_INDEX, targetData[VERIFIER_ID_SLOT_INDEX].length
+                SLOT_VERIFIER_ID, targetData[SLOT_VERIFIER_ID].length
             );
         }
 
-        uint256 verifierId = abi.decode(targetData[VERIFIER_ID_SLOT_INDEX], (uint256));
+        uint256 verifierId = abi.decode(targetData[SLOT_VERIFIER_ID], (uint256));
         uint256 applicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         if (applicationId == 0) {
             revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
