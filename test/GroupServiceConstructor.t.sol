@@ -56,7 +56,6 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
                 == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP,
             "max recipient actions"
         );
-        require(executor.MAX_MINT_BATCH_LENGTH() == MAX_MINT_BATCH_LENGTH, "max mint batch");
     }
 
     function testOnProposalCreatedStoresConfiguration() external {

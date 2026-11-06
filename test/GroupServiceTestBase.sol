@@ -41,7 +41,6 @@ abstract contract GroupServiceTestBase {
 
     uint256 internal constant PRECISION = 1e18;
     uint256 internal constant MAX_RECIPIENTS_PER_ACTION = 8;
-    uint256 internal constant MAX_MINT_BATCH_LENGTH = 10;
 
     uint256 internal constant CREATION_PHASE = 2;
     uint256 internal constant JOIN_PHASE = 3;

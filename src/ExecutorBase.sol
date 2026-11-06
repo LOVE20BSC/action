@@ -11,8 +11,6 @@ import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 
 abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
-    uint256 public constant MAX_MINT_BATCH_LENGTH = 10;
-
     address public immutable ACTION_TARGET_ADDRESS;
     address public immutable STAKE_ADDRESS;
     address public immutable MEMBER_NFT_ADDRESS;
@@ -75,10 +73,6 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         if (length != rounds.length) {
             revert IActionExecutorErrors.BatchLengthMismatch(length, rounds.length);
         }
-        if (length > MAX_MINT_BATCH_LENGTH) {
-            revert IActionExecutorErrors.MintBatchTooLarge(length, MAX_MINT_BATCH_LENGTH);
-        }
-
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
