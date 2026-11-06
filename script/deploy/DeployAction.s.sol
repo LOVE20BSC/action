@@ -52,11 +52,12 @@ contract DeployAction is Script {
     function _validateConfig(ActionConfig memory config) internal view {
         require(block.chainid == config.chainId, "Chain ID mismatch");
 
-        // Core dependencies must be deployed contracts: ActionTarget derives
-        // vote/submit/memberNFT/phase from Mint, the three Executors only take ActionTarget, and
-        // Stake is resolved through ActionTarget.VOTE_ADDRESS() before its remaining addresses are
-        // derived; a wrong address does not revert during simulation and would broadcast 4
-        // contracts for nothing (21_check.sh would only catch it afterwards).
+        // Runs before startBroadcast(), so a wrong Mint/Stake address fails simulation instead of
+        // broadcasting: code-length checks reject EOAs and undeployed contracts, the getter calls
+        // revert for contracts that do not implement the interface, and every derived address is
+        // code-checked before use. ActionTarget derives vote/submit/memberNFT/phase from Mint, the
+        // three Executors only take ActionTarget, and Stake is resolved through
+        // ActionTarget.VOTE_ADDRESS() before its remaining addresses are derived.
         require(config.mint.code.length != 0, "Mint must be a deployed contract");
         require(config.stake.code.length != 0, "Stake must be a deployed contract");
 
@@ -112,18 +113,8 @@ contract DeployAction is Script {
         internal
         returns (DeploymentAddresses memory addrs)
     {
-        addrs.actionTarget = address(new ActionTarget());
+        addrs.actionTarget = address(new ActionTarget(mint));
         console2.log("ActionTarget deployed at:", addrs.actionTarget);
-        // Init must be the first transaction sent to the new ActionTarget: it is broadcast
-        // immediately after the deployment from the same broadcaster, with nothing in between.
-        // This is the only ordering guarantee the contract itself cannot provide (init is
-        // permissionless by design, see specs/action/01-action-target.md). If any other
-        // transaction reaches the address first, either this init reverts (AlreadyInitialized)
-        // or the five binding checks in _validateDeployment fail — both abort the deployment.
-        require(!ActionTarget(addrs.actionTarget).initialized(), "ActionTarget already initialized");
-        ActionTarget(addrs.actionTarget).init(mint);
-        require(ActionTarget(addrs.actionTarget).initialized(), "ActionTarget init did not take effect");
-        console2.log("ActionTarget initialized");
 
         addrs.lpExecutor = address(new LpExecutor(addrs.actionTarget));
         console2.log("LpExecutor deployed at:", addrs.lpExecutor);
@@ -145,9 +136,8 @@ contract DeployAction is Script {
         IActionTarget actionTarget = IActionTarget(addrs.actionTarget);
         // The five bindings below are every write entry's auth root: SUBMIT/VOTE gate the three
         // core callbacks, MEMBER_NFT is the member-owner predicate, PHASE drives the join/settle
-        // rounds and MINT is the only mint outlet. Together they prove init ran first and derived
-        // from the expected Mint; a front-run init shows up as a mismatch here.
-        require(actionTarget.initialized(), "ActionTarget not initialized");
+        // rounds and MINT is the only mint outlet. Together they prove the constructor derived
+        // the four bindings from the expected Mint; a mismatched Mint shows up here.
         require(actionTarget.MINT_ADDRESS() == mintAddress, "ActionTarget mint mismatch");
         require(actionTarget.VOTE_ADDRESS() == mint.VOTE_ADDRESS(), "ActionTarget vote mismatch");
         require(actionTarget.SUBMIT_ADDRESS() == mint.SUBMIT_ADDRESS(), "ActionTarget submit mismatch");

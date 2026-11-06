@@ -320,15 +320,11 @@ ACTUAL_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL")
 verify_value "CHAIN_ID" "$CHAIN_ID" "$ACTUAL_CHAIN_ID" || exit 1
 
 # 1. ActionTarget.
-# Its five post-init bindings — SUBMIT, VOTE, MEMBER_NFT, PHASE, MINT — are every write entry's
-# auth root. Checking all five plus initialized() is the deployment-side proof that init was the
-# first transaction to the address and derived from the expected Mint; the contract deliberately
-# does not restrict init's caller (see specs/action/01-action-target.md).
+# Its five constructor-derived bindings — SUBMIT, VOTE, MEMBER_NFT, PHASE, MINT — are every write
+# entry's auth root. Checking all five independently proves the constructor read the expected Mint
+# and stored the canonical core addresses (see specs/action/01-action-target.md).
 print_contract_header "1" "ActionTarget" "$ACTION_TARGET_ADDRESS"
 verify_deployed_and_runtime "ActionTarget" "$ACTION_TARGET_ADDRESS"
-
-ACTUAL_INIT=$(cast call "$ACTION_TARGET_ADDRESS" "initialized()(bool)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-verify_value "initialized" "true" "$ACTUAL_INIT" || ((FAILED+=1))
 
 ACTUAL_MINT=$(cast call "$ACTION_TARGET_ADDRESS" "MINT_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "mintAddress" "$MINT_ADDRESS" "$ACTUAL_MINT" || ((FAILED+=1))

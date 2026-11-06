@@ -32,7 +32,6 @@ interface IActionTargetEvents {
 }
 
 interface IActionTargetErrors {
-    error AlreadyInitialized();
     error NotSubmit(address caller);
     error NotVote(address caller);
     error NotMemberOwner(uint256 memberId);
@@ -84,9 +83,6 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     function VOTE_ADDRESS() external view returns (address);
     function MINT_ADDRESS() external view returns (address);
     function PHASE_ADDRESS() external view returns (address);
-
-    function initialized() external view returns (bool);
-    function init(address mintAddress) external;
 
     function registerJoinState(
         address tokenAddress,

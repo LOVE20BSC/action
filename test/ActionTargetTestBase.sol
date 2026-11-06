@@ -48,16 +48,15 @@ abstract contract ActionTargetTestBase {
 
     function setUp() public virtual {
         _deployMocks();
-        actionTarget = new ActionTarget();
-        executor = new MockExecutor(address(actionTarget));
         submitAddress = address(new MockSubmit());
         voteAddress = address(vote);
-        phase.setPhase(1);
         mint.setVoteAddress(voteAddress);
         mint.setSubmitAddress(submitAddress);
         mint.setMemberNFTAddress(address(memberNFT));
         mint.setPhaseAddress(address(phase));
-        actionTarget.init(address(mint));
+        actionTarget = new ActionTarget(address(mint));
+        executor = new MockExecutor(address(actionTarget));
+        phase.setPhase(1);
     }
 
     function _deployMocks() internal {

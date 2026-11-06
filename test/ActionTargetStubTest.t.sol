@@ -53,10 +53,9 @@ contract ActionTargetStubTest is ActionTargetTestBase {
     function setUp() public override {
         super.setUp();
         stub = new CallbackStub();
-        stubTarget = new ActionTarget();
         mint.setVoteAddress(address(stub));
         mint.setSubmitAddress(address(stub));
-        stubTarget.init(address(mint));
+        stubTarget = new ActionTarget(address(mint));
         stub.setTarget(stubTarget);
     }
 

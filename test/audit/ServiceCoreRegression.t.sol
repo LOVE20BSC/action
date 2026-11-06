@@ -55,10 +55,8 @@ contract ServiceCoreRegressionTest is Test {
         uint256[] memory ids = new uint256[](1);
         ids[0] = 1;
         _mock(VOTE, abi.encodeWithSignature("votedProposalIds(address,uint256,uint256,uint256,bool)"), abi.encode(ids, uint256(1)));
-        mint = new Mint();
-        mint.init(VOTE, SUBMIT, LAUNCH, NFT, 0, 1e17, 1e17);
-        target = new ActionTarget();
-        target.init(address(mint));
+        mint = new Mint(PHASE, VOTE, SUBMIT, LAUNCH, NFT, 0, 1e17, 1e17);
+        target = new ActionTarget(address(mint));
         _mock(SUBMIT, abi.encodeWithSignature("proposalTarget(address,uint256)"), abi.encode(address(target), TargetMode.Callback));
         parent = new LOVE20Token("Parent", "P", 100000, 1000000, address(this), address(mint), address(this));
         child = new LOVE20Token("Child", "C", 100000, 1000000, address(this), address(mint), address(parent));

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Step 3: source verification. Self-contained: loads network.params, verifier.params, action.params
-# and the addresses.action.params written by the last deployment, without relying on the entrypoint
-# to refresh addresses afterwards.
+# Step 3: source verification. Self-contained: loads network.params, verifier.params, action.params,
+# addresses.core.params (for ActionTarget's mint constructor argument) and the addresses.action.params
+# written by the last deployment, without relying on the entrypoint to refresh addresses afterwards.
 # Usage: script/deploy/31_verify.sh <network>
 
 network="${1:?usage: script/deploy/31_verify.sh <network>}"
@@ -21,9 +21,9 @@ if [ ! -d "$NETWORK_DIR" ]; then
     exit 1
 fi
 
-# Constructor arguments for the three Executors come from addresses.action.params (ActionTarget,
-# GroupActionExecutor) and action.params (splits).
-for config in network.params action.params addresses.action.params; do
+# Constructor arguments come from addresses.core.params (ActionTarget's mint), addresses.action.params
+# (ActionTarget, GroupActionExecutor) and action.params (splits).
+for config in network.params action.params addresses.core.params addresses.action.params; do
     if [ ! -f "$NETWORK_DIR/$config" ]; then
         echo "Error: Missing required configuration: $NETWORK_DIR/$config"
         exit 1
@@ -41,11 +41,13 @@ fi
 params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
 
 params_unset_all "$NETWORK_DIR/network.params" "$VERIFIER_PARAMS" \
-    "$NETWORK_DIR/action.params" "$NETWORK_DIR/addresses.action.params"
+    "$NETWORK_DIR/action.params" "$NETWORK_DIR/addresses.core.params" \
+    "$NETWORK_DIR/addresses.action.params"
 
 params_load "$NETWORK_DIR/network.params"
 params_load "$VERIFIER_PARAMS"
 params_load "$NETWORK_DIR/action.params"
+params_load "$NETWORK_DIR/addresses.core.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 
 cd "$PROJECT_ROOT"
@@ -109,10 +111,16 @@ for field in $CONTRACT_ADDRESS_FIELDS $GROUP_ACTION_LIBRARY_FIELDS $GROUP_SERVIC
     fi
 done
 
-# The three Executors fix their protocol addresses as immutables in the constructor, so the
-# constructor arguments must be supplied when verifying. A failing command substitution would
-# silently abort under set -e, so each call is checked explicitly for a clear message, and every
-# encoding finishes before any verification request is sent.
+# ActionTarget derives its core bindings from Mint in the constructor and the three Executors fix
+# their protocol addresses in the constructor, so the constructor arguments must be supplied when
+# verifying. A failing command substitution would silently abort under set -e, so each call is
+# checked explicitly for a clear message, and every encoding finishes before any verification
+# request is sent.
+if ! ACTION_TARGET_ARGS=$(cast abi-encode "constructor(address)" \
+    "$MINT_ADDRESS"); then
+    echo "Error: Failed to encode ActionTarget constructor arguments"
+    exit 1
+fi
 if ! LP_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
     "$ACTION_TARGET_ADDRESS"); then
     echo "Error: Failed to encode LpExecutor constructor arguments"
@@ -137,7 +145,8 @@ verify_contract() {
     forge verify-contract "$address" "$fqn" "${COMMON_ARGS[@]}" "$@"
 }
 
-verify_contract "$ACTION_TARGET_ADDRESS" "src/ActionTarget.sol:ActionTarget"
+verify_contract "$ACTION_TARGET_ADDRESS" "src/ActionTarget.sol:ActionTarget" \
+    --constructor-args "$ACTION_TARGET_ARGS"
 verify_contract "$LP_EXECUTOR_ADDRESS" "src/LpExecutor.sol:LpExecutor" \
     --constructor-args "$LP_EXECUTOR_ARGS"
 verify_contract "$GROUP_ACTION_EXECUTOR_ADDRESS" "src/GroupActionExecutor.sol:GroupActionExecutor" \

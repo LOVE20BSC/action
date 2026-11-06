@@ -23,6 +23,8 @@ interface ActionTargetIntegrationVm {
     function stopPrank() external;
     function roll(uint256 blockNumber) external;
     function expectRevert(bytes calldata data) external;
+    function getNonce(address account) external view returns (uint64);
+    function computeCreateAddress(address deployer, uint256 nonce) external view returns (address);
 }
 
 contract ActionTargetRealIntegrationTest {
@@ -64,17 +66,16 @@ contract ActionTargetRealIntegrationTest {
         factory = new MockUniswapV2Factory();
         router = new MockUniswapV2Router();
         rootToken = new LOVE20Token("RootCommunity", "ROOT", 1000000, 100000000, owner, owner, address(this));
-        memberNFT = new MemberNFT(1e18, 4, 2, 20);
-        mint = new Mint();
-        vote = new Vote();
-        submit = new Submit();
-        stake = new Stake();
-        launch = new Launch();
 
-        launch.init(
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedMemberNFT = vm.computeCreateAddress(address(this), nonce + 1);
+        address predictedVote = vm.computeCreateAddress(address(this), nonce + 4);
+        address predictedMint = vm.computeCreateAddress(address(this), nonce + 5);
+
+        launch = new Launch(
             LaunchInitParams({
-                mintAddress: address(mint),
-                memberNFTAddress: address(memberNFT),
+                mintAddress: predictedMint,
+                memberNFTAddress: predictedMemberNFT,
                 rootParentTokenAddress: address(rootToken),
                 pairFactoryAddress: address(factory),
                 distributor: distributor,
@@ -87,17 +88,27 @@ contract ActionTargetRealIntegrationTest {
                 symbol: "TEST"
             })
         );
-        (address[] memory tokenList,) = launch.tokens(0, 1, false);
-        token = LOVE20Token(tokenList[0]);
+        token = LOVE20Token(launch.FIRST_TOKEN_ADDRESS());
 
-        submit.init(address(phase), address(stake), address(memberNFT), 5e16);
-        // Fee settlement ratio from the integration profile (0.3%).
-        stake.init(address(phase), address(memberNFT), address(vote), address(launch), address(router), address(factory), 1, 100, 3e15, 2, 5);
-        vote.init(address(phase), address(stake), address(submit), address(memberNFT));
-        mint.init(address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17);
+        memberNFT = new MemberNFT(1e18, 4, 2, 20, address(token));
+        stake = new Stake(
+            address(phase),
+            address(memberNFT),
+            predictedVote,
+            address(launch),
+            address(router),
+            address(factory),
+            1,
+            100,
+            3e15, // fee settlement ratio from the integration profile (0.3%)
+            2,
+            5
+        );
+        submit = new Submit(address(phase), address(stake), address(memberNFT), 5e16);
+        vote = new Vote(address(phase), address(stake), address(submit), address(memberNFT));
+        mint = new Mint(address(phase), address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17);
 
-        actionTarget = new ActionTarget();
-        actionTarget.init(address(mint));
+        actionTarget = new ActionTarget(address(mint));
         executor = new MockExecutor(address(actionTarget));
 
         vm.roll(block.number + ROLL_PAST_ROUND0);

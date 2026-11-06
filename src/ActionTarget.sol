@@ -26,7 +26,6 @@ contract ActionTarget is IActionTarget {
     address public VOTE_ADDRESS;
     address public MINT_ADDRESS;
     address public PHASE_ADDRESS;
-    bool public initialized;
 
     // tokenAddress => memberId => actionIds
     mapping(address => mapping(uint256 => Uint256Set.Storage))
@@ -54,23 +53,13 @@ contract ActionTarget is IActionTarget {
     mapping(address => mapping(address => uint256[])) internal _actionIdsByExecutor;
 
     // forge-lint: disable-next-item(missing-zero-check)
-    function init(address mintAddress) external {
-        if (initialized) {
-            revert AlreadyInitialized();
-        }
-        initialized = true;
-
+    constructor(address mintAddress) {
         IMint mint = IMint(mintAddress);
-        address voteAddress = mint.VOTE_ADDRESS();
-        address submitAddress = mint.SUBMIT_ADDRESS();
-        address memberNFTAddress = mint.MEMBER_NFT_ADDRESS();
-        address phaseAddress = mint.PHASE_ADDRESS();
-
-        MEMBER_NFT_ADDRESS = memberNFTAddress;
-        SUBMIT_ADDRESS = submitAddress;
-        VOTE_ADDRESS = voteAddress;
+        PHASE_ADDRESS = mint.PHASE_ADDRESS();
+        MEMBER_NFT_ADDRESS = mint.MEMBER_NFT_ADDRESS();
+        SUBMIT_ADDRESS = mint.SUBMIT_ADDRESS();
+        VOTE_ADDRESS = mint.VOTE_ADDRESS();
         MINT_ADDRESS = mintAddress;
-        PHASE_ADDRESS = phaseAddress;
     }
 
     modifier onlyBoundExecutor(address tokenAddress, uint256 actionId) {

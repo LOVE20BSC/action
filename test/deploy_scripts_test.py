@@ -127,6 +127,75 @@ def fake_tool(tool, args):
 PARAMS_SH_SHA256 = "b3a8f64dc87d9e823a364de92e3bc79144d246f1c1a861cdcf95616042b8f840"
 
 
+CONSTRUCTOR_SLOTS = {
+    "ActionTarget": ["MINT_ADDRESS"],
+    "LpExecutor": ["ACTION_TARGET_ADDRESS"],
+    "GroupActionExecutor": ["ACTION_TARGET_ADDRESS", "GROUP_ACTION_SPLITS"],
+    "GroupServiceExecutor": ["GROUP_ACTION_EXECUTOR_ADDRESS"],
+}
+
+ADDRESS_VALUE = re.compile(r"0x[0-9a-fA-F]{40}")
+UINT_VALUE = re.compile(r"0|[1-9][0-9]*")
+
+
+def constructor_abi(repo: Path, contract: str) -> list:
+    """ABI entries from compiled output: `forge inspect` when available, else the `out/` artifact."""
+    try:
+        inspected = subprocess.run(["forge", "inspect", contract, "abi", "--json"],
+                                   cwd=repo, text=True, capture_output=True)
+    except FileNotFoundError:
+        inspected = None
+    if inspected is not None:
+        assert inspected.returncode == 0, (contract, inspected.stderr, inspected.stdout)
+        return json.loads(inspected.stdout)
+    artifact = repo / "out" / (contract + ".sol") / (contract + ".json")
+    assert artifact.is_file(), (f"cannot derive the {contract} constructor ABI: forge is not on PATH "
+                                f"and {artifact} is missing; run `forge build` first")
+    print(f"warning: forge is not on PATH; using the build artifact {artifact}", file=sys.stderr)
+    return json.loads(artifact.read_text())["abi"]
+
+
+def constructor_layout(repo: Path, contract: str):
+    """Return (signature, slot types) for the constructor, derived from the ABI."""
+    entries = [entry for entry in constructor_abi(repo, contract) if entry.get("type") == "constructor"]
+    assert len(entries) == 1, (contract, entries)
+    slot_types = [entry["type"] for entry in entries[0]["inputs"]]
+    assert all(slot_type != "tuple" for slot_type in slot_types), (contract, slot_types)
+    return "constructor(" + ",".join(slot_types) + ")", slot_types
+
+
+def constructor_slot_value(slot_type: str, key: str, env: dict) -> str:
+    """31_verify passes address/uint values verbatim and uint arrays as a bracketed literal."""
+    if slot_type.endswith("[]"):
+        items = env[key].split(",") if env[key] else []
+        assert all(UINT_VALUE.fullmatch(item.strip()) for item in items), (slot_type, key, env[key])
+        return "[" + env[key] + "]"
+    if slot_type == "address":
+        assert ADDRESS_VALUE.fullmatch(env[key]) is not None, (slot_type, key, env[key])
+    elif slot_type.startswith("uint"):
+        assert UINT_VALUE.fullmatch(env[key]) is not None, (slot_type, key, env[key])
+    else:
+        raise AssertionError(f"unsupported ABI type {slot_type} for {key}")
+    return env[key]
+
+
+def verify_constructor_arguments(repo: Path, contract: str, log: list, env: dict) -> None:
+    """Per-slot check of the values 31_verify passes: ABI types in CONSTRUCTOR_SLOTS order."""
+    signature, slot_types = constructor_layout(repo, contract)
+    keys = CONSTRUCTOR_SLOTS[contract]
+    assert len(slot_types) == len(keys), (
+        f"{contract}: the compiled ABI has {len(slot_types)} constructor slots but CONSTRUCTOR_SLOTS "
+        f"lists {len(keys)}; update the slot map together with the constructor", slot_types, keys)
+    expected = [constructor_slot_value(slot_type, key, env)
+                for key, slot_type in zip(keys, slot_types)]
+    encoded = [call for call in log if call[:2] == ["cast", "abi-encode"]]
+    matching = [call for call in encoded
+                if call[2] == signature and [value for value in call[3:] if not value.startswith("env:")] == expected]
+    assert matching, (contract, "no cast abi-encode call matches the compiled signature and expected slots",
+                      signature, expected, [call[2:] for call in encoded])
+    assert len(matching) == 1, (contract, matching)
+
+
 def params_shared_copy() -> None:
     """params.sh 必须与四仓共享副本逐字节相同。"""
     repo = Path(__file__).resolve().parents[1]
@@ -297,7 +366,7 @@ def main():
             for signature, value in fields.items():
                 calls[env[contract + "_ADDRESS"].lower() + "/" + signature] = env.get(value, value)
 
-        getters("ACTION_TARGET", {"initialized()(bool)": "true", "MINT_ADDRESS()(address)": "MINT_ADDRESS",
+        getters("ACTION_TARGET", {"MINT_ADDRESS()(address)": "MINT_ADDRESS",
                 "VOTE_ADDRESS()(address)": "VOTE_ADDRESS", "SUBMIT_ADDRESS()(address)": "SUBMIT_ADDRESS",
                 "MEMBER_NFT_ADDRESS()(address)": "MEMBER_NFT_ADDRESS", "PHASE_ADDRESS()(address)": "PHASE_ADDRESS"})
         for name in ("LP_EXECUTOR", "GROUP_ACTION_EXECUTOR", "GROUP_SERVICE_EXECUTOR"):
@@ -702,27 +771,35 @@ def main():
         assert "Source verification succeeded" not in result.stdout
         _, log = run("31_verify.sh", args=("test",))
         assert_verify_plan(log)
-        # 三个 Executor 的构造参数必须回填；GroupActionExecutor 的 splits 以数组字面量编码。
+        # ActionTarget 与三个 Executor 的构造参数必须回填，且逐槽与 CONSTRUCTOR_SLOTS 对齐；
+        # GroupActionExecutor 的 splits 以数组字面量编码。
         encoder_calls = [call for call in log if call[:2] == ["cast", "abi-encode"]]
-        assert len(encoder_calls) == 3, encoder_calls
+        assert len(encoder_calls) == 4, encoder_calls
         splits_call = next(call for call in encoder_calls if "uint256[]" in call[2])
         assert "[" + env["GROUP_ACTION_SPLITS"] + "]" in splits_call, splits_call
+        for contract in CONSTRUCTOR_SLOTS:
+            verify_constructor_arguments(action, contract, log, env)
         by_source = verifies_by_source(log)
-        for source in ("src/LpExecutor.sol:LpExecutor", "src/GroupActionExecutor.sol:GroupActionExecutor",
+        for source in ("src/ActionTarget.sol:ActionTarget", "src/LpExecutor.sol:LpExecutor",
+                       "src/GroupActionExecutor.sol:GroupActionExecutor",
                        "src/GroupServiceExecutor.sol:GroupServiceExecutor"):
             assert by_source[source][by_source[source].index("--constructor-args") + 1] == "0x1234", by_source[source]
-        assert "--constructor-args" not in by_source["src/ActionTarget.sol:ActionTarget"]
-        # 编码失败：在任何验证请求之前显式中止。Lp 与 GroupService 的签名相同，
-        # 用入参地址区分两者的失败路径。
-        for signature, label in [("constructor(address)", "LpExecutor"),
-                                 ("constructor(address,uint256[])", "GroupActionExecutor")]:
-            result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL=signature)
-            assert f"Failed to encode {label}" in result.stdout, result.stdout
-            assert not any(call[0] == "forge" for call in log)
-        result, log = run("31_verify.sh", False, ("test",),
-                          ABI_ENCODE_FAIL_ARG=env["GROUP_ACTION_EXECUTOR_ADDRESS"])
-        assert "Failed to encode GroupServiceExecutor" in result.stdout, result.stdout
+        # ActionTarget、LpExecutor、GroupServiceExecutor 共用 constructor(address) 签名：
+        # 同签名失败会在第一次编码（ActionTarget）处中止，因此先证明三次编码确实共用该签名，
+        # 再用入参地址分别验证三个合约各自的失败路径。
+        ctor_address_calls = [call for call in encoder_calls if call[2] == "constructor(address)"]
+        assert len(ctor_address_calls) == 3, ctor_address_calls
+        result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL="constructor(address)")
+        assert "Failed to encode ActionTarget constructor arguments" in result.stdout, result.stdout
         assert not any(call[0] == "forge" for call in log)
+        result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL="constructor(address,uint256[])")
+        assert "Failed to encode GroupActionExecutor constructor arguments" in result.stdout, result.stdout
+        assert not any(call[0] == "forge" for call in log)
+        for arg_key, label in [("MINT_ADDRESS", "ActionTarget"), ("ACTION_TARGET_ADDRESS", "LpExecutor"),
+                               ("GROUP_ACTION_EXECUTOR_ADDRESS", "GroupServiceExecutor")]:
+            result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL_ARG=env[arg_key])
+            assert f"Failed to encode {label} constructor arguments" in result.stdout, result.stdout
+            assert not any(call[0] == "forge" for call in log)
         # 缺 ETHERSCAN_API_KEY：验证步失败且不提交任何验证请求。
         with network.joinpath("network.params").open("a") as config:
             config.write("ETHERSCAN_API_KEY=\n")

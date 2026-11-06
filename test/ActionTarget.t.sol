@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {ActionTarget} from "../src/ActionTarget.sol";
 import {IActionTargetErrors} from "../src/interfaces/IActionTarget.sol";
 import {IMintErrors} from "@core/interfaces/IMint.sol";
 import {MockExecutor, MockMint} from "./mocks/ActionTargetMocks.sol";
@@ -22,27 +21,12 @@ contract ActionTargetTest is ActionTargetTestBase {
         return abi.encodeWithSelector(IActionTargetErrors.UnauthorizedExecutor.selector, address(token), actionId);
     }
 
-    function testInitBindsDependenciesAndDerivesPhase() external view {
-        require(actionTarget.initialized(), "initialized");
+    function testConstructorBindsDependencies() external view {
         require(actionTarget.MEMBER_NFT_ADDRESS() == address(memberNFT), "memberNFT bound");
         require(actionTarget.SUBMIT_ADDRESS() == submitAddress, "submit bound");
         require(actionTarget.VOTE_ADDRESS() == address(vote), "vote bound");
         require(actionTarget.MINT_ADDRESS() == address(mint), "mint bound");
         require(actionTarget.PHASE_ADDRESS() == address(phase), "phase derived from mint");
-    }
-
-    function testInitIsPermissionless() external {
-        ActionTarget fresh = new ActionTarget();
-        vm.prank(OUTSIDER);
-        fresh.init(address(mint));
-        require(fresh.initialized(), "outsider init succeeds");
-        require(fresh.PHASE_ADDRESS() == address(phase), "phase derived");
-    }
-
-    function testInitRejectsSecondCall() external {
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.AlreadyInitialized.selector));
-        actionTarget.init(address(mint));
-        require(actionTarget.MEMBER_NFT_ADDRESS() == address(memberNFT), "state unchanged");
     }
 
     function testCreateBindsExecutorAndIndexes() external {

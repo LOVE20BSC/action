@@ -27,7 +27,7 @@ script/
 
 ### 1. 按依赖顺序部署被依赖方
 
-Action 的依赖从 core 的 `Mint`（`ActionTarget.init`）出发：`LpExecutor` / `GroupActionExecutor` 只收 ActionTarget（后者另收 splits），`GroupServiceExecutor` 只收 GroupActionExecutor；Stake 经 `ActionTarget.VOTE_ADDRESS()` → `Vote.STAKE_ADDRESS()` 反查后派生：
+Action 的依赖从 core 的 `Mint`（`ActionTarget` 构造函数只收 Mint 并派生其余四个绑定）出发：`LpExecutor` / `GroupActionExecutor` 只收 ActionTarget（后者另收 splits），`GroupServiceExecutor` 只收 GroupActionExecutor；Stake 经 `ActionTarget.VOTE_ADDRESS()` → `Vote.STAKE_ADDRESS()` 反查后派生：
 
 ```bash
 # 1) dex（core 的依赖）：WETH / Factory / Router
@@ -68,7 +68,7 @@ GROUP_ACTION_SPLITS=1e17,4e17,7e17      # 第2名10% / 第3名40% / 第4名70%
 
 参数文件里的长整数可写成 `<整数>e<指数>`（`1e17` 即 10%）或带下划线的分组写法（`1_000_000`），由 `script/deploy/params.sh` 在载入时展开为十进制再导出；尾数必须是不带小数点的整数（`2.5e15` 不会被展开，写成 `25e14`）；展开是纯词法的、没有键表，写错的写法会留给 `vm.envUint` 在广播前报错。
 
-`GROUP_ACTION_SPLITS` 是 `GroupActionVerify` 的开放窗口，不是奖励分成：`openOffset = ceil(verifyPhaseBlocks * SPLITS[rank-2] / 1e18)`，第 1 名在验证阶段起点即可提交。三个步骤各自用 `params_require_keys` 对 `action.params` 断言该键存在（键集合由 `deploy_scripts_test.py` 交叉核对，漏一处即失败）；缺键即失败，空值合法（表示不分层）。`splits` 经 `11_deploy.sh` 以 `--sig "run(uint256[])"` 传入 `DeployAction.s.sol`；`DeployAction` 在广播前校验：空数组合法（不分层，仅投票第一名作为当轮唯一公共验证者），非空时每项 `0 < split < 1e18` 且严格递增；21_check 复核。splits 是部署期静态配置，由部署脚本校验、21_check 复核，合约不重复校验；`ActionTarget` 允许提案绑定任意 Executor，非本脚本部署的 Executor 由其提案方自担 splits 配置风险。其余合约没有其它数值参数：`ActionTarget.init` 只收 `Mint` 地址；`LpExecutor` / `GroupActionExecutor` 的构造函数只收 `ActionTarget`（后者另收 `splits`），`GroupServiceExecutor` 只收 `GroupActionExecutor`（ActionTarget 从它反查）；`Stake` 经 `ActionTarget.VOTE_ADDRESS()` 反查，`memberNFT/phase/vote/launch/pairFactory` 均由 `Stake` 派生。
+`GROUP_ACTION_SPLITS` 是 `GroupActionVerify` 的开放窗口，不是奖励分成：`openOffset = ceil(verifyPhaseBlocks * SPLITS[rank-2] / 1e18)`，第 1 名在验证阶段起点即可提交。三个步骤各自用 `params_require_keys` 对 `action.params` 断言该键存在（键集合由 `deploy_scripts_test.py` 交叉核对，漏一处即失败）；缺键即失败，空值合法（表示不分层）。`splits` 经 `11_deploy.sh` 以 `--sig "run(uint256[])"` 传入 `DeployAction.s.sol`；`DeployAction` 在广播前校验：空数组合法（不分层，仅投票第一名作为当轮唯一公共验证者），非空时每项 `0 < split < 1e18` 且严格递增；21_check 复核。splits 是部署期静态配置，由部署脚本校验、21_check 复核，合约不重复校验；`ActionTarget` 允许提案绑定任意 Executor，非本脚本部署的 Executor 由其提案方自担 splits 配置风险。其余合约没有其它数值参数：`ActionTarget` 的构造函数只收 `Mint` 地址并派生 `vote/submit/memberNFT/phase`；`LpExecutor` / `GroupActionExecutor` 的构造函数只收 `ActionTarget`（后者另收 `splits`），`GroupServiceExecutor` 只收 `GroupActionExecutor`（ActionTarget 从它反查）；`Stake` 经 `ActionTarget.VOTE_ADDRESS()` 反查，`memberNFT/phase/vote/launch/pairFactory` 均由 `Stake` 派生。
 
 ## 设计约定：自包含步骤
 
@@ -78,7 +78,7 @@ GROUP_ACTION_SPLITS=1e17,4e17,7e17      # 第2名10% / 第3名40% / 第4名70%
 | --- | --- |
 | `11_deploy.sh` | `network.params`、`addresses.core.params`、`action.params`、`.account`；读取本次广播生成的 `broadcast/DeployAction.s.sol/<chain-id>/run-latest.json`；写入 `addresses.action.params` |
 | `21_check.sh` | `network.params`、`addresses.core.params`、`action.params`、`addresses.action.params`；通过 `forge inspect` 读取本地构建产物，按 `immutableReferences` 回填链上 immutable 槽后做逐字节比对 |
-| `31_verify.sh` | `network.params`、`verifier.params`、`action.params`、`addresses.action.params`（后两者用于回填 Executor 构造参数） |
+| `31_verify.sh` | `network.params`、`verifier.params`、`action.params`、`addresses.core.params`、`addresses.action.params`（后三者用于回填 ActionTarget 与 Executor 构造参数） |
 
 入口 `one_click_deploy.sh` 只做编排：备份地址 → 依次跑三步 → 校验失败回滚。新增合约/模块时新建 `one_click_deploy_<x>.sh` 与自己的步骤脚本、参数文件，对现有文件零改动——各模块的部署输入互不要求存在，不会因别的模块参数变动而失败。
 
@@ -127,7 +127,7 @@ cd action
 ./script/deploy/31_verify.sh anvil31337_dev
 ```
 
-四个链接库没有构造函数参数，直接提交验证；`ActionTarget` 的绑定经 `init` 完成，无需构造参数。`LpExecutor` / `GroupActionExecutor` 的构造函数收 ActionTarget（后者另收 splits），`GroupServiceExecutor` 收 GroupActionExecutor；验证时由 `31_verify.sh` 用 `cast abi-encode` 回填 `--constructor-args`（依赖 `addresses.action.params` 的 `ACTION_TARGET_ADDRESS`、`GROUP_ACTION_EXECUTOR_ADDRESS` 与 `action.params` 的 `GROUP_ACTION_SPLITS`），编码失败在任何验证请求之前中止。`GroupActionExecutor` 与 `GroupServiceExecutor` 的运行时字节码内嵌链接库地址，验证时按 `addresses.action.params` 里的库地址传 `--libraries`；不传会让 standard-json 的 `settings.libraries` 为空，链上字节码无法匹配。链接库本身也逐一提交验证。使用 Etherscan V2 API Key；缺少 Key 或任何一份合约/库验证失败均返回非零；链列在 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 时跳过并返回 0（`ETHERSCAN_VERIFIER_URL` 决定端点，`56`/`97` 不允许进跳过名单）。`ETHERSCAN_API_KEY` 是 `network.params` 的一个键，只从文件取值——步骤脚本载入该文件时文件值（包括空值）覆盖调用方的同名环境变量，所以 `ETHERSCAN_API_KEY=xxx ./31_verify.sh` 不生效。
+四个链接库没有构造函数参数，直接提交验证；`ActionTarget` 的构造函数只收 `Mint`，验证时用 `addresses.core.params` 的 `MINT_ADDRESS` 回填 `--constructor-args`。`LpExecutor` / `GroupActionExecutor` 的构造函数收 ActionTarget（后者另收 splits），`GroupServiceExecutor` 收 GroupActionExecutor；验证时由 `31_verify.sh` 用 `cast abi-encode` 回填 `--constructor-args`（另依赖 `addresses.action.params` 的 `ACTION_TARGET_ADDRESS`、`GROUP_ACTION_EXECUTOR_ADDRESS` 与 `action.params` 的 `GROUP_ACTION_SPLITS`），编码失败在任何验证请求之前中止。`GroupActionExecutor` 与 `GroupServiceExecutor` 的运行时字节码内嵌链接库地址，验证时按 `addresses.action.params` 里的库地址传 `--libraries`；不传会让 standard-json 的 `settings.libraries` 为空，链上字节码无法匹配。链接库本身也逐一提交验证。使用 Etherscan V2 API Key；缺少 Key 或任何一份合约/库验证失败均返回非零；链列在 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 时跳过并返回 0（`ETHERSCAN_VERIFIER_URL` 决定端点，`56`/`97` 不允许进跳过名单）。`ETHERSCAN_API_KEY` 是 `network.params` 的一个键，只从文件取值——步骤脚本载入该文件时文件值（包括空值）覆盖调用方的同名环境变量，所以 `ETHERSCAN_API_KEY=xxx ./31_verify.sh` 不生效。
 
 ## 部署输出
 
@@ -146,13 +146,13 @@ GROUP_RECIPIENTS_LIBRARY_ADDRESS=0x...
 
 后 4 项是 `GroupActionExecutor` / `GroupServiceExecutor` 通过 `delegatecall` 调用的外部库，由 Foundry 在广播阶段自动以 CREATE2 部署。它们不在部署日志中，`11_deploy.sh` 从本次运行写出的 `broadcast/DeployAction.s.sol/<chain-id>/run-latest.json` 的 `libraries` 字段提取；产物须由本次运行生成，且回填的 Executor 地址须与部署日志一致，缺项、过期或不一致时不写地址文件。这些校验都在广播之后：此时合约已经上链，脚本会保留部署日志并打印日志与 broadcast 产物路径，便于人工恢复地址记录。
 
-`DeployAction.s.sol` 的部署顺序：`ActionTarget`（从 Mint 派生并 `init`）→ `LpExecutor` / `GroupActionExecutor`（构造函数只收 ActionTarget 与 splits，其余地址从 ActionTarget→Vote→Stake 派生）→ `GroupServiceExecutor`（构造函数只收 GroupActionExecutor，ActionTarget 从它反查）。三个 Executor 的协议地址全部在构造函数里固化为 immutable，没有 `init` 步骤。
+`DeployAction.s.sol` 的部署顺序：`ActionTarget`（构造函数从 Mint 派生四个绑定）→ `LpExecutor` / `GroupActionExecutor`（构造函数只收 ActionTarget 与 splits，其余地址从 ActionTarget→Vote→Stake 派生）→ `GroupServiceExecutor`（构造函数只收 GroupActionExecutor，ActionTarget 从它反查）。三个 Executor 的协议地址全部在构造函数里固化为 immutable，没有额外的初始化步骤。
 
 ## 校验内容（21_check.sh）
 
 只读链上状态（`forge inspect` 会在本地编译并刷新 `out`/`cache`，不写地址文件）：
 
-- 4 个合约均已部署（`cast code` 非空）、运行时代码与构建产物在 immutable 槽回填后逐字节一致；`ActionTarget.initialized() == true`（三个 Executor 的依赖由构造函数固化，无 `init`/`initialized`）
+- 4 个合约均已部署（`cast code` 非空）、运行时代码与构建产物在 immutable 槽回填后逐字节一致；四个合约的依赖均由构造函数固化，不存在初始化入口
 - `ActionTarget` 的 `MINT_ADDRESS / VOTE_ADDRESS / SUBMIT_ADDRESS / MEMBER_NFT_ADDRESS / PHASE_ADDRESS` 与 core 地址一致
 - 三个 Executor 的 `ACTION_TARGET_ADDRESS()`、`STAKE_ADDRESS()`、`MEMBER_NFT_ADDRESS()`、`PHASE_ADDRESS()` 与 core 地址一致；`LpExecutor.PAIR_FACTORY_ADDRESS()`、`GroupActionExecutor.VOTE_ADDRESS()`、`GroupServiceExecutor.LAUNCH_ADDRESS()`/`MINT_ADDRESS()` 与派生源一致；`GroupServiceExecutor.GROUP_ACTION_EXECUTOR_ADDRESS()` 指向本次部署的 `GroupActionExecutor`
 - `GroupActionExecutor.SPLITS()` 与 `action.params` 配置一致，并复核每项 `0 < split < 1e18` 且严格递增（cast 对大整数的 `[1e17]` 科学计数法标注已归一化）
