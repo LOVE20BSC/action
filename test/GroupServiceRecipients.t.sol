@@ -135,16 +135,16 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](0)
         );
 
-        uint256[] memory tooMany = new uint256[](DEFAULT_MAX_RECIPIENTS + 1);
-        uint256[] memory unitRatios = new uint256[](DEFAULT_MAX_RECIPIENTS + 1);
-        string[] memory unitRemarks = new string[](DEFAULT_MAX_RECIPIENTS + 1);
+        uint256[] memory tooMany = new uint256[](MAX_RECIPIENTS_PER_ACTION + 1);
+        uint256[] memory unitRatios = new uint256[](MAX_RECIPIENTS_PER_ACTION + 1);
+        string[] memory unitRemarks = new string[](MAX_RECIPIENTS_PER_ACTION + 1);
         for (uint256 i = 0; i < unitRatios.length; i++) {
             tooMany[i] = MEMBER1_ID + i;
             unitRatios[i] = 1;
             unitRemarks[i] = "";
         }
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.TooManyRecipients.selector, DEFAULT_MAX_RECIPIENTS + 1, DEFAULT_MAX_RECIPIENTS));
+        vm.expectRevert(abi.encodeWithSelector(IGroupRecipientsErrors.TooManyRecipients.selector, MAX_RECIPIENTS_PER_ACTION + 1, MAX_RECIPIENTS_PER_ACTION));
         executor.setRecipients(address(token), GROUP_ACTION_ID, GROUP_ID, tooMany, unitRatios, unitRemarks);
 
         vm.prank(GROUP_OWNER);
@@ -173,14 +173,14 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IERC721Errors.ERC721NonexistentToken.selector, MEMBER1_ID + DEFAULT_MAX_RECIPIENTS + 5
+                IERC721Errors.ERC721NonexistentToken.selector, MEMBER1_ID + MAX_RECIPIENTS_PER_ACTION + 5
             )
         );
         executor.setRecipients(
             address(token),
             GROUP_ACTION_ID,
             GROUP_ID,
-            _ids(MEMBER1_ID + DEFAULT_MAX_RECIPIENTS + 5),
+            _ids(MEMBER1_ID + MAX_RECIPIENTS_PER_ACTION + 5),
             _ratios(PRECISION),
             new string[](1)
         );

@@ -40,7 +40,7 @@ abstract contract GroupServiceTestBase {
     GroupServiceVm internal constant vm = GroupServiceVm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     uint256 internal constant PRECISION = 1e18;
-    uint256 internal constant DEFAULT_MAX_RECIPIENTS = 10;
+    uint256 internal constant MAX_RECIPIENTS_PER_ACTION = 10;
 
     uint256 internal constant CREATION_PHASE = 2;
     uint256 internal constant JOIN_PHASE = 3;

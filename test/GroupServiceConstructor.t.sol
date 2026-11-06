@@ -49,7 +49,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
 
     function testConstants() external view {
         require(executor.PRECISION() == PRECISION, "precision");
-        require(executor.DEFAULT_MAX_RECIPIENTS() == DEFAULT_MAX_RECIPIENTS, "max recipients");
+        require(executor.MAX_RECIPIENTS_PER_ACTION() == MAX_RECIPIENTS_PER_ACTION, "max recipients");
     }
 
     function testOnProposalCreatedStoresConfiguration() external {

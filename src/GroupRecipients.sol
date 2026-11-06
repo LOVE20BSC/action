@@ -317,8 +317,8 @@ library GroupRecipients {
                 length, table.ratios.length, table.remarks.length
             );
         }
-        if (length > GroupServiceStorage.DEFAULT_MAX_RECIPIENTS) {
-            revert IGroupRecipientsErrors.TooManyRecipients(length, GroupServiceStorage.DEFAULT_MAX_RECIPIENTS);
+        if (length > GroupServiceStorage.MAX_RECIPIENTS_PER_ACTION) {
+            revert IGroupRecipientsErrors.TooManyRecipients(length, GroupServiceStorage.MAX_RECIPIENTS_PER_ACTION);
         }
 
         uint256 totalRatios = 0;
