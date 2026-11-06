@@ -103,7 +103,7 @@ library GroupRecipients {
             uint256 actual = actionSet.count();
             if (!actionSet.contains(sourceActionId) && actual >= GroupServiceStorage.MAX_RECIPIENT_ACTIONS) {
                 revert IGroupRecipientsErrors.RecipientActionsLimitExceeded(
-                    groupId, actual, GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+                    sourceTokenAddress, groupId, actual, GroupServiceStorage.MAX_RECIPIENT_ACTIONS
                 );
             }
             actionSet.add(round, sourceActionId);
