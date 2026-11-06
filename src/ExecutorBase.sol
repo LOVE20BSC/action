@@ -73,6 +73,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         if (length != rounds.length) {
             revert IActionExecutorErrors.BatchLengthMismatch(length, rounds.length);
         }
+
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
