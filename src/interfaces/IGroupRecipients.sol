@@ -29,6 +29,11 @@ interface IGroupRecipientsErrors {
         uint256 count,
         uint256 maxCount
     );
+    error RecipientActionsLimitExceeded(
+        uint256 groupId,
+        uint256 actual,
+        uint256 limit
+    );
     error ZeroRecipientRatio(uint256 recipientId);
     error RecipientArrayLengthMismatch(
         uint256 recipientIdsLength,

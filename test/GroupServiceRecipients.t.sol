@@ -4,7 +4,6 @@ pragma solidity =0.8.37;
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupRecipientsErrors, IGroupRecipientsEvents} from "../src/interfaces/IGroupRecipients.sol";
 import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
-import {RecipientActionsLimitExceeded} from "../src/GroupRecipients.sol";
 import {GroupServiceStorage} from "../src/GroupServiceStorage.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MockGroupServiceMemberNFT} from "./mocks/GroupServiceMocks.sol";
@@ -513,7 +512,10 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                RecipientActionsLimitExceeded.selector, GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+                IGroupRecipientsErrors.RecipientActionsLimitExceeded.selector,
+                GROUP_ID,
+                GroupServiceStorage.MAX_RECIPIENT_ACTIONS,
+                GroupServiceStorage.MAX_RECIPIENT_ACTIONS
             )
         );
         executor.setRecipients(
