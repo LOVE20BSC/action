@@ -101,9 +101,9 @@ library GroupRecipients {
             RoundHistoryUint256Set.Storage storage actionSet =
                 self.actionIdsWithRecipients[sourceTokenAddress][groupId];
             uint256 actual = actionSet.count();
-            if (!actionSet.contains(sourceActionId) && actual >= GroupServiceStorage.MAX_RECIPIENT_ACTIONS) {
+            if (!actionSet.contains(sourceActionId) && actual >= GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP) {
                 revert IGroupRecipientsErrors.RecipientActionsLimitExceeded(
-                    sourceTokenAddress, groupId, actual, GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+                    sourceTokenAddress, groupId, actual, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP
                 );
             }
             actionSet.add(round, sourceActionId);

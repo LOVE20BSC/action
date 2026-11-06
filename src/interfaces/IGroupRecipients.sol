@@ -56,7 +56,7 @@ interface IGroupRecipientsErrors {
 interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
     function PRECISION() external view returns (uint256);
     function DEFAULT_MAX_RECIPIENTS() external view returns (uint256);
-    function MAX_RECIPIENT_ACTIONS() external view returns (uint256);
+    function MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP() external view returns (uint256);
 
     function setRecipients(
         address sourceTokenAddress,

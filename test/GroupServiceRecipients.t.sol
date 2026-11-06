@@ -501,12 +501,12 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testRecipientActionsLimitRejectsTheThirtyThirdAction() external {
         _prepareRecipientsScenario();
-        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
 
         (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "set filled to the limit");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "set filled to the limit");
 
-        uint256 overflowActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+        uint256 overflowActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
         groupAction.setJoinTokenAddress(address(token), overflowActionId, address(token));
 
         vm.prank(GROUP_OWNER);
@@ -515,8 +515,8 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
                 IGroupRecipientsErrors.RecipientActionsLimitExceeded.selector,
                 address(token),
                 GROUP_ID,
-                GroupServiceStorage.MAX_RECIPIENT_ACTIONS,
-                GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+                GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP,
+                GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP
             )
         );
         executor.setRecipients(
@@ -526,48 +526,48 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testRecipientActionsLimitKeepsExistingUpdatesAndClearsUsable() external {
         _prepareRecipientsScenario();
-        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
 
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(PRECISION / 2));
 
         (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "updating an existing action adds no slot");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "updating an existing action adds no slot");
 
         _setRecipients(GROUP_ID, GROUP_ACTION_ID_B, new uint256[](0), new uint256[](0));
 
         (, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS - 1, "clearing an existing action frees its slot");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP - 1, "clearing an existing action frees its slot");
 
-        uint256 replacementActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+        uint256 replacementActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
         groupAction.setJoinTokenAddress(address(token), replacementActionId, address(token));
         _setRecipients(GROUP_ID, replacementActionId, _ids(MEMBER1_ID), _ratios(PRECISION));
 
         (, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "freed slot accepts a new action");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "freed slot accepts a new action");
     }
 
     function testRecipientActionsLimitIsScopedToEachGroup() external {
         _prepareRecipientsScenario();
-        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
-        _fillRecipientActions(GROUP_OWNER_B_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_OWNER_B_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
 
         (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "group A is full");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "group A is full");
         (, total) = executor.actionIdsWithRecipients(address(token), GROUP_OWNER_B_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "group B has its own full budget");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "group B has its own full budget");
     }
 
     function testRecipientActionsLimitSurvivesTheVerifyRound() external {
         _prepareRecipientsScenario();
-        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
 
         // Cross into the next verify round: the earlier configurations are inherited, not reset.
         _atPhase(MINT_PHASE);
         (, uint256 total) =
             executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND + 1, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "previous rounds remain registered");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "previous rounds remain registered");
 
-        uint256 overflowActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+        uint256 overflowActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
         groupAction.setJoinTokenAddress(address(token), overflowActionId, address(token));
 
         vm.prank(GROUP_OWNER);
@@ -576,8 +576,8 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
                 IGroupRecipientsErrors.RecipientActionsLimitExceeded.selector,
                 address(token),
                 GROUP_ID,
-                GroupServiceStorage.MAX_RECIPIENT_ACTIONS,
-                GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+                GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP,
+                GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP
             )
         );
         executor.setRecipients(
@@ -587,12 +587,12 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testRecipientActionsLimitIsScopedToEachSourceToken() external {
         _prepareRecipientsScenario();
-        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
 
         (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "primary token is full");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "primary token is full");
 
-        uint256 siblingActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+        uint256 siblingActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
         groupAction.setJoinTokenAddress(address(childToken), siblingActionId, address(childToken));
 
         vm.prank(GROUP_OWNER);
@@ -603,7 +603,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         (, total) = executor.actionIdsWithRecipients(address(childToken), GROUP_ID, SERVICE_ROUND, 0, 0, false);
         require(total == 1, "sibling token has its own quota");
         (, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
-        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "primary token keeps its full set");
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "primary token keeps its full set");
     }
 
     function _fillRecipientActions(uint256 groupId, uint256 count, uint256 firstActionId) internal {

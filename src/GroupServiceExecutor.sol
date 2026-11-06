@@ -26,7 +26,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
     uint256 public constant DEFAULT_MAX_RECIPIENTS = GroupServiceStorage.DEFAULT_MAX_RECIPIENTS;
-    uint256 public constant MAX_RECIPIENT_ACTIONS = GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+    uint256 public constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
     uint256 private constant ABI_WORD_BYTES = 32;
 
     uint256 private constant SLOT_SOURCE_TOKEN = 1;
