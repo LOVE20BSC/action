@@ -4,6 +4,8 @@ pragma solidity =0.8.37;
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupRecipientsErrors, IGroupRecipientsEvents} from "../src/interfaces/IGroupRecipients.sol";
 import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {RecipientActionsLimitExceeded} from "../src/GroupRecipients.sol";
+import {GroupServiceStorage} from "../src/GroupServiceStorage.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MockGroupServiceMemberNFT} from "./mocks/GroupServiceMocks.sol";
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
@@ -496,6 +498,68 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(token.balanceOf(MEMBER1) == 0, "old holder not paid");
         require(token.balanceOf(MEMBER2) == 450e18, "new holder paid");
         require(token.balanceOf(GROUP_OWNER) == 0, "owner keeps nothing at full allocation");
+    }
+
+    function testRecipientActionsLimitRejectsTheThirtyThirdAction() external {
+        _prepareRecipientsScenario();
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+
+        (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "set filled to the limit");
+
+        uint256 overflowActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+        groupAction.setJoinTokenAddress(address(token), overflowActionId, address(token));
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RecipientActionsLimitExceeded.selector, GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+            )
+        );
+        executor.setRecipients(
+            address(token), overflowActionId, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
+        );
+    }
+
+    function testRecipientActionsLimitKeepsExistingUpdatesAndClearsUsable() external {
+        _prepareRecipientsScenario();
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(PRECISION / 2));
+
+        (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "updating an existing action adds no slot");
+
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID_B, new uint256[](0), new uint256[](0));
+
+        (, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS - 1, "clearing an existing action frees its slot");
+
+        uint256 replacementActionId = GROUP_ACTION_ID + GroupServiceStorage.MAX_RECIPIENT_ACTIONS;
+        groupAction.setJoinTokenAddress(address(token), replacementActionId, address(token));
+        _setRecipients(GROUP_ID, replacementActionId, _ids(MEMBER1_ID), _ratios(PRECISION));
+
+        (, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "freed slot accepts a new action");
+    }
+
+    function testRecipientActionsLimitIsScopedToEachGroup() external {
+        _prepareRecipientsScenario();
+        _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+        _fillRecipientActions(GROUP_OWNER_B_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS, GROUP_ACTION_ID);
+
+        (, uint256 total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "group A is full");
+        (, total) = executor.actionIdsWithRecipients(address(token), GROUP_OWNER_B_ID, SERVICE_ROUND, 0, 0, false);
+        require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS, "group B has its own full budget");
+    }
+
+    function _fillRecipientActions(uint256 groupId, uint256 count, uint256 firstActionId) internal {
+        for (uint256 i; i < count; ++i) {
+            uint256 actionId = firstActionId + i;
+            groupAction.setJoinTokenAddress(address(token), actionId, address(token));
+            _setRecipients(groupId, actionId, _ids(MEMBER1_ID), _ratios(PRECISION));
+        }
     }
 
     function _prepareRecipientsScenario() internal {

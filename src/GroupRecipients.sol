@@ -13,6 +13,8 @@ import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
 import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 
+error RecipientActionsLimitExceeded(uint256 groupId, uint256 limit);
+
 library GroupRecipients {
     using GroupServiceStorage for GroupServiceStorage.Layout;
     using RoundHistoryUint256Array for RoundHistoryUint256Array.History;
@@ -98,7 +100,15 @@ library GroupRecipients {
         self.remarksHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.remarks);
 
         if (table.recipientIds.length != 0) {
-            self.actionIdsWithRecipients[sourceTokenAddress][groupId].add(round, sourceActionId);
+            RoundHistoryUint256Set.Storage storage actionSet =
+                self.actionIdsWithRecipients[sourceTokenAddress][groupId];
+            if (
+                !actionSet.contains(sourceActionId)
+                    && actionSet.count() >= GroupServiceStorage.MAX_RECIPIENT_ACTIONS
+            ) {
+                revert RecipientActionsLimitExceeded(groupId, GroupServiceStorage.MAX_RECIPIENT_ACTIONS);
+            }
+            actionSet.add(round, sourceActionId);
         } else {
             self.actionIdsWithRecipients[sourceTokenAddress][groupId].remove(round, sourceActionId);
         }
