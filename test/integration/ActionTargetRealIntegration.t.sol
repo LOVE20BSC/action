@@ -92,9 +92,9 @@ contract ActionTargetRealIntegrationTest {
 
         submit.init(address(phase), address(stake), address(memberNFT), 5e16);
         // Fee settlement ratio from the integration profile (0.3%).
-        stake.init(address(phase), address(memberNFT), address(vote), address(launch), address(router), address(factory), 1, 100, 3e15);
+        stake.init(address(phase), address(memberNFT), address(vote), address(launch), address(router), address(factory), 1, 100, 3e15, 2, 5);
         vote.init(address(phase), address(stake), address(submit), address(memberNFT));
-        mint.init(address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17, 2);
+        mint.init(address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17);
 
         actionTarget = new ActionTarget();
         actionTarget.init(address(mint));

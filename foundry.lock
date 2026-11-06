@@ -1,6 +1,6 @@
 {
   "lib/core": {
-    "rev": "60426521fe8d7ff35deee9f8c718acd118caae59"
+    "rev": "7431b2f6a90045fac4d0a57fba1baf364b5269d4"
   },
   "lib/forge-std": {
     "tag": {
