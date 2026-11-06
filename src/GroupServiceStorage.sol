@@ -8,8 +8,8 @@ import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 
 library GroupServiceStorage {
     uint256 constant PRECISION = 1e18;
-    uint256 constant MAX_RECIPIENTS_PER_ACTION = 10;
-    uint256 constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = 32;
+    uint256 constant MAX_RECIPIENTS_PER_ACTION = 8;
+    uint256 constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = 16;
     uint256 constant MAX_REMARK_BYTES = 256;
 
     enum SettlementCause {

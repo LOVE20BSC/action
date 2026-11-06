@@ -499,7 +499,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(token.balanceOf(GROUP_OWNER) == 0, "owner keeps nothing at full allocation");
     }
 
-    function testRecipientActionsLimitRejectsTheThirtyThirdAction() external {
+    function testRecipientActionsLimitRejectsTheActionOverTheLimit() external {
         _prepareRecipientsScenario();
         _fillRecipientActions(GROUP_ID, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, GROUP_ACTION_ID);
 
@@ -628,11 +628,11 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _atPhase(VERIFY_PHASE);
     }
 
-    /// 边界成功值：10 个收款人 + 每条 256 字节备注，恰好等于上限时接受。
-    function testSetRecipientsAcceptsTenRecipientsAndMaxRemarks() external {
+    /// 边界成功值：上限个收款人 + 每条 256 字节备注，恰好等于上限时接受。
+    function testSetRecipientsAcceptsFullTableAndMaxRemarks() external {
         _prepareRecipientsScenario();
 
-        uint256 count = 10;
+        uint256 count = MAX_RECIPIENTS_PER_ACTION;
         uint256[] memory ids = new uint256[](count);
         uint256[] memory ratios = new uint256[](count);
         string[] memory remarks = new string[](count);
@@ -648,7 +648,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         (uint256[] memory storedIds,, string[] memory storedRemarks) =
             executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
-        require(storedIds.length == count, "ten recipients stored");
+        require(storedIds.length == count, "full recipient table stored");
         require(bytes(storedRemarks[count - 1]).length == 256, "max remark stored");
     }
 

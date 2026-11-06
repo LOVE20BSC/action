@@ -55,6 +55,10 @@ interface IActionExecutorErrors {
         uint256 actionIdsLength,
         uint256 roundsLength
     );
+    error MintBatchTooLarge(
+        uint256 count,
+        uint256 maxCount
+    );
     error RoundNotStarted(
         uint256 requiredRound,
         uint256 currentRound

@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {GroupServiceStorage} from "../src/GroupServiceStorage.sol";
 import {MockGroupServiceToken} from "./mocks/GroupServiceMocks.sol";
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 
@@ -50,6 +51,12 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
     function testConstants() external view {
         require(executor.PRECISION() == PRECISION, "precision");
         require(executor.MAX_RECIPIENTS_PER_ACTION() == MAX_RECIPIENTS_PER_ACTION, "max recipients");
+        require(
+            executor.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP()
+                == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP,
+            "max recipient actions"
+        );
+        require(executor.MAX_MINT_BATCH_LENGTH() == MAX_MINT_BATCH_LENGTH, "max mint batch");
     }
 
     function testOnProposalCreatedStoresConfiguration() external {

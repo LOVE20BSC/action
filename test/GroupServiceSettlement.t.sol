@@ -589,6 +589,50 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(burnAmounts[0] == 0 && burnAmounts[1] == 0, "nothing burned");
     }
 
+    function testBatchSettlementRejectsOverlongBatch() external {
+        _standardScenario();
+
+        uint256 length = MAX_MINT_BATCH_LENGTH + 1;
+        uint256[] memory actionIds = new uint256[](length);
+        uint256[] memory rounds = new uint256[](length);
+        for (uint256 i; i < length; ++i) {
+            actionIds[i] = SERVICE_ACTION_ID;
+            rounds[i] = SERVICE_ROUND;
+        }
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.MintBatchTooLarge.selector, length, MAX_MINT_BATCH_LENGTH
+            )
+        );
+        executor.mintMemberRewards(address(token), actionIds, rounds, GROUP_ID);
+        require(actionTarget.mintRewardCalls() == 0, "no element settled");
+    }
+
+    function testBatchSettlementAcceptsTheMaximumLength() external {
+        _standardScenario();
+
+        uint256 length = MAX_MINT_BATCH_LENGTH;
+        uint256[] memory actionIds = new uint256[](length);
+        uint256[] memory rounds = new uint256[](length);
+        for (uint256 i; i < length; ++i) {
+            actionIds[i] = SERVICE_ACTION_ID;
+            rounds[i] = SERVICE_ROUND;
+        }
+        // The second element points at an action that was never created: the length gate admits
+        // the batch and the per-element guard is what rejects it.
+        actionIds[1] = SERVICE_ACTION_ID + 2;
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.ActionNotCreated.selector, address(token), SERVICE_ACTION_ID + 2
+            )
+        );
+        executor.mintMemberRewards(address(token), actionIds, rounds, GROUP_ID);
+    }
+
     function testSettlementCannotMintTwice() external {
         _standardScenario();
         _settleService(GROUP_ID);
