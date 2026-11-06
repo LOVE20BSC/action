@@ -27,6 +27,10 @@ contract DeployAction is Script {
         uint256 chainId;
         address mint;
         address stake;
+        address expectedMemberNFT;
+        address expectedPhase;
+        address expectedVote;
+        address expectedSubmit;
         uint256[] splits;
     }
 
@@ -46,6 +50,10 @@ contract DeployAction is Script {
         config.chainId = vm.envUint("CHAIN_ID");
         config.mint = vm.envAddress("MINT_ADDRESS");
         config.stake = vm.envAddress("STAKE_ADDRESS");
+        config.expectedMemberNFT = vm.envAddress("MEMBER_NFT_ADDRESS");
+        config.expectedPhase = vm.envAddress("PHASE_ADDRESS");
+        config.expectedVote = vm.envAddress("VOTE_ADDRESS");
+        config.expectedSubmit = vm.envAddress("SUBMIT_ADDRESS");
         config.splits = groupActionSplits;
     }
 
@@ -71,6 +79,17 @@ contract DeployAction is Script {
         require(phase.code.length != 0, "Mint phaseAddress must be a deployed contract");
         require(vote.code.length != 0, "Mint voteAddress must be a deployed contract");
         require(submit.code.length != 0, "Mint submitAddress must be a deployed contract");
+
+        // Cross-check Mint's derivation graph against the addresses core recorded before this run.
+        // Without it, a contract with code that answers the four getters with self-consistent but
+        // wrong addresses would pass both _validateConfig and _validateDeployment, and 21_check.sh
+        // would only catch it after the four action contracts were broadcast.
+        require(
+            memberNFT == config.expectedMemberNFT, "Mint memberNFTAddress mismatch with core params"
+        );
+        require(phase == config.expectedPhase, "Mint phaseAddress mismatch with core params");
+        require(vote == config.expectedVote, "Mint voteAddress mismatch with core params");
+        require(submit == config.expectedSubmit, "Mint submitAddress mismatch with core params");
 
         // The Executor's derived values cannot be read back, so align the Stake getters with Mint's
         // derivation graph item by item before deploying.

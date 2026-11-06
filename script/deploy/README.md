@@ -82,7 +82,7 @@ GROUP_ACTION_SPLITS=1e17,4e17,7e17      # 第2名10% / 第3名40% / 第4名70%
 
 入口 `one_click_deploy.sh` 只做编排：备份地址 → 依次跑三步 → 校验失败回滚。新增合约/模块时新建 `one_click_deploy_<x>.sh` 与自己的步骤脚本、参数文件，对现有文件零改动——各模块的部署输入互不要求存在，不会因别的模块参数变动而失败。
 
-`DeployAction.s.sol` 在广播前校验 `MINT_ADDRESS` 与 `STAKE_ADDRESS` 有代码，并交叉核对 Mint 派生的 `memberNFT/phase/vote/submit/launch`、Stake 派生的 `memberNFT/phase/vote/launch/pairFactory/router`、`Stake.launch == Mint.launch`、`Launch.pairFactory == Stake.pairFactory` 以及 Vote/Submit 的绑定；缺失、地址无代码或 splits 非法在广播前即失败，不会白广播行动合约。`11_deploy.sh` 只做文件、链、账户与密码编排，不重复这些校验。部署后 `_validateDeployment` 再核对四个合约的绑定关系；`21_check.sh` 独立复核，并直接读取 Stake 的派生 getter。
+`DeployAction.s.sol` 在广播前校验 `MINT_ADDRESS` 与 `STAKE_ADDRESS` 有代码，并交叉核对 Mint 派生的 `memberNFT/phase/vote/submit/launch`、Stake 派生的 `memberNFT/phase/vote/launch/pairFactory/router`、`Stake.launch == Mint.launch`、`Launch.pairFactory == Stake.pairFactory` 以及 Vote/Submit 的绑定，并把 Mint 的 `memberNFT/phase/vote/submit` 与 `addresses.core.params` 的同名记录逐项比对（Mint 自洽但与 core 地址记录不符同样在广播前失败）；缺失、地址无代码或 splits 非法在广播前即失败，不会白广播行动合约。`11_deploy.sh` 只做文件、链、账户与密码编排，不重复这些校验。部署后 `_validateDeployment` 再核对四个合约的绑定关系；`21_check.sh` 独立复核，并直接读取 Stake 的派生 getter。
 
 ## 部署流程
 

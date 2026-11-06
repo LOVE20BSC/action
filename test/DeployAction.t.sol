@@ -414,10 +414,42 @@ contract DeployActionTest is Test {
         deployer.validateConfigForTest(config);
     }
 
+    function testRejectsCoreParamsMemberNFTMismatch() public {
+        DeployAction.ActionConfig memory config = _validConfig();
+        config.expectedMemberNFT = makeAddr("otherCoreMemberNFT");
+        vm.expectRevert("Mint memberNFTAddress mismatch with core params");
+        deployer.validateConfigForTest(config);
+    }
+
+    function testRejectsCoreParamsPhaseMismatch() public {
+        DeployAction.ActionConfig memory config = _validConfig();
+        config.expectedPhase = makeAddr("otherCorePhase");
+        vm.expectRevert("Mint phaseAddress mismatch with core params");
+        deployer.validateConfigForTest(config);
+    }
+
+    function testRejectsCoreParamsVoteMismatch() public {
+        DeployAction.ActionConfig memory config = _validConfig();
+        config.expectedVote = makeAddr("otherCoreVote");
+        vm.expectRevert("Mint voteAddress mismatch with core params");
+        deployer.validateConfigForTest(config);
+    }
+
+    function testRejectsCoreParamsSubmitMismatch() public {
+        DeployAction.ActionConfig memory config = _validConfig();
+        config.expectedSubmit = makeAddr("otherCoreSubmit");
+        vm.expectRevert("Mint submitAddress mismatch with core params");
+        deployer.validateConfigForTest(config);
+    }
+
     function _validConfig() internal view returns (DeployAction.ActionConfig memory config) {
         config.chainId = block.chainid;
         config.mint = mint;
         config.stake = stake;
+        config.expectedMemberNFT = memberNFT;
+        config.expectedPhase = phase;
+        config.expectedVote = vote;
+        config.expectedSubmit = submit;
         config.splits = new uint256[](3);
         config.splits[0] = 1e17;
         config.splits[1] = 4e17;
