@@ -450,6 +450,16 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
 
+        // Precedence: a member who never joined the round still reports the member-level cause even though
+        // the divisor is zero — the join check runs before the divisor check.
+        vm.prank(MEMBER1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IActionExecutorErrors.ZeroRewardWeight.selector, address(token), SERVICE_ACTION_ID, MEMBER1_ID
+            )
+        );
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER1_ID);
+
         // The zero divisor is not cached: the failed settlement leaves no state, so the read recomputes.
         require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 0, "zero denominator");
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
