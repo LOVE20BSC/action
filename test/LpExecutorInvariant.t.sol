@@ -124,7 +124,8 @@ contract LpExecutorHandler {
         uint256 memberId = seed % 2 + 1;
         if (mintedModel[memberId]) return;
 
-        // Zero settlement reverts NoRewardAvailable; skip members with nothing to settle.
+        // Zero settlement reverts (MemberRewardPoolEmpty / ZeroEffectiveJoinAmount /
+        // MemberRewardRoundedToZero); skip members with nothing to settle.
         uint256 memberEffective = balanceModel[memberId] - deductionModel[memberId];
         uint256 totalEffective = totalJoinedModel - totalDeductionModel;
         if (memberEffective == 0 || totalEffective == 0) return;

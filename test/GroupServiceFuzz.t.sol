@@ -30,7 +30,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 rewardB = 1 + uint256(rewardSeedB) % 1e9;
         // r = 0 would leave the pure verifiers with nothing to mint and nothing
         // to burn, and r = PRECISION would do the same to the pure owners; both
-        // revert with NoRewardAvailable instead of settling, so those saturated
+        // revert with ZeroRewardWeight instead of settling, so those saturated
         // cases are unit-tested instead.
         uint256 ratio = 1 + uint256(ratioSeed) % (PRECISION - 1);
         uint256 govMultiplier = uint256(govSeed) % (2 * PRECISION + 1);
