@@ -100,6 +100,17 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
 
         if (fullWithdraw) {
             _withdraw(1, joinAmount);
+            require(
+                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0, "joined amount cleared to zero"
+            );
+            require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "round deduction cleared to zero");
+            require(actionTarget.isJoined(address(token), ACTION_ID, 1) == false, "join state cleared");
+        } else {
+            require(
+                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == joinAmount,
+                "joined amount untouched without a withdrawal"
+            );
+            require(actionTarget.isJoined(address(token), ACTION_ID, 1), "join state kept without a withdrawal");
         }
     }
 
