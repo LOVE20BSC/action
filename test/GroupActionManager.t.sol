@@ -511,3 +511,45 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.stakedByMemberId(address(token), GROUP_ID) == 0, "member ledger closed again");
     }
 }
+
+contract GroupActionManagerActivationRoundTest is GroupActionExecutorTestBase {
+    function testCreationPhaseActivationLocksTheFirstJoinRound() external {
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
+        _activateGroup();
+
+        (, bool active, uint256 activatedRound,) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
+        require(active, "active");
+        require(activatedRound == CREATION_PHASE, "activation round is the first joinable round");
+
+        _atPhase(CREATION_PHASE + 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector,
+                GROUP_ID,
+                CREATION_PHASE
+            )
+        );
+        _deactivateGroup(GROUP_ID);
+
+        _atPhase(CREATION_PHASE + 2);
+        _deactivateGroup(GROUP_ID);
+    }
+
+    function testLaterPhaseActivationLocksItsOwnJoinRound() external {
+        _atPhase(CREATION_PHASE + 1);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
+        _activateGroup();
+
+        (, , uint256 activatedRound,) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
+        require(activatedRound == CREATION_PHASE, "activation round is the current join round");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector,
+                GROUP_ID,
+                CREATION_PHASE
+            )
+        );
+        _deactivateGroup(GROUP_ID);
+    }
+}

@@ -175,7 +175,9 @@ library GroupActionManager {
 
         group.config = config;
         group.active = true;
-        group.activatedRound = round;
+        group.activatedRound = round < self.createdRoundByActionId[tokenAddress][actionId]
+            ? self.createdRoundByActionId[tokenAddress][actionId]
+            : round;
         group.deactivatedRound = 0;
         self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 
