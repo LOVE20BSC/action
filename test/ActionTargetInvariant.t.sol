@@ -32,6 +32,12 @@ contract ActionTargetHandler {
     mapping(uint256 => mapping(uint256 => bool)) public minted;
     mapping(uint256 => mapping(uint256 => bool)) public burned;
 
+    uint256 public createCalls;
+    uint256 public joinCalls;
+    uint256 public clearCalls;
+    uint256 public forceClearCalls;
+    uint256 public mintRewardCalls;
+
     constructor(
         address actionTarget_,
         address phase_,
@@ -62,6 +68,7 @@ contract ActionTargetHandler {
         vm.prank(submitAddress);
         actionTarget.onProposalCreated(address(token), actionId, targetData);
         phaseContract.setPhase(JOIN_PHASE);
+        createCalls++;
     }
 
     function join(uint256 seed) external {
@@ -72,6 +79,7 @@ contract ActionTargetHandler {
         phaseContract.setPhase(JOIN_PHASE);
         vm.prank(executorAddress);
         actionTarget.registerJoinState(address(token), actionId, memberId);
+        joinCalls++;
     }
 
     function clear(uint256 seed) external {
@@ -82,6 +90,7 @@ contract ActionTargetHandler {
         phaseContract.setPhase(JOIN_PHASE);
         vm.prank(executorAddress);
         actionTarget.clearJoinState(address(token), actionId, memberId);
+        clearCalls++;
     }
 
     function forceClearJoinState(uint256 seed) external {
@@ -92,6 +101,7 @@ contract ActionTargetHandler {
         phaseContract.setPhase(JOIN_PHASE);
         vm.prank(memberNFT.ownerOf(memberId));
         actionTarget.forceClearJoinState(address(token), actionId, memberId);
+        forceClearCalls++;
     }
 
     function mintReward(uint256 seed) external {
@@ -102,6 +112,7 @@ contract ActionTargetHandler {
         vote.setProposalVoted(address(token), round, actionId, true);
         vm.prank(executorAddress);
         actionTarget.mintActionReward(address(token), actionId, round);
+        mintRewardCalls++;
     }
 
     function actionIdAt(uint256 index) external pure returns (uint256) {
@@ -129,6 +140,20 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
     function targetContracts() public view returns (address[] memory targets) {
         targets = new address[](1);
         targets[0] = address(handler);
+    }
+
+    function testHandlerCoverage() external {
+        handler.create(0);
+        handler.join(0);
+        handler.clear(0);
+        handler.join(0);
+        handler.forceClearJoinState(0);
+        handler.mintReward(0);
+        require(handler.createCalls() > 0, "create entry never succeeded");
+        require(handler.joinCalls() > 0, "join entry never succeeded");
+        require(handler.clearCalls() > 0, "clear entry never succeeded");
+        require(handler.forceClearCalls() > 0, "force clear entry never succeeded");
+        require(handler.mintRewardCalls() > 0, "mint reward entry never succeeded");
     }
 
     function invariant_MembershipMirrorsModel() public view {

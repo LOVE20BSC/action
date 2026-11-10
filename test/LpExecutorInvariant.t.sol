@@ -33,6 +33,12 @@ contract LpExecutorHandler {
     uint256 public burnedSumModel;
     bool public mintPhase;
 
+    uint256 public joinCalls;
+    uint256 public withdrawCalls;
+    uint256 public exitCalls;
+    uint256 public phaseAdvances;
+    uint256 public mintCalls;
+
     constructor(
         address lpExecutor_,
         address phase_,
@@ -67,6 +73,7 @@ contract LpExecutorHandler {
         deductionModel[memberId] += added;
         totalJoinedModel += amount;
         totalDeductionModel += added;
+        joinCalls++;
     }
 
     function withdraw(uint256 seed) external {
@@ -92,6 +99,7 @@ contract LpExecutorHandler {
             totalJoinedModel -= amount;
             balanceModel[memberId] -= amount;
         }
+        withdrawCalls++;
     }
 
     function exit(uint256 seed) external {
@@ -108,6 +116,7 @@ contract LpExecutorHandler {
         deductionModel[memberId] = 0;
         totalJoinedModel -= balance;
         balanceModel[memberId] = 0;
+        exitCalls++;
     }
 
     function advanceToMintPhase() external {
@@ -117,6 +126,7 @@ contract LpExecutorHandler {
         vm.roll((JOIN_PHASE + 1) * PHASE_BLOCKS);
         MockLpActionTarget(actionTarget).setActionReward(token, ACTION_ID, 2, PROPOSAL_REWARD, true);
         MockERC20(token).mint(lpExecutor, PROPOSAL_REWARD);
+        phaseAdvances++;
     }
 
     function mint(uint256 seed) external {
@@ -140,6 +150,7 @@ contract LpExecutorHandler {
         burnedAmountModel[memberId] = burnAmount;
         mintedSumModel += mintAmount;
         burnedSumModel += burnAmount;
+        mintCalls++;
     }
 
     function _memberAddress(uint256 memberId) internal view returns (address) {
@@ -171,6 +182,21 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
     function targetContracts() public view returns (address[] memory targets) {
         targets = new address[](1);
         targets[0] = address(handler);
+    }
+
+    function testHandlerCoverage() external {
+        handler.join(0);
+        handler.withdraw(0);
+        handler.join(0);
+        handler.exit(0);
+        handler.join(0);
+        handler.advanceToMintPhase();
+        handler.mint(0);
+        require(handler.joinCalls() > 0, "join entry never succeeded");
+        require(handler.withdrawCalls() > 0, "withdraw entry never succeeded");
+        require(handler.exitCalls() > 0, "exit entry never succeeded");
+        require(handler.phaseAdvances() > 0, "phase advance entry never ran");
+        require(handler.mintCalls() > 0, "mint entry never succeeded");
     }
 
     function invariant_LedgersMatchModel() public view {

@@ -30,6 +30,14 @@ contract GroupActionHandler {
     uint256 public quotaModel;
     uint256 public grantModel;
 
+    uint256 public ownJoinCalls;
+    uint256 public providerJoinCalls;
+    uint256 public grantCalls;
+    uint256 public removeQuotaCalls;
+    uint256 public ownWithdrawCalls;
+    uint256 public exitCalls;
+    uint256 public quotaWithdrawCalls;
+
     constructor(
         address executor_,
         address phase_,
@@ -74,6 +82,7 @@ contract GroupActionHandler {
             GroupActionExecutor(executor).join(token, ACTION_ID, GROUP_ID, memberId, amount, 0, new string[](0))
         {
             ownModel[memberId] += amount;
+            ownJoinCalls++;
         } catch {}
     }
 
@@ -88,6 +97,7 @@ contract GroupActionHandler {
         {
             providerModel[MEMBER2_ID] += amount;
             quotaModel -= amount;
+            providerJoinCalls++;
         } catch {}
     }
 
@@ -105,6 +115,7 @@ contract GroupActionHandler {
         {
             quotaModel += amount;
             grantModel += amount;
+            grantCalls++;
         } catch {}
     }
 
@@ -117,6 +128,7 @@ contract GroupActionHandler {
         quotaModel = 0;
         grantModel = 0;
         providerModel[MEMBER2_ID] = 0;
+        removeQuotaCalls++;
     }
 
     function withdrawOwn(uint256 seed) external {
@@ -128,6 +140,7 @@ contract GroupActionHandler {
         vm.prank(actor);
         GroupActionExecutor(executor).withdraw(token, ACTION_ID, memberId, amount);
         ownModel[memberId] -= amount;
+        ownWithdrawCalls++;
     }
 
     function exitAll(uint256 seed) external {
@@ -141,6 +154,7 @@ contract GroupActionHandler {
             providerModel[memberId] = 0;
         }
         ownModel[memberId] = 0;
+        exitCalls++;
     }
 
     function withdrawProviderQuota(uint256 seed) external {
@@ -150,6 +164,7 @@ contract GroupActionHandler {
         GroupActionExecutor(executor).withdrawProviderQuota(token, ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, amount);
         quotaModel -= amount;
         grantModel -= amount;
+        quotaWithdrawCalls++;
     }
 
     function _fund(address account, uint256 amount) internal {
@@ -179,6 +194,26 @@ contract GroupActionInvariantTest is GroupActionExecutorTestBase {
     function targetContracts() public view returns (address[] memory targets) {
         targets = new address[](1);
         targets[0] = address(handler);
+    }
+
+    function testHandlerCoverage() external {
+        handler.joinOwn(0);
+        handler.joinOwn(1);
+        handler.grantQuota(0);
+        handler.removeQuota();
+        handler.grantQuota(0);
+        handler.withdrawProviderQuota(0);
+        handler.grantQuota(0);
+        handler.joinWithProvider(0);
+        handler.withdrawOwn(0);
+        handler.exitAll(0);
+        require(handler.ownJoinCalls() > 0, "own join entry never succeeded");
+        require(handler.providerJoinCalls() > 0, "provider join entry never succeeded");
+        require(handler.grantCalls() > 0, "grant entry never succeeded");
+        require(handler.removeQuotaCalls() > 0, "remove quota entry never succeeded");
+        require(handler.ownWithdrawCalls() > 0, "withdraw entry never succeeded");
+        require(handler.exitCalls() > 0, "exit entry never succeeded");
+        require(handler.quotaWithdrawCalls() > 0, "quota withdraw entry never succeeded");
     }
 
     function invariant_JoinLedgersMatchModel() public view {
