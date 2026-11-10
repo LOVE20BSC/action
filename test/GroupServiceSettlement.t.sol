@@ -347,7 +347,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
     ///      action-level divisor. The difference is not redistributed; it stays in the executor.
     function testOwnerFloorResidueStaysInTheExecutor() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -363,10 +363,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         (uint256 first,) = _settleService(GROUP_ID);
         (uint256 second,) = _settleService(GROUP_OWNER_B_ID);
-        require(first == 300e18 && second == 300e18, "each owner takes one third");
+        require(first == 150e18 && second == 150e18, "each owner takes a sixth");
         require(
-            token.balanceOf(address(executor)) == 300e18,
-            "the unallocated third stays in the executor"
+            token.balanceOf(address(executor)) == 600e18,
+            "the verifier half and the unallocated third stay in the executor"
         );
     }
 
@@ -518,7 +518,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
     function testSettlementRoundWindow() external {
         _atPhase(CREATION_PHASE);
         // Ratio 0: the whole reward belongs to the owner side.
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -537,14 +537,14 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND - 1, GROUP_ID);
 
         (uint256 mintAmount,) = _settleService(GROUP_ID);
-        require(mintAmount == SERVICE_REWARD, "full reward goes to the owner at ratio 0");
+        require(mintAmount == SERVICE_REWARD / 2, "the owner side keeps the non-verifier share");
     }
 
     function testBatchSettlementPairsArraysAndRollsBack() external {
         _atPhase(CREATION_PHASE);
         // Ratio 0: the whole reward belongs to the owner side.
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
-        _createServiceAction(SERVICE_ACTION_ID + 1, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
+        _createServiceAction(SERVICE_ACTION_ID + 1, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -588,7 +588,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
             executor.mintMemberRewards(address(token), _ids(SERVICE_ACTION_ID, SERVICE_ACTION_ID + 1), rounds, GROUP_ID);
         require(mintAmounts.length == 2 && burnAmounts.length == 2, "pairwise results");
-        require(mintAmounts[0] == SERVICE_REWARD && mintAmounts[1] == SERVICE_REWARD, "both actions paid");
+        require(mintAmounts[0] == SERVICE_REWARD / 2 && mintAmounts[1] == SERVICE_REWARD / 2, "both actions paid");
         require(burnAmounts[0] == 0 && burnAmounts[1] == 0, "nothing burned");
     }
 
@@ -700,27 +700,5 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         out = new address[](2);
         out[0] = a;
         out[1] = b;
-    }
-}
-
-contract GroupServiceZeroNumeratorTest is GroupServiceTestBase {
-    function testZeroVerifierRatioLeavesThePureVerifierWithZeroWeight() external {
-        _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
-        _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        _qualifyVerifier(VERIFIER_ID);
-        _joinService(VERIFIER_ID);
-        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
-        _armServiceReward(SERVICE_REWARD);
-        _atPhase(MINT_PHASE);
-
-        vm.prank(VERIFIER);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionExecutorErrors.ZeroRewardWeight.selector, address(token), SERVICE_ACTION_ID, VERIFIER_ID
-            )
-        );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
     }
 }

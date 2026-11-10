@@ -76,7 +76,7 @@ contract ServiceCoreRegressionTest is Test {
         data[0] = abi.encode(address(service));
         data[1] = abi.encode(address(child));
         data[2] = abi.encode(uint256(0));
-        data[3] = abi.encode(uint256(0));
+        data[3] = abi.encode(uint256(5e17));
         vm.prank(SUBMIT);
         target.onProposalCreated(address(parent), 1, data);
         vm.prank(ALICE);
@@ -122,7 +122,7 @@ contract ServiceCoreRegressionTest is Test {
         assertFalse(mint.isRewardPrepared(address(child), 2));
         vm.prank(ALICE);
         (uint256 first,) = service.mintMemberReward(address(parent), 1, 2, 1);
-        assertEq(first, 45000);
+        assertEq(first, 67500);
 
         // Burning the community token frees supply headroom, so the served action's live reward grows.
         child.burn(90000);
@@ -130,7 +130,7 @@ contract ServiceCoreRegressionTest is Test {
 
         // The second owner divides by the same moved number, so the share is unchanged.
         (uint256 second,,) = service.memberReward(address(parent), 1, 2, 2);
-        assertEq(second, 45000);
+        assertEq(second, 22500);
 
         (uint256 budget,) = target.actionReward(address(parent), 1, 2);
         assertEq(first + second, budget);
@@ -138,7 +138,7 @@ contract ServiceCoreRegressionTest is Test {
         // The claim is payable with no outside funding, and the budget is not exceeded.
         vm.prank(BOB);
         (uint256 paid,) = service.mintMemberReward(address(parent), 1, 2, 2);
-        assertEq(paid, 45000);
+        assertEq(paid, 22500);
         assertEq(first + paid, budget);
         assertEq(parent.balanceOf(address(service)), 0);
     }

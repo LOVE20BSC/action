@@ -28,10 +28,9 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
     ) external {
         uint256 rewardA = 1 + uint256(rewardSeedA) % 1e9;
         uint256 rewardB = 1 + uint256(rewardSeedB) % 1e9;
-        // r = 0 leaves a pure verifier with a zero numerator, so the mint reverts
-        // with ZeroRewardWeight; r = 1e18 is rejected at creation
-        // (InvalidRatioForPublicVerifier). Keep r strictly inside (0, 1e18) and
-        // leave the saturated cases to the unit tests.
+        // The public verifier ratio must be strictly inside (0, 1e18); both bounds
+        // are rejected at creation (InvalidRatioForPublicVerifier) and covered by
+        // the constructor unit tests.
         uint256 ratio = 1 + uint256(ratioSeed) % (PRECISION - 1);
         uint256 govMultiplier = uint256(govSeed) % (2 * PRECISION + 1);
         uint256 validVotes = uint256(validVotesSeed);
@@ -94,7 +93,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratioSeedB,
         uint256 ratioSeedC
     ) external {
-        uint256 serviceReward = 1 + uint256(serviceRewardSeed);
+        uint256 serviceReward = 2 + uint256(serviceRewardSeed);
         uint256 groupReward = 1 + uint256(groupRewardSeed);
         // Each ratio must be at least one wei (ZeroRatio) and the three must not
         // sum past PRECISION (DistributionOverflow); the bounds nest so both
@@ -104,7 +103,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratioC = 1 + ratioSeedC % (PRECISION - ratioA - ratioB);
 
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -118,14 +117,13 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        // ratio 0 sends the whole reward to the owner side, and the owner weight
-        // equals the divisor, so the theoretical reward is the entire service
-        // reward with nothing burned.
-        require(mintAmount == serviceReward && burnAmount == 0, "owner receives the theoretical reward");
+        // The owner weight equals the divisor, so the owner side keeps exactly the
+        // non-verifier share of the service reward and nothing is burned.
+        require(mintAmount == serviceReward / 2 && burnAmount == 0, "owner receives the theoretical reward");
 
         uint256 distributed = token.balanceOf(MEMBER1) + token.balanceOf(MEMBER2) + token.balanceOf(GROUP_OWNER_B);
         uint256 remaining = token.balanceOf(GROUP_OWNER);
-        require(distributed + remaining == serviceReward, "distributed plus remaining equals the owner reward");
+        require(distributed + remaining == mintAmount, "distributed plus remaining equals the owner reward");
         require(
             token.balanceOf(address(executor)) + distributed + remaining == serviceReward,
             "the executor is drained exactly"

@@ -130,6 +130,12 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
             4,
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, PRECISION)
         );
+        _expectCreateRevert(
+            address(token),
+            _serviceTargetData(address(token), 0, 0),
+            4,
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, 0)
+        );
     }
 
     function testOnProposalCreatedRejectsNonDirectTokenRelations() external {

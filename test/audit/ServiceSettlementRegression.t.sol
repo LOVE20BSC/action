@@ -13,7 +13,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
     ///      move rescales them together.
     function testRegression_RewardMoveCannotOverpayTheBudget() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -26,15 +26,15 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         (uint256 first,) = _settleService(GROUP_ID);
-        require(first == 450e18, "first owner receives half");
+        require(first == 225e18, "first owner receives a quarter");
 
         // The served action's own reward doubles between the two settlements. Every action of the round
         // divides the same pool, so the divisor and both owners' slices rescale together.
         groupAction.setActionReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, 200e18);
 
         (uint256 second,) = _settleService(GROUP_OWNER_B_ID);
-        require(second == 450e18, "second owner keeps the same share");
-        require(first + second == SERVICE_REWARD, "budget held");
+        require(second == 225e18, "second owner keeps the same share");
+        require(first + second == SERVICE_REWARD / 2, "budget held");
         require(
             executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 200e18, "divisor follows the live reward"
         );
@@ -44,7 +44,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
     ///      comparison, reverting every settlement of the action and stranding its reward.
     function testRegression_MaxMultiplierStillSettles() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, type(uint256).max, 0);
+        _createServiceAction(SERVICE_ACTION_ID, type(uint256).max, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -57,7 +57,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
 
         // The cap never binds, so the theoretical owner reward is paid and nothing overflows.
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        require(mintAmount == SERVICE_REWARD, "theoretical owner reward paid");
+        require(mintAmount == SERVICE_REWARD / 2, "theoretical owner reward paid");
         require(burnAmount == 0, "nothing burned");
     }
 

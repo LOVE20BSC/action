@@ -100,7 +100,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
 
     function testExitAfterJoinStillSettlesTheJoinedRound() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -121,8 +121,8 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         );
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        require(mintAmount == SERVICE_REWARD && burnAmount == 0, "exited member settles the joined round");
-        require(token.balanceOf(GROUP_OWNER) == SERVICE_REWARD, "reward paid despite the exit");
+        require(mintAmount == SERVICE_REWARD / 2 && burnAmount == 0, "exited member settles the joined round");
+        require(token.balanceOf(GROUP_OWNER) == SERVICE_REWARD / 2, "reward paid despite the exit");
     }
 
     function testSetRecipientsBeforeTheVerifyRoundReverts() external {
@@ -294,8 +294,8 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
 
     function testBatchRollsBackWhenOneActionWasAlreadyMinted() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
-        _createServiceAction(SERVICE_ACTION_ID + 1, 0, 0);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
+        _createServiceAction(SERVICE_ACTION_ID + 1, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -331,7 +331,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER);
         (uint256[] memory mintAmounts,) =
             executor.mintMemberRewards(address(token), _ids(SERVICE_ACTION_ID + 1), _ids(SERVICE_ROUND), GROUP_ID);
-        require(mintAmounts[0] == SERVICE_REWARD, "the rolled back action settles afterwards");
+        require(mintAmounts[0] == SERVICE_REWARD / 2, "the rolled back action settles afterwards");
     }
 
     function testProjectedRewardsMatchTheSettlementBeforeMinting() external {
