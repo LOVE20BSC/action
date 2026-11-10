@@ -23,9 +23,9 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         executor.join(address(token), 99, MEMBER1_ID);
     }
 
-    function testFullVerifierRatioLeavesTheOwnerSideEmpty() external {
+    function testRatioJustBelowFullStillPaysTheOwner() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION - 1);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
@@ -36,35 +36,14 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        // The pure owner side has a zero numerator at the full verifier ratio
-        // and there is nothing to burn either, so the mint reverts with the
-        // member-level zero-weight error instead of a rounding error.
-        (
-            uint256 projectedVerifier,
-            uint256 projectedOwner,,
-            uint256 projectedDistributed,
-            uint256 projectedRemaining,
-        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
-        require(
-            projectedVerifier == 0 && projectedOwner == 0 && projectedDistributed == 0 && projectedRemaining == 0,
-            "owner projects nothing at the full verifier ratio"
-        );
-
-        vm.prank(GROUP_OWNER);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionExecutorErrors.ZeroRewardWeight.selector,
-                address(token),
-                SERVICE_ACTION_ID,
-                GROUP_ID
-            )
-        );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
+        require(ownerMint == SERVICE_REWARD / PRECISION, "owner keeps the residual share");
+        require(ownerBurn == 0, "nothing burned");
 
         (uint256 verifierMint, uint256 verifierBurn) = _settleService(VERIFIER_ID);
-        require(verifierMint == SERVICE_REWARD, "verifier takes the whole reward");
-        require(verifierBurn == 0, "nothing burned");
-        require(token.balanceOf(address(executor)) == 0, "executor drained by the verifier alone");
+        require(verifierMint == SERVICE_REWARD - ownerMint, "verifier takes the rest");
+        require(verifierBurn == 0, "verifier never burns");
+        require(token.balanceOf(address(executor)) == 0, "executor drained by the two roles");
     }
 
     function testLateJoinHoldsFromThatRoundButNotTheEarlierOne() external {

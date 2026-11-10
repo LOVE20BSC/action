@@ -9,7 +9,7 @@ import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEvents {
     function testJoinOwnerBranchViaActiveGroups() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
 
@@ -29,7 +29,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinVerifierBranchViaVerifierApplication() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         // The member owns no group; qualification comes from an open verifier
         // application inside the service round's community action set.
@@ -42,7 +42,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinReadsTheApplicationAtTheJoinedRound() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
 
         address[] memory executors = new address[](1);
         executors[0] = address(groupAction);
@@ -72,7 +72,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinRequiresEitherBranch() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
 
         // No active groups and no application at all.
@@ -108,7 +108,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinRejectsNonMemberOwner() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
 
@@ -119,7 +119,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinRejectsDuplicate() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -135,7 +135,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinBeforeWindowRevertsFromTarget() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _qualifyGroupOwner(GROUP_ID);
 
         // Joining at the creation round itself: the target refuses the snapshot.
@@ -155,7 +155,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testExitClearsJoinStateAndEmitsEvent() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -190,7 +190,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testExitRejectsNonMemberOwner() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -202,7 +202,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testExitDoesNotReclaimPastRounds() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -223,7 +223,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinInfoRejectsFutureRounds() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -237,7 +237,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testExitFollowsCurrentOwnerAfterTransfer() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
@@ -257,7 +257,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         // The action exists from the vote phase, but the join round is phase - 1
         // and stays 0 until phase 2: there is no round to snapshot a join into.
         _atPhase(1);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _qualifyGroupOwner(GROUP_ID);
 
         vm.prank(GROUP_OWNER);
@@ -268,7 +268,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
     function testJoinedAmountFamilyProxiesCommunityStake() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         groupAction.setTotalStaked(address(token), 777e18);
         groupAction.setStakedByMemberId(address(token), GROUP_ID, 123e18);

@@ -429,7 +429,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (sourceTokenAddress == address(0)) {
             revert ZeroActionTokenAddress();
         }
-        if (publicVerifierRatioValue > PRECISION) {
+        if (publicVerifierRatioValue >= PRECISION) {
             revert InvalidRatioForPublicVerifier(publicVerifierRatioValue);
         }
         if (sourceTokenAddress != tokenAddress) {
@@ -533,10 +533,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         }
 
         _applyFormulas(settlement, memberId);
-        if (
-            settlement.publicVerifierRatio * settlement.verifierWeight == 0
-                && (PRECISION - settlement.publicVerifierRatio) * settlement.ownerWeight == 0
-        ) {
+        if (settlement.publicVerifierRatio == 0 && settlement.ownerWeight == 0) {
             settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
         }
     }

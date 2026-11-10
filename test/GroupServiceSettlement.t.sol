@@ -704,23 +704,23 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 }
 
 contract GroupServiceZeroNumeratorTest is GroupServiceTestBase {
-    function testVerifierOnlySplitLeavesTheOwnerWithZeroWeight() external {
+    function testZeroVerifierRatioLeavesThePureVerifierWithZeroWeight() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        _qualifyGroupOwner(GROUP_ID);
-        _joinService(GROUP_ID);
+        _qualifyVerifier(VERIFIER_ID);
+        _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        vm.prank(GROUP_OWNER);
+        vm.prank(VERIFIER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.ZeroRewardWeight.selector, address(token), SERVICE_ACTION_ID, GROUP_ID
+                IActionExecutorErrors.ZeroRewardWeight.selector, address(token), SERVICE_ACTION_ID, VERIFIER_ID
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
     }
 }

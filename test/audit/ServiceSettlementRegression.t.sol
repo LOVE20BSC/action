@@ -66,7 +66,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
     ///      action with no final score at all.
     function testRegression_ZeroRatedActionContributesNothing() external {
         _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _qualifyVerifier(VERIFIER_ID);
@@ -85,7 +85,7 @@ contract ServiceSettlementRegressionTest is GroupServiceTestBase {
         );
 
         (uint256 first,) = _settleService(VERIFIER_ID);
-        require(first == SERVICE_REWARD, "verifier takes the whole reward");
+        require(first == SERVICE_REWARD / 2, "verifier takes the verifier share");
 
         (uint256 projected,,) =
             executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);

@@ -80,14 +80,14 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
     function testOnProposalCreatedAcceptsDirectParentToken() external {
         _atPhase(CREATION_PHASE);
         // The service token is the community token's direct parent.
-        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 0, PRECISION);
+        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 0, PRECISION - 1);
         require(
             executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(childToken),
             "child community token bound"
         );
 
         _atPhase(3);
-        _createServiceActionOn(address(token), address(token), SERVICE_ACTION_ID + 1, 0, PRECISION);
+        _createServiceActionOn(address(token), address(token), SERVICE_ACTION_ID + 1, 0, PRECISION - 1);
         require(
             executor.actionTokenAddress(address(token), SERVICE_ACTION_ID + 1) == address(token), "same token bound"
         );
@@ -124,13 +124,19 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
             4,
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, PRECISION + 1)
         );
+        _expectCreateRevert(
+            address(token),
+            _serviceTargetData(address(token), 0, PRECISION),
+            4,
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, PRECISION)
+        );
     }
 
     function testOnProposalCreatedRejectsNonDirectTokenRelations() external {
         // Grandchild community token: only its direct parent may serve it.
         _expectCreateRevert(
             address(token),
-            _serviceTargetData(address(grandChildToken), 0, PRECISION),
+            _serviceTargetData(address(grandChildToken), 0, PRECISION - 1),
             4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
@@ -142,7 +148,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         // A child service token cannot serve its own parent community.
         _expectCreateRevert(
             address(grandChildToken),
-            _serviceTargetData(address(token), 0, PRECISION),
+            _serviceTargetData(address(token), 0, PRECISION - 1),
             4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
@@ -155,7 +161,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         MockGroupServiceToken stranger = new MockGroupServiceToken();
         _expectCreateRevert(
             address(token),
-            _serviceTargetData(address(stranger), 0, PRECISION),
+            _serviceTargetData(address(stranger), 0, PRECISION - 1),
             4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
@@ -166,7 +172,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         );
         _expectCreateRevert(
             address(childToken),
-            _serviceTargetData(address(stranger), 0, PRECISION),
+            _serviceTargetData(address(stranger), 0, PRECISION - 1),
             4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
@@ -181,7 +187,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(0xBEEF)));
-        executor.onProposalCreated(address(token), SERVICE_ACTION_ID, _serviceTargetData(address(token), 0, PRECISION));
+        executor.onProposalCreated(address(token), SERVICE_ACTION_ID, _serviceTargetData(address(token), 0, PRECISION - 1));
     }
 
     function testOnProposalSubmittedChecksCallerOnly() external {
