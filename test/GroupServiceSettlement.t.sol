@@ -442,15 +442,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        // No voted group actions: the denominator is 0 and the mint reverts.
+        // No voted group actions: the denominator is 0 and the mint reverts with the round-level cause,
+        // not the member-level `ZeroRewardWeight` (a zero divisor implies zero weights for every member).
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionExecutorErrors.ZeroRewardWeight.selector,
-                address(token),
-                SERVICE_ACTION_ID,
-                GROUP_ID
-            )
+            abi.encodeWithSelector(IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), SERVICE_ROUND)
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
 
