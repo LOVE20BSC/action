@@ -197,6 +197,7 @@ contract DeployAction is Script {
             groupServiceExecutor.MEMBER_NFT_ADDRESS() == mint.MEMBER_NFT_ADDRESS(),
             "GroupServiceExecutor member NFT mismatch"
         );
+        require(groupServiceExecutor.PHASE_ADDRESS() == mint.PHASE_ADDRESS(), "GroupServiceExecutor phase mismatch");
         require(
             groupServiceExecutor.GROUP_ACTION_EXECUTOR_ADDRESS() == addrs.groupActionExecutor,
             "GroupServiceExecutor binding mismatch"

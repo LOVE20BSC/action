@@ -16,6 +16,57 @@ contract DeployActionHarness is DeployAction {
         addrs = _deployContracts(mint, splits);
         _validateDeployment(mint, stake, splits, addrs);
     }
+
+    function validateDeploymentForTest(
+        address mint,
+        address stake,
+        uint256[] memory splits,
+        DeploymentAddresses memory addrs
+    ) external view {
+        _validateDeployment(mint, stake, splits, addrs);
+    }
+}
+
+contract MockGroupServiceExecutor {
+    address public actionTargetAddress;
+    address public stakeAddress;
+    address public memberNFTAddress;
+    address public groupActionExecutorAddress;
+    address public phaseAddress;
+
+    function set(
+        address actionTarget_,
+        address stake_,
+        address memberNFT_,
+        address groupActionExecutor_,
+        address phase_
+    ) external {
+        actionTargetAddress = actionTarget_;
+        stakeAddress = stake_;
+        memberNFTAddress = memberNFT_;
+        groupActionExecutorAddress = groupActionExecutor_;
+        phaseAddress = phase_;
+    }
+
+    function ACTION_TARGET_ADDRESS() external view returns (address) {
+        return actionTargetAddress;
+    }
+
+    function STAKE_ADDRESS() external view returns (address) {
+        return stakeAddress;
+    }
+
+    function MEMBER_NFT_ADDRESS() external view returns (address) {
+        return memberNFTAddress;
+    }
+
+    function GROUP_ACTION_EXECUTOR_ADDRESS() external view returns (address) {
+        return groupActionExecutorAddress;
+    }
+
+    function PHASE_ADDRESS() external view returns (address) {
+        return phaseAddress;
+    }
 }
 
 contract MockMint {
@@ -219,6 +270,25 @@ contract DeployActionTest is Test {
         require(addrs.lpExecutor != address(0), "lp executor deployed");
         require(addrs.groupActionExecutor != address(0), "group action executor deployed");
         require(addrs.groupServiceExecutor != address(0), "group service executor deployed");
+    }
+
+    function testRejectsGroupServicePhaseMismatch() public {
+        DeployAction.ActionConfig memory config = _validConfig();
+        DeployAction.DeploymentAddresses memory addrs =
+            deployer.deployForTest(config.mint, config.stake, config.splits);
+
+        MockGroupServiceExecutor mismatched = new MockGroupServiceExecutor();
+        mismatched.set(
+            addrs.actionTarget,
+            config.stake,
+            MockMint(config.mint).MEMBER_NFT_ADDRESS(),
+            addrs.groupActionExecutor,
+            makeAddr("otherPhase")
+        );
+        addrs.groupServiceExecutor = address(mismatched);
+
+        vm.expectRevert("GroupServiceExecutor phase mismatch");
+        deployer.validateDeploymentForTest(config.mint, config.stake, config.splits, addrs);
     }
 
     function testRejectsZeroSplit() public {
