@@ -391,6 +391,15 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(actionTarget.isJoined(address(token), ACTION_ID, 1) == false, "target state untouched");
     }
 
+    function testJoinRejectsForeignActionEvenWhenAlreadyJoinedElsewhere() external {
+        _atPhase(3);
+        actionTarget.setJoined(address(token), 999, 1, true);
+
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), 999));
+        lpExecutor.join(address(token), 999, 1, 1e18);
+    }
+
     function testJoinTransferFailureRollsBack() external {
         joinToken.setFailTransferFrom(true);
         _atPhaseBlock(3, 3300);

@@ -162,6 +162,9 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         if (amount == 0) {
             revert ZeroParticipationAmount();
         }
+        if (_createdRoundByActionId[tokenAddress][actionId] == 0) {
+            revert ActionNotCreated(tokenAddress, actionId);
+        }
 
         uint256 joinRound = currentJoinRound();
 
