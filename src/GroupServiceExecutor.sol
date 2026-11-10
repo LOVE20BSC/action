@@ -533,6 +533,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         }
 
         _applyFormulas(settlement, memberId);
+        if (
+            settlement.publicVerifierRatio * settlement.verifierWeight == 0
+                && (PRECISION - settlement.publicVerifierRatio) * settlement.ownerWeight == 0
+        ) {
+            settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
+        }
     }
 
     function _applyFormulas(

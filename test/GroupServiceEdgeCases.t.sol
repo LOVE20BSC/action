@@ -36,8 +36,9 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        // The pure owner side floors to zero and there is nothing to burn
-        // either, so the mint reverts instead of paying an empty reward.
+        // The pure owner side has a zero numerator at the full verifier ratio
+        // and there is nothing to burn either, so the mint reverts with the
+        // member-level zero-weight error instead of a rounding error.
         (
             uint256 projectedVerifier,
             uint256 projectedOwner,,
@@ -52,9 +53,9 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IActionExecutorErrors.MemberRewardRoundedToZero.selector,
+                IActionExecutorErrors.ZeroRewardWeight.selector,
                 address(token),
-                SERVICE_ROUND,
+                SERVICE_ACTION_ID,
                 GROUP_ID
             )
         );
