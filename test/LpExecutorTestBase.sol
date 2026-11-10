@@ -30,6 +30,7 @@ interface LpExecutorVm {
     function recordLogs() external;
     function getRecordedLogs() external returns (Log[] memory logs);
     function roll(uint256 blockNumber) external;
+    function getBlockNumber() external view returns (uint256);
 }
 
 abstract contract LpExecutorTestBase {
@@ -137,7 +138,7 @@ abstract contract LpExecutorTestBase {
 
     function _createActionWithConfig(uint256 actionId, uint256 govRatioMultiplier, uint256 minGovRatio) internal {
         uint256 savedPhase = phase.currentPhase();
-        uint256 savedBlock = block.number;
+        uint256 savedBlock = vm.getBlockNumber();
         phase.setCurrentPhase(CREATION_PHASE);
         vm.roll(CREATION_PHASE * PHASE_BLOCKS);
         vm.prank(address(actionTarget));
