@@ -510,11 +510,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
         RoundActions memory scope = _roundActions(settlement.actionTokenAddress, round);
 
-        // Load-bearing: the round-level divisor is judged before the member-level weights. On a zero-divisor
-        // round every member weight is necessarily zero, so judging weights first would report the
-        // member-level `ZeroRewardWeight` for a cause that sits at the round level, and the round-level
-        // `MemberRewardPoolEmpty` branch would be unreachable. A member who did not join the round still
-        // stops at the join check above and keeps `ZeroRewardWeight`.
         settlement.denominator = _denominator(scope);
         if (settlement.denominator == 0) {
             settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;

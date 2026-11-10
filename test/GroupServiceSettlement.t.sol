@@ -442,16 +442,13 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        // No voted group actions: the denominator is 0 and the mint reverts with the round-level cause,
-        // not the member-level `ZeroRewardWeight` (a zero divisor implies zero weights for every member).
+        // No voted group actions: the denominator is 0 and the mint reverts.
         vm.prank(GROUP_OWNER);
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), SERVICE_ROUND)
         );
         executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
 
-        // Precedence: a member who never joined the round still reports the member-level cause even though
-        // the divisor is zero — the join check runs before the divisor check.
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
