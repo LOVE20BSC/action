@@ -659,4 +659,36 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         }
         result = string(out);
     }
+
+    function testHugeRatiosRevertWithDistributionOverflow() external {
+        _prepareRecipientsScenario();
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupRecipientsErrors.DistributionOverflow.selector, type(uint256).max, PRECISION
+            )
+        );
+        executor.setRecipients(
+            address(token),
+            GROUP_ACTION_ID,
+            GROUP_ID,
+            _ids(MEMBER1_ID, MEMBER2_ID),
+            _ratios(type(uint256).max, 1),
+            new string[](2)
+        );
+
+        vm.prank(GROUP_OWNER);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupRecipientsErrors.DistributionOverflow.selector, PRECISION + 1, PRECISION)
+        );
+        executor.setRecipients(
+            address(token),
+            GROUP_ACTION_ID,
+            GROUP_ID,
+            _ids(MEMBER1_ID, MEMBER2_ID),
+            _ratios(PRECISION, 1),
+            new string[](2)
+        );
+    }
 }

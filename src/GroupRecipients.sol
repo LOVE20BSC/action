@@ -340,10 +340,16 @@ library GroupRecipients {
                 }
             }
             IMemberNFT(protocol.memberNFTAddress).ownerOf(recipientId);
-            totalRatios += table.ratios[i];
-        }
-        if (totalRatios > GroupServiceStorage.PRECISION) {
-            revert IGroupRecipientsErrors.DistributionOverflow(totalRatios, GroupServiceStorage.PRECISION);
+            uint256 ratio = table.ratios[i];
+            if (ratio > GroupServiceStorage.PRECISION) {
+                revert IGroupRecipientsErrors.DistributionOverflow(ratio, GroupServiceStorage.PRECISION);
+            }
+            if (totalRatios > GroupServiceStorage.PRECISION - ratio) {
+                revert IGroupRecipientsErrors.DistributionOverflow(
+                    totalRatios + ratio, GroupServiceStorage.PRECISION
+                );
+            }
+            totalRatios += ratio;
         }
     }
 
