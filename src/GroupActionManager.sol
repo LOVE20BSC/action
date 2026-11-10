@@ -170,14 +170,12 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.GroupAlreadyActivated(groupId);
         }
 
-        uint256 round = currentJoinRound(protocol.phaseAddress);
+        uint256 round = IPhase(protocol.phaseAddress).currentPhase();
         _checkActivationMinGovRatio(self, protocol, tokenAddress, actionId, groupId);
 
         group.config = config;
         group.active = true;
-        group.activatedRound = round < self.createdRoundByActionId[tokenAddress][actionId]
-            ? self.createdRoundByActionId[tokenAddress][actionId]
-            : round;
+        group.activatedRound = round;
         group.deactivatedRound = 0;
         self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 
@@ -210,7 +208,7 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.GroupNotActive(groupId);
         }
 
-        uint256 round = currentJoinRound(protocol.phaseAddress);
+        uint256 round = IPhase(protocol.phaseAddress).currentPhase();
         if (round == group.activatedRound) {
             revert IGroupActionManagerErrors.DeactivationLockedInActivatedRound(groupId, round);
         }
@@ -262,7 +260,7 @@ library GroupActionManager {
 
         GroupConfig memory previousConfig = group.config;
 
-        uint256 round = currentJoinRound(protocol.phaseAddress);
+        uint256 round = IPhase(protocol.phaseAddress).currentPhase();
         group.config = config;
         self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 

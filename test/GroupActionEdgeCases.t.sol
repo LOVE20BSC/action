@@ -44,7 +44,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         });
         _activateGroupWith(GROUP_B_ID, config);
         require(
-            bytes(executor.descriptionByRound(address(token), ACTION_ID, 2, GROUP_B_ID)).length == 1024,
+            bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_B_ID)).length == 1024,
             "1024 bytes accepted"
         );
     }
@@ -78,7 +78,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         _activateGroup();
         (GroupConfig memory config, bool active, uint256 activatedRound, uint256 deactivatedRound) =
             executor.groupState(address(token), ACTION_ID, GROUP_ID);
-        require(active && activatedRound == 4 && deactivatedRound == 0, "reactivated at the new round");
+        require(active && activatedRound == 5 && deactivatedRound == 0, "reactivated at the new round");
         require(config.minJoinAmount == 1e18, "config restored");
         require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake taken again");
 

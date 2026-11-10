@@ -39,7 +39,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(actionTotal == 1 && actionIds[0] == ACTION_ID, "action ids");
 
         require(
-            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 2, GROUP_ID)))
+            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_ID)))
                 == keccak256(bytes("group")),
             "description by round"
         );
@@ -147,14 +147,18 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         executor.activateGroup(address(token), ACTION_ID, GROUP_8, tooLong);
     }
 
-    function testActivateGroupChecksRoundBeforeEligibility() external {
-        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), 0, PRECISION, 0, VERIFIER_STAKE));
-        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+    function testActivationNeedsOnlyTheActionToExist() external {
         _atPhase(1);
+        _createActionWith(ACTION_2, _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE));
+        memberNFT.setOwner(GROUP_8, GROUP_OWNER);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
+
+        (, bool active, uint256 activatedRound,) = executor.groupState(address(token), ACTION_2, GROUP_8);
+        require(active && activatedRound == 1, "activated in the creation round");
+        require(executor.stakedByMemberId(address(token), GROUP_8) == ACTIVATION_STAKE, "stake taken");
     }
 
     function testActivationMinGovRatioGate() external {
@@ -210,7 +214,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         _openJoinPhase();
 
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector, GROUP_ID, 2));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector, GROUP_ID, 3));
         executor.deactivateGroup(address(token), ACTION_ID, GROUP_ID);
 
         memberNFT.setOwner(GROUP_99, GROUP_OWNER);
@@ -240,7 +244,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 
         (GroupConfig memory config, bool active, uint256 activatedRound, uint256 deactivatedRound) =
             executor.groupState(address(token), ACTION_ID, GROUP_ID);
-        require(active && activatedRound == 2 && deactivatedRound == 0, "group info flags");
+        require(active && activatedRound == 3 && deactivatedRound == 0, "group info flags");
         require(keccak256(bytes(config.description)) == keccak256(bytes("v2")), "description updated");
         require(
             config.maxCapacity == 500e18 && config.minJoinAmount == 2e18 && config.maxJoinAmount == 20e18
@@ -248,12 +252,12 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             "config updated"
         );
         require(
-            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_ID)))
+            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 4, GROUP_ID)))
                 == keccak256(bytes("v2")),
             "description history at update round"
         );
         require(
-            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 2, GROUP_ID)))
+            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_ID)))
                 == keccak256(bytes("group")),
             "history keeps activation round"
         );
@@ -513,15 +517,14 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
 }
 
 contract GroupActionManagerActivationRoundTest is GroupActionExecutorTestBase {
-    function testCreationPhaseActivationLocksTheFirstJoinRound() external {
+    function testActivationRecordsTheVoteRoundAndLocksThatRoundOnly() external {
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
         _activateGroup();
 
         (, bool active, uint256 activatedRound,) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
         require(active, "active");
-        require(activatedRound == CREATION_PHASE, "activation round is the first joinable round");
+        require(activatedRound == CREATION_PHASE, "activation round is the vote round");
 
-        _atPhase(CREATION_PHASE + 1);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector,
@@ -531,26 +534,23 @@ contract GroupActionManagerActivationRoundTest is GroupActionExecutorTestBase {
         );
         _deactivateGroup(GROUP_ID);
 
-        _atPhase(CREATION_PHASE + 2);
+        _atPhase(CREATION_PHASE + 1);
         _deactivateGroup(GROUP_ID);
     }
 
-    function testLaterPhaseActivationLocksItsOwnJoinRound() external {
+    function testReactivationRecordsTheNewVoteRound() external {
         _atPhase(CREATION_PHASE + 1);
         _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
         _activateGroup();
 
-        (, , uint256 activatedRound,) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
-        require(activatedRound == CREATION_PHASE, "activation round is the current join round");
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IGroupActionManagerErrors.DeactivationLockedInActivatedRound.selector,
-                GROUP_ID,
-                CREATION_PHASE
-            )
-        );
+        _atPhase(CREATION_PHASE + 2);
         _deactivateGroup(GROUP_ID);
+
+        _atPhase(CREATION_PHASE + 3);
+        _activateGroup();
+
+        (, , uint256 activatedRound,) = executor.groupState(address(token), ACTION_ID, GROUP_ID);
+        require(activatedRound == CREATION_PHASE + 3, "reactivation round is the new vote round");
     }
 }
 

@@ -388,7 +388,7 @@ contract GroupActionEventsTest is
         );
         (, bool active, uint256 activatedRound, uint256 deactivatedRound) =
             executor.groupState(address(token), ACTION_ID, GROUP_ID);
-        require(!active && deactivatedRound == 3, "inactive with deactivated round");
+        require(!active && deactivatedRound == 4, "inactive with deactivated round");
 
         _atPhase(5);
         vm.recordLogs();
@@ -400,9 +400,9 @@ contract GroupActionEventsTest is
         );
         (bool activeAfter, uint256 reactivatedRound, uint256 deactivatedRoundAfter) = _groupState();
         require(activeAfter, "active again");
-        require(reactivatedRound == 4, "reactivation round");
+        require(reactivatedRound == 5, "reactivation round");
         require(deactivatedRoundAfter == 0, "deactivation round reset");
-        require(activatedRound == 2, "original activation round");
+        require(activatedRound == 3, "original activation round");
     }
 
     function _groupState() private view returns (bool active, uint256 activatedRound, uint256 deactivatedRound) {
@@ -419,7 +419,7 @@ contract GroupActionEventsTest is
         emit GroupActivated({
             tokenAddress: address(token),
             actionId: ACTION_ID,
-            round: 2,
+            round: 3,
             groupId: GROUP_ID,
             stakeAmount: ACTIVATION_STAKE,
             maxCapacity: 0,
@@ -442,7 +442,7 @@ contract GroupActionEventsTest is
         emit GroupConfigChanged({
             tokenAddress: address(token),
             actionId: ACTION_ID,
-            round: 3,
+            round: 4,
             groupId: GROUP_ID,
             maxCapacity: 500e18,
             minJoinAmount: 2e18,
@@ -462,7 +462,7 @@ contract GroupActionEventsTest is
         emit GroupDeactivated({
             tokenAddress: address(token),
             actionId: ACTION_ID,
-            round: 3,
+            round: 4,
             groupId: GROUP_ID,
             stakeAmount: ACTIVATION_STAKE
         });
