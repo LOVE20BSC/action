@@ -805,3 +805,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         out[0] = a;
     }
 }
+
+contract GroupActionVerifyRoundGuardTest is GroupActionExecutorTestBase {
+    function testSubmitApplicationRejectsBeforeTheFirstRound() external {
+        phase.setCurrentPhase(0);
+
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
+    }
+}

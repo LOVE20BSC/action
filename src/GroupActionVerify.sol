@@ -827,6 +827,9 @@ library GroupActionVerify {
         string calldata description
     ) private view returns (uint256 round) {
         round = IPhase(protocol.phaseAddress).currentPhase();
+        if (round == 0) {
+            revert IActionExecutorErrors.RoundNotStarted(1, 0);
+        }
         uint256 descriptionLength = bytes(description).length;
         if (descriptionLength > GroupActionStorage.MAX_DESCRIPTION_BYTES) {
             revert IGroupActionExecutorErrors.DescriptionTooLong(
