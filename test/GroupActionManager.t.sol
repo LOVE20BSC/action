@@ -553,3 +553,17 @@ contract GroupActionManagerActivationRoundTest is GroupActionExecutorTestBase {
         _deactivateGroup(GROUP_ID);
     }
 }
+
+contract GroupActionManagerMaxJoinAmountTest is GroupActionExecutorTestBase {
+    function testMaxJoinAmountSkipsActionsWithoutAJoinToken() external {
+        uint256 unknownActionId = 999;
+        _atPhase(CREATION_PHASE + 1);
+        vote.setVotesNumByProposalId(address(token), CREATION_PHASE, unknownActionId, 500e18);
+
+        require(executor.maxJoinAmount(address(token), unknownActionId) == 0, "no join token yields no cap");
+
+        _fundJoinTokenFor(MEMBER1, 100e18);
+        uint256 actionMaxJoinAmount = executor.maxJoinAmount(address(token), ACTION_ID);
+        require(actionMaxJoinAmount > 0, "this executor's action still reports a cap");
+    }
+}

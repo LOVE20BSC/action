@@ -407,7 +407,11 @@ library GroupActionManager {
         if (actionVoteAmount == 0) {
             return 0;
         }
-        uint256 totalMinted = IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).totalSupply();
+        address joinTokenAddress = self.joinTokenAddressByActionId[tokenAddress][actionId];
+        if (joinTokenAddress == address(0)) {
+            return 0;
+        }
+        uint256 totalMinted = IERC20(joinTokenAddress).totalSupply();
         uint256 baseAmount = Math.mulDiv(
             totalMinted,
             self.maxJoinAmountRatioByActionId[tokenAddress][actionId],
