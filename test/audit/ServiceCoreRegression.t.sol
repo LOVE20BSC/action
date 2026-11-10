@@ -61,6 +61,7 @@ contract ServiceCoreRegressionTest is Test {
         parent = new LOVE20Token("Parent", "P", 100000, 1000000, address(this), address(mint), address(this));
         child = new LOVE20Token("Child", "C", 100000, 1000000, address(this), address(mint), address(parent));
         _mock(LAUNCH, abi.encodeWithSignature("parentToken(address)"), abi.encode(address(parent)));
+        _mock(LAUNCH, abi.encodeWithSignature("isLOVE20Token(address)"), abi.encode(true));
         group = new GroupActionExecutor(address(target), new uint256[](0));
         service = new GroupServiceExecutor(address(group));
         bytes[] memory data = new bytes[](6);
