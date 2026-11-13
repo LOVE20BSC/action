@@ -10,7 +10,7 @@ import {MemberNFT} from "@core/MemberNFT.sol";
 import {Mint} from "@core/Mint.sol";
 import {Vote} from "@core/Vote.sol";
 import {Submit, ProposalBody} from "@core/Submit.sol";
-import {Stake} from "@core/Stake.sol";
+import {Stake, DexConfig} from "@core/Stake.sol";
 import {Launch} from "@core/Launch.sol";
 import {LOVE20Token} from "@core/LOVE20Token.sol";
 import {LaunchInitParams} from "@core/interfaces/ILaunch.sol";
@@ -95,8 +95,12 @@ contract ActionTargetRealIntegrationTest {
             address(memberNFT),
             predictedVote,
             address(launch),
-            address(router),
-            address(factory),
+            DexConfig({
+                router: address(router),
+                pairFactory: address(factory),
+                swapFeeForLpRatio: 3000000000000000,
+                swapFeeForProtocolRatio: 0
+            }),
             1,
             100,
             3e15, // fee settlement ratio from the integration profile (0.3%)
