@@ -38,7 +38,6 @@ contract ActionTargetRealIntegrationTest {
     uint256 internal constant BOOST_AMOUNT = 100;
     uint256 internal constant MEMBER1_VOTES = 100;
     uint256 internal constant MEMBER2_VOTES = 60;
-    uint256 internal constant SLIPPAGE_100_PERCENT = 1e18;
     uint256 internal constant PROMISED_WAITING_PHASES = 1;
     uint256 internal constant TOKEN_TRANSFER_AMOUNT = 10000;
 
@@ -129,7 +128,7 @@ contract ActionTargetRealIntegrationTest {
         memberNFT.mint("Alice");
         token.approve(address(stake), type(uint256).max);
         rootToken.approve(address(stake), type(uint256).max);
-        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, SLIPPAGE_100_PERCENT, PROMISED_WAITING_PHASES, 1);
+        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, PROMISED_WAITING_PHASES, 1);
         stake.stakeBoost(address(token), BOOST_AMOUNT, PROMISED_WAITING_PHASES, 1);
         vm.stopPrank();
 
@@ -137,7 +136,7 @@ contract ActionTargetRealIntegrationTest {
         memberNFT.mint("Bob");
         token.approve(address(stake), type(uint256).max);
         rootToken.approve(address(stake), type(uint256).max);
-        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, SLIPPAGE_100_PERCENT, PROMISED_WAITING_PHASES, 2);
+        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, PROMISED_WAITING_PHASES, 2);
         stake.stakeBoost(address(token), BOOST_AMOUNT, PROMISED_WAITING_PHASES, 2);
         vm.stopPrank();
     }
