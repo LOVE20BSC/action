@@ -112,6 +112,10 @@ library GroupActionJoin {
         uint256 amount
     ) internal {
         IERC20 joinToken = IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]);
+        if (address(joinToken) == tokenAddress) {
+            joinToken.safeTransferFrom(msg.sender, address(this), amount);
+            return;
+        }
         uint256 balanceBefore = joinToken.balanceOf(address(this));
         joinToken.safeTransferFrom(msg.sender, address(this), amount);
         uint256 received = joinToken.balanceOf(address(this)) - balanceBefore;
@@ -127,6 +131,10 @@ library GroupActionJoin {
         uint256 amount
     ) private {
         IERC20 joinToken = IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]);
+        if (address(joinToken) == tokenAddress) {
+            joinToken.safeTransfer(msg.sender, amount);
+            return;
+        }
         uint256 balanceBefore = joinToken.balanceOf(msg.sender);
         joinToken.safeTransfer(msg.sender, amount);
         uint256 received = joinToken.balanceOf(msg.sender) - balanceBefore;

@@ -27,6 +27,8 @@ interface GroupActionExecutorVm {
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
     function recordLogs() external;
     function getRecordedLogs() external returns (Log[] memory logs);
+    function mockCallRevert(address callee, bytes calldata data, bytes calldata revertData) external;
+    function clearMockedCalls() external;
 }
 
 /// @dev Executor-level suite: deploys the real Executor with thin mocks for the

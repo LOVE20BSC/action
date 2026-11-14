@@ -8,6 +8,31 @@ import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.s
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionJoinTest is GroupActionExecutorTestBase {
+    function testFuzzCommunityJoinTokenNeedsNoReceiptReads(uint8 seed) external {
+        joinToken = token;
+        _createAction(ACTION_ID);
+        _openJoinPhase();
+        uint256 route = seed % 4;
+        address recipient = route < 2 ? MEMBER1 : PROVIDER;
+        _fundJoinTokenFor(recipient, 100e18);
+        vm.mockCallRevert(address(token), abi.encodeWithSignature("balanceOf(address)"), bytes("unexpected receipt read"));
+
+        if (route < 2) _join(MEMBER1_ID, 100e18, 0);
+        else _grantQuota(PROVIDER_ID, MEMBER2_ID, 100e18);
+        vm.prank(recipient);
+        if (route == 0) executor.withdraw(address(token), ACTION_ID, MEMBER1_ID, 100e18);
+        else if (route == 1) executor.exit(address(token), ACTION_ID, MEMBER1_ID);
+        else if (route == 2) {
+            executor.removeProviderQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER2_ID));
+        } else {
+            executor.withdrawProviderQuota(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 100e18);
+        }
+
+        vm.clearMockedCalls();
+        require(token.balanceOf(recipient) == 100e18, "full refund");
+        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "participation cleared");
+    }
+
     function testFuzzRefundRejectsTaxAndPreservesAccounting(uint8 seed) external {
         uint256 route = seed % 4;
         _openJoinPhase();
