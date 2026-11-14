@@ -42,14 +42,14 @@ library GroupActionStorage {
 
         // tokenAddress => actionId => join token address
         mapping(address => mapping(uint256 => address)) joinTokenAddressByActionId;
-        // tokenAddress => actionId => activation stake amount
-        mapping(address => mapping(uint256 => uint256)) activationStakeAmountByActionId;
+        // tokenAddress => actionId => fixed activation stake required per group
+        mapping(address => mapping(uint256 => uint256)) requiredActivationStakeByActionId;
         // tokenAddress => actionId => max join amount ratio (1e18 precision)
         mapping(address => mapping(uint256 => uint256)) maxJoinAmountRatioByActionId;
         // tokenAddress => actionId => activation min gov ratio (1e18 precision)
         mapping(address => mapping(uint256 => uint256)) activationMinGovRatioByActionId;
-        // tokenAddress => actionId => verifier stake amount required to apply
-        mapping(address => mapping(uint256 => uint256)) verifierStakeAmountByActionId;
+        // tokenAddress => actionId => fixed verifier stake required to apply
+        mapping(address => mapping(uint256 => uint256)) requiredVerifierStakeByActionId;
         // tokenAddress => actionId => creation vote round
         mapping(address => mapping(uint256 => uint256)) createdRoundByActionId;
         // tokenAddress => actionId => verification schema keys
@@ -63,12 +63,12 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => Uint256Set.Storage)) activeGroupIdsByActionId;
         // tokenAddress => actionId => groupId => description history by round
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryString.History))) descriptionHistoryByGroupId;
-        // tokenAddress => actionId => staked amount of active groups
-        mapping(address => mapping(uint256 => uint256)) stakedByActionId;
-        // tokenAddress => total staked across actions
-        mapping(address => uint256) totalStaked;
-        // tokenAddress => group owner memberId => total staked of the member's active groups
-        mapping(address => mapping(uint256 => uint256)) stakedByMemberId;
+        // tokenAddress => actionId => total activation stake of active groups in the action
+        mapping(address => mapping(uint256 => uint256)) activationStakeByActionId;
+        // tokenAddress => total activation stake across actions
+        mapping(address => uint256) totalActivationStake;
+        // tokenAddress => groupId => total activation stake across actions
+        mapping(address => mapping(uint256 => uint256)) activationStakeByGroupId;
         // groupId => token addresses with active groups of the group
         mapping(uint256 => AddressSet.Storage) tokenAddressesByGroupId;
         // tokenAddress => groupId => action ids with active groups of the group
@@ -158,15 +158,15 @@ library GroupActionStorage {
 
         // tokenAddress => actionId => applicationId => whether the application has been punished
         mapping(address => mapping(uint256 => mapping(uint256 => bool))) applicationPunished;
-        // tokenAddress => actionId => verifierId => shared verifier stake amount
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierStakeByMemberId;
+        // tokenAddress => actionId => verifierId => current verifier stake shared across applications
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierStakeByVerifierId;
         // tokenAddress => actionId => voted rounds awaiting overdue verification checks
         mapping(address => mapping(uint256 => Uint256Set.Storage)) pendingVerificationRounds;
 
-        // tokenAddress => total active-group stake history by round
-        mapping(address => RoundHistoryUint256.History) totalStakedHistory;
-        // tokenAddress => memberId => active-group stake history by round
-        mapping(address => mapping(uint256 => RoundHistoryUint256.History)) stakedByMemberIdHistory;
+        // tokenAddress => total activation stake history by round
+        mapping(address => RoundHistoryUint256.History) totalActivationStakeHistory;
+        // tokenAddress => groupId => activation stake history across actions, by round
+        mapping(address => mapping(uint256 => RoundHistoryUint256.History)) activationStakeHistoryByGroupId;
 
         // tokenAddress => actionId => memberId => schema key index => value history
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => RoundHistoryString.History)))) verificationValueHistory;

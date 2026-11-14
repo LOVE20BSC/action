@@ -48,8 +48,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return _layout.joinTokenAddressByActionId[tokenAddress][actionId];
     }
 
-    function activationStakeAmount(address tokenAddress, uint256 actionId) external view returns (uint256) {
-        return _layout.activationStakeAmountByActionId[tokenAddress][actionId];
+    function requiredActivationStake(address tokenAddress, uint256 actionId) external view returns (uint256) {
+        return _layout.requiredActivationStakeByActionId[tokenAddress][actionId];
     }
 
     function maxJoinAmountRatio(address tokenAddress, uint256 actionId) external view returns (uint256) {
@@ -60,8 +60,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return _layout.activationMinGovRatioByActionId[tokenAddress][actionId];
     }
 
-    function verifierStakeAmount(address tokenAddress, uint256 actionId) external view returns (uint256) {
-        return _layout.verifierStakeAmountByActionId[tokenAddress][actionId];
+    function requiredVerifierStake(address tokenAddress, uint256 actionId) external view returns (uint256) {
+        return _layout.requiredVerifierStakeByActionId[tokenAddress][actionId];
     }
 
     function SPLITS() external view returns (uint256[] memory) {
@@ -570,24 +570,24 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionManager.maxJoinAmount(_layout, _protocol(), tokenAddress, actionId);
     }
 
-    function staked(address tokenAddress, uint256 actionId) external view returns (uint256) {
-        return GroupActionManager.staked(_layout, tokenAddress, actionId);
+    function activationStakeByActionId(address tokenAddress, uint256 actionId) external view returns (uint256) {
+        return GroupActionManager.activationStakeByActionId(_layout, tokenAddress, actionId);
     }
 
-    function totalStaked(address tokenAddress) external view returns (uint256) {
-        return GroupActionManager.totalStaked(_layout, tokenAddress);
+    function totalActivationStake(address tokenAddress) external view returns (uint256) {
+        return GroupActionManager.totalActivationStake(_layout, tokenAddress);
     }
 
-    function totalStakedByRound(address tokenAddress, uint256 round) external view returns (uint256) {
-        return _layout.totalStakedHistory[tokenAddress].value(round);
+    function totalActivationStakeByRound(address tokenAddress, uint256 round) external view returns (uint256) {
+        return _layout.totalActivationStakeHistory[tokenAddress].value(round);
     }
 
-    function stakedByMemberIdByRound(address tokenAddress, uint256 round, uint256 memberId) external view returns (uint256) {
-        return _layout.stakedByMemberIdHistory[tokenAddress][memberId].value(round);
+    function activationStakeByGroupIdByRound(address tokenAddress, uint256 round, uint256 groupId) external view returns (uint256) {
+        return _layout.activationStakeHistoryByGroupId[tokenAddress][groupId].value(round);
     }
 
-    function stakedByMemberId(address tokenAddress, uint256 memberId) external view returns (uint256) {
-        return GroupActionManager.stakedByMemberId(_layout, tokenAddress, memberId);
+    function activationStakeByGroupId(address tokenAddress, uint256 groupId) external view returns (uint256) {
+        return GroupActionManager.activationStakeByGroupId(_layout, tokenAddress, groupId);
     }
 
     function tokenAddressesByGroupId(

@@ -11,10 +11,10 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
     function testConstructorDerivesDependenciesAndValidates() external {
         require(executor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target");
         require(executor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token stored");
-        require(executor.activationStakeAmount(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake stored");
+        require(executor.requiredActivationStake(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake stored");
         require(executor.maxJoinAmountRatio(address(token), ACTION_ID) == PRECISION, "ratio stored");
         require(executor.activationMinGovRatio(address(token), ACTION_ID) == 0, "min gov ratio stored");
-        require(executor.verifierStakeAmount(address(token), ACTION_ID) == VERIFIER_STAKE, "verifier stake stored");
+        require(executor.requiredVerifierStake(address(token), ACTION_ID) == VERIFIER_STAKE, "verifier stake stored");
         uint256[] memory splits = executor.SPLITS();
         require(splits.length == 1 && splits[0] == 5e17, "splits stored");
 

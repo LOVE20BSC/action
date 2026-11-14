@@ -150,20 +150,20 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
         uint256 actionId
     ) external view returns (uint256);
 
-    function staked(
+    function activationStakeByActionId(
         address tokenAddress,
         uint256 actionId
     ) external view returns (uint256);
 
-    function totalStaked(address tokenAddress) external view returns (uint256);
+    function totalActivationStake(address tokenAddress) external view returns (uint256);
 
-    function totalStakedByRound(address tokenAddress, uint256 round) external view returns (uint256);
+    function totalActivationStakeByRound(address tokenAddress, uint256 round) external view returns (uint256);
 
-    function stakedByMemberIdByRound(address tokenAddress, uint256 round, uint256 memberId) external view returns (uint256);
+    function activationStakeByGroupIdByRound(address tokenAddress, uint256 round, uint256 groupId) external view returns (uint256);
 
-    function stakedByMemberId(
+    function activationStakeByGroupId(
         address tokenAddress,
-        uint256 memberId
+        uint256 groupId
     ) external view returns (uint256);
 
     function tokenAddressesByGroupId(

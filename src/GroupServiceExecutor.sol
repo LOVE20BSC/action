@@ -198,7 +198,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (round > _joinRound()) {
             return 0;
         }
-        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalStakedByRound(
+        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalActivationStakeByRound(
             _layout.actionTokenAddressByActionId[tokenAddress][actionId], round
         );
     }
@@ -212,7 +212,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (round > _joinRound()) {
             return 0;
         }
-        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).stakedByMemberIdByRound(
+        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).activationStakeByGroupIdByRound(
             _layout.actionTokenAddressByActionId[tokenAddress][actionId], round, memberId
         );
     }

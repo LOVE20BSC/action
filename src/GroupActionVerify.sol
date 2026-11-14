@@ -169,10 +169,10 @@ library GroupActionVerify {
         self.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
         self.applicationDescription[tokenAddress][actionId][applicationId] = description;
         {
-            uint256 requiredStake = self.verifierStakeAmountByActionId[tokenAddress][actionId];
-            uint256 depositedStake = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+            uint256 requiredStake = self.requiredVerifierStakeByActionId[tokenAddress][actionId];
+            uint256 depositedStake = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
             if (requiredStake > depositedStake) {
-                self.verifierStakeByMemberId[tokenAddress][actionId][verifierId] = requiredStake;
+                self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId] = requiredStake;
                 _depositVerifierStake(tokenAddress, actionId, round, verifierId, requiredStake - depositedStake);
             }
         }
@@ -203,8 +203,8 @@ library GroupActionVerify {
         self.currentApplicationId[tokenAddress][actionId][verifierId] = 0;
         self.applicationIdHistory[tokenAddress][actionId][verifierId].record(round, 0);
 
-        uint256 stakeAmount = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
-        delete self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+        uint256 stakeAmount = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
+        delete self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
         if (stakeAmount != 0) {
             IERC20(tokenAddress).safeTransfer(IMemberNFT(protocol.memberNFTAddress).ownerOf(verifierId), stakeAmount);
             emit IGroupActionVerifyEvents.VerifierStakeRefunded({
@@ -231,7 +231,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 verifierId
     ) external view returns (uint256) {
-        return self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+        return self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
     }
 
     function verifierApplication(
@@ -414,8 +414,8 @@ library GroupActionVerify {
             revert IGroupActionVerifyErrors.ApplicationPunished(applicationId);
         }
         {
-            uint256 available = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
-            uint256 required = self.verifierStakeAmountByActionId[tokenAddress][actionId];
+            uint256 available = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
+            uint256 required = self.requiredVerifierStakeByActionId[tokenAddress][actionId];
             if (available < required) {
                 revert IGroupActionVerifyErrors.InsufficientVerifierStake(verifierId, available, required);
             }
@@ -466,8 +466,8 @@ library GroupActionVerify {
             if (self.applicationPunished[tokenAddress][actionId][applicationId]) continue;
             self.applicationPunished[tokenAddress][actionId][applicationId] = true;
             uint256 verifierId = self.applicationVerifierId[tokenAddress][actionId][applicationId];
-            uint256 amount = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
-            delete self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+            uint256 amount = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
+            delete self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
             if (amount != 0) ILOVE20Token(tokenAddress).burn(amount);
             emit IGroupActionVerifyEvents.VerifierApplicationPunished(
                 tokenAddress, actionId, applicationId, verifierId, round, amount

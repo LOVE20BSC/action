@@ -67,7 +67,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
 
         _atPhase(4);
         _deactivateGroup(GROUP_ID);
-        require(executor.staked(address(token), ACTION_ID) == 0, "stake returned on deactivation");
+        require(executor.activationStakeByActionId(address(token), ACTION_ID) == 0, "stake returned on deactivation");
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.GroupNotActive.selector, GROUP_ID));
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, 1e18, 0, new string[](0));
@@ -80,7 +80,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
             executor.groupState(address(token), ACTION_ID, GROUP_ID);
         require(active && activatedRound == 5 && deactivatedRound == 0, "reactivated at the new round");
         require(config.minJoinAmount == 1e18, "config restored");
-        require(executor.staked(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake taken again");
+        require(executor.activationStakeByActionId(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake taken again");
 
         _join(MEMBER2_ID, 1e18, 0);
         require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 4, MEMBER2_ID) == 1e18, "join resumed");

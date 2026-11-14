@@ -521,12 +521,12 @@ contract MockGroupServiceGroupActionExecutor {
         return _lockedVerifierId[tokenAddress][actionId][round];
     }
 
-    function totalStakedByRound(address tokenAddress, uint256 round) external view returns (uint256) {
+    function totalActivationStakeByRound(address tokenAddress, uint256 round) external view returns (uint256) {
         return _totalStaked[tokenAddress][round];
     }
 
-    function stakedByMemberIdByRound(address tokenAddress, uint256 round, uint256 memberId) external view returns (uint256) {
-        return _stakedByMemberId[tokenAddress][round][memberId];
+    function activationStakeByGroupIdByRound(address tokenAddress, uint256 round, uint256 groupId) external view returns (uint256) {
+        return _stakedByMemberId[tokenAddress][round][groupId];
     }
 }
 

@@ -111,10 +111,10 @@ library GroupActionManager {
         self.joinTokenAddressByActionId[tokenAddress][actionId] = joinTokenAddress;
         // Load-bearing: written only here. Refunds read this value instead of a per-group ledger, so a
         // later write while groups are active would over-refund out of the other groups' stake.
-        self.activationStakeAmountByActionId[tokenAddress][actionId] = activationStakeAmount;
+        self.requiredActivationStakeByActionId[tokenAddress][actionId] = activationStakeAmount;
         self.maxJoinAmountRatioByActionId[tokenAddress][actionId] = maxJoinAmountRatio;
         self.activationMinGovRatioByActionId[tokenAddress][actionId] = activationMinGovRatio;
-        self.verifierStakeAmountByActionId[tokenAddress][actionId] = verifierStakeAmount;
+        self.requiredVerifierStakeByActionId[tokenAddress][actionId] = verifierStakeAmount;
 
         if (targetData.length == TARGET_DATA_MAX_LENGTH) {
             (string[] memory keys, string[] memory descriptions) =
@@ -181,13 +181,13 @@ library GroupActionManager {
         group.deactivatedRound = 0;
         self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 
-        uint256 stakeAmount = self.activationStakeAmountByActionId[tokenAddress][actionId];
+        uint256 stakeAmount = self.requiredActivationStakeByActionId[tokenAddress][actionId];
         self.activeGroupIdsByActionId[tokenAddress][actionId].add(groupId);
-        self.stakedByActionId[tokenAddress][actionId] += stakeAmount;
-        self.totalStaked[tokenAddress] += stakeAmount;
-        self.stakedByMemberId[tokenAddress][groupId] += stakeAmount;
-        self.totalStakedHistory[tokenAddress].record(round - 1, self.totalStaked[tokenAddress]);
-        self.stakedByMemberIdHistory[tokenAddress][groupId].record(round - 1, self.stakedByMemberId[tokenAddress][groupId]);
+        self.activationStakeByActionId[tokenAddress][actionId] += stakeAmount;
+        self.totalActivationStake[tokenAddress] += stakeAmount;
+        self.activationStakeByGroupId[tokenAddress][groupId] += stakeAmount;
+        self.totalActivationStakeHistory[tokenAddress].record(round - 1, self.totalActivationStake[tokenAddress]);
+        self.activationStakeHistoryByGroupId[tokenAddress][groupId].record(round - 1, self.activationStakeByGroupId[tokenAddress][groupId]);
         self.tokenAddressesByGroupId[groupId].add(tokenAddress);
         self.actionIdsByGroupId[tokenAddress][groupId].add(actionId);
         self.activeActionIds[tokenAddress].add(actionId);
@@ -217,17 +217,17 @@ library GroupActionManager {
             revert IGroupActionManagerErrors.DeactivationLockedInActivatedRound(groupId, round);
         }
 
-        uint256 stakeAmount = self.activationStakeAmountByActionId[tokenAddress][actionId];
+        uint256 stakeAmount = self.requiredActivationStakeByActionId[tokenAddress][actionId];
 
         group.active = false;
         group.deactivatedRound = round;
 
         self.activeGroupIdsByActionId[tokenAddress][actionId].remove(groupId);
-        self.stakedByActionId[tokenAddress][actionId] -= stakeAmount;
-        self.totalStaked[tokenAddress] -= stakeAmount;
-        self.stakedByMemberId[tokenAddress][groupId] -= stakeAmount;
-        self.totalStakedHistory[tokenAddress].record(round - 1, self.totalStaked[tokenAddress]);
-        self.stakedByMemberIdHistory[tokenAddress][groupId].record(round - 1, self.stakedByMemberId[tokenAddress][groupId]);
+        self.activationStakeByActionId[tokenAddress][actionId] -= stakeAmount;
+        self.totalActivationStake[tokenAddress] -= stakeAmount;
+        self.activationStakeByGroupId[tokenAddress][groupId] -= stakeAmount;
+        self.totalActivationStakeHistory[tokenAddress].record(round - 1, self.totalActivationStake[tokenAddress]);
+        self.activationStakeHistoryByGroupId[tokenAddress][groupId].record(round - 1, self.activationStakeByGroupId[tokenAddress][groupId]);
         self.actionIdsByGroupId[tokenAddress][groupId].remove(actionId);
         if (self.actionIdsByGroupId[tokenAddress][groupId].count() == 0) {
             self.tokenAddressesByGroupId[groupId].remove(tokenAddress);
@@ -331,27 +331,27 @@ library GroupActionManager {
         return _maxJoinAmount(self, protocol, tokenAddress, actionId);
     }
 
-    function staked(
+    function activationStakeByActionId(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId
     ) external view returns (uint256) {
-        return self.stakedByActionId[tokenAddress][actionId];
+        return self.activationStakeByActionId[tokenAddress][actionId];
     }
 
-    function totalStaked(
+    function totalActivationStake(
         GroupActionStorage.Layout storage self,
         address tokenAddress
     ) external view returns (uint256) {
-        return self.totalStaked[tokenAddress];
+        return self.totalActivationStake[tokenAddress];
     }
 
-    function stakedByMemberId(
+    function activationStakeByGroupId(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 memberId
+        uint256 groupId
     ) external view returns (uint256) {
-        return self.stakedByMemberId[tokenAddress][memberId];
+        return self.activationStakeByGroupId[tokenAddress][groupId];
     }
 
     function tokenAddressesByGroupId(
@@ -474,10 +474,10 @@ library GroupActionManager {
             tokenAddress: tokenAddress,
             actionId: actionId,
             joinTokenAddress: self.joinTokenAddressByActionId[tokenAddress][actionId],
-            activationStakeAmount: self.activationStakeAmountByActionId[tokenAddress][actionId],
+            activationStakeAmount: self.requiredActivationStakeByActionId[tokenAddress][actionId],
             maxJoinAmountRatio: self.maxJoinAmountRatioByActionId[tokenAddress][actionId],
             activationMinGovRatio: self.activationMinGovRatioByActionId[tokenAddress][actionId],
-            verifierStakeAmount: self.verifierStakeAmountByActionId[tokenAddress][actionId],
+            verifierStakeAmount: self.requiredVerifierStakeByActionId[tokenAddress][actionId],
             verificationKeys: self.verificationKeysByActionId[tokenAddress][actionId],
             verificationDescriptions: self.verificationDescriptionsByActionId[tokenAddress][actionId]
         });
