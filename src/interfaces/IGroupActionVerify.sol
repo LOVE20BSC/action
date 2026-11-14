@@ -189,6 +189,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 verifierId
     ) external;
 
+    /// @notice Total unburned collateral held for this verifier, including earlier applications.
     function verifierStake(
         address tokenAddress,
         uint256 actionId,
