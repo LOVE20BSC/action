@@ -143,16 +143,16 @@ contract LpExecutorRealIntegrationTest {
         memberNFT.mint("Alice");
         token.approve(address(stake), type(uint256).max);
         rootToken.approve(address(stake), type(uint256).max);
-        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, PROMISED_WAITING_PHASES, 1);
-        stake.stakeBoost(address(token), BOOST_AMOUNT, PROMISED_WAITING_PHASES, 1);
+        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, PROMISED_WAITING_PHASES, 1, type(uint256).max);
+        stake.stakeBoost(address(token), BOOST_AMOUNT, PROMISED_WAITING_PHASES, 1, type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(member2);
         memberNFT.mint("Bob");
         token.approve(address(stake), type(uint256).max);
         rootToken.approve(address(stake), type(uint256).max);
-        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, PROMISED_WAITING_PHASES, 2);
-        stake.stakeBoost(address(token), BOOST_AMOUNT, PROMISED_WAITING_PHASES, 2);
+        stake.stakeLiquidity(address(token), STAKE_AMOUNT, STAKE_AMOUNT, PROMISED_WAITING_PHASES, 2, type(uint256).max);
+        stake.stakeBoost(address(token), BOOST_AMOUNT, PROMISED_WAITING_PHASES, 2, type(uint256).max);
         vm.stopPrank();
     }
 
