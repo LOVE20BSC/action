@@ -146,7 +146,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         // The service token is the parent of the served action token; every
         // community read must key on the action token, not the service token.
-        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 0, PRECISION / 2);
+        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, PRECISION, PRECISION / 2);
         _atPhase(JOIN_PHASE);
         _setVotedGroupActionsOn(address(childToken), _ids(GROUP_ACTION_ID));
         groupAction.setHasActiveGroups(address(childToken), GROUP_ID, true);
@@ -166,6 +166,9 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
             address(childToken), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER2_ID), _ratios(PRECISION), remarks
         );
         _atPhase(MINT_PHASE);
+        stake.setTotalGovVotes(address(token), 100e18);
+        stake.setTotalGovVotes(address(childToken), 100e18);
+        stake.setGovVotes(address(childToken), GROUP_ID, 50e18);
 
         require(
             executor.totalGroupActionReward(address(childToken), SERVICE_ROUND) == GROUP_REWARD,

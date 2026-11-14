@@ -327,12 +327,13 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             return (theoreticalReward, 0);
         }
 
-        if (IStake(STAKE_ADDRESS).totalGovVotes(tokenAddress, round) == 0) {
+        uint256 currentPhase = IPhase(PHASE_ADDRESS).currentPhase();
+        if (IStake(STAKE_ADDRESS).totalGovVotes(tokenAddress, currentPhase) == 0) {
             return (0, theoreticalReward);
         }
 
         uint256 govRatioCap =
-            Math.mulDiv(_calculateGovRatio(tokenAddress, round, memberId), govRatioMultiplierValue, PRECISION);
+            Math.mulDiv(_calculateGovRatio(tokenAddress, currentPhase, memberId), govRatioMultiplierValue, PRECISION);
         uint256 cappedRatio = effectiveLpRatio < govRatioCap ? effectiveLpRatio : govRatioCap;
 
         // Load-bearing: when the cap does not bind, mint the exact theoretical amount. Re-deriving it
@@ -381,7 +382,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         if (minted) {
             ratio = _mintedGovRatioByMemberId[tokenAddress][actionId][round][memberId];
         } else {
-            ratio = _calculateGovRatio(tokenAddress, round, memberId);
+            ratio = _calculateGovRatio(tokenAddress, IPhase(PHASE_ADDRESS).currentPhase(), memberId);
         }
     }
 
@@ -533,7 +534,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         _mintedRewardByMemberId[tokenAddress][actionId][round][memberId] = mintAmount;
         _burnedRewardByMemberId[tokenAddress][actionId][round][memberId] = burnAmount;
         _mintedGovRatioByMemberId[tokenAddress][actionId][round][memberId] =
-            _calculateGovRatio(tokenAddress, round, memberId);
+            _calculateGovRatio(tokenAddress, IPhase(PHASE_ADDRESS).currentPhase(), memberId);
 
         if (burnAmount != 0) {
             ILOVE20Token(tokenAddress).burn(burnAmount);

@@ -226,6 +226,18 @@ contract LpExecutorRealIntegrationTest {
         _assertJoinLedger(proposalId, round);
 
         _advanceToPhaseStart(round + 2);
+        (uint256 cappedMint, uint256 cappedBurn, bool mintedBefore) =
+            lpExecutor.memberReward(address(token), proposalId, round, 1);
+        require(!mintedBefore && cappedBurn != 0, "reward has pending overflow");
+        vm.prank(member1);
+        stake.increasePromisedWaitingPhases(address(token), 1, PROMISED_WAITING_PHASES * 3);
+        (uint256 toppedUpMint, uint256 toppedUpBurn,) = lpExecutor.memberReward(address(token), proposalId, round, 1);
+        require(toppedUpMint > cappedMint && toppedUpBurn < cappedBurn, "current governance reduces overflow");
+        require(toppedUpMint + toppedUpBurn == cappedMint + cappedBurn, "historical theoretical reward stays fixed");
+        require(
+            stake.govVotes(address(token), round, 1) < stake.govVotes(address(token), phase.currentPhase(), 1),
+            "historical votes stay unchanged"
+        );
         _assertSettlement(proposalId, round);
         _expectRewardAlreadyMinted(proposalId, round);
     }

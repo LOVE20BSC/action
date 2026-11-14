@@ -178,9 +178,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
-        // The cap is on but the community has no governance votes at all.
-        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 0);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 100e18);
         _atPhase(MINT_PHASE);
+        stake.setTotalGovVotes(address(token), 0);
+        stake.setGovVotes(address(token), GROUP_ID, 0);
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
         require(mintAmount == 0, "owner reward fully capped away");
@@ -631,7 +633,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(minted && mintAmount == 450e18 && burnAmount == 0, "base ledger recorded");
     }
 
-    function testSettledQueriesIgnoreLaterGovVotes() external {
+    function testPendingRewardsUseLatestGovVotesAndSettledQueriesStayFixed() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 1e18, PRECISION / 2);
         _atPhase(JOIN_PHASE);
@@ -646,8 +648,19 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
         _atPhase(MINT_PHASE);
 
+        (uint256 mintAmount, uint256 burnAmount, bool minted) =
+            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        require(!minted && mintAmount == 90e18 && burnAmount == 360e18, "initial owner cap");
+        stake.setTotalGovVotes(address(token), 200e18);
+        stake.setGovVotes(address(token), GROUP_ID, 50e18);
+        (mintAmount, burnAmount, minted) =
+            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        require(!minted && mintAmount == 225e18 && burnAmount == 225e18, "latest votes set the owner cap");
+        (, uint256 ownerReward, uint256 pendingBurn,,,) =
+            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        require(ownerReward == mintAmount && pendingBurn == burnAmount, "service quote uses the latest votes");
         (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
-        require(ownerMint == 90e18 && ownerBurn == 360e18, "capped settlement recorded");
+        require(ownerMint == mintAmount && ownerBurn == burnAmount, "settlement matches the latest quote");
 
         // The votes move underneath a settled round.
         stake.setGovVotes(address(token), GROUP_ID, 0);
@@ -656,10 +669,12 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         // The recorded result survives: no recompute, no re-burn.
         (,, uint256 ownerBurned,,, bool claimed) =
             executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
-        require(claimed && ownerBurned == 360e18, "recorded burn ignores later votes");
-        (uint256 mintAmount, uint256 burnAmount, bool minted) =
+        require(claimed && ownerBurned == 225e18, "recorded burn ignores later votes");
+        (mintAmount, burnAmount, minted) =
             executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
-        require(minted && mintAmount == 90e18 && burnAmount == 360e18, "base ledger ignores later votes");
+        require(minted && mintAmount == 225e18 && burnAmount == 225e18, "base ledger ignores later votes");
+        (uint256 verifierMint, uint256 verifierBurn) = _settleService(VERIFIER_ID);
+        require(verifierMint == 450e18 && verifierBurn == 0, "verifier reward ignores the owner cap");
     }
 
     function testSettlementTinyAmountsWithFullRedistribution() external {

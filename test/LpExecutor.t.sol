@@ -721,8 +721,9 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testMintMemberRewardBurnsAllWhenNoGovVotes() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
-        stake.setTotalGovVotes(address(token), 2, 0);
         _atPhase(4);
+        stake.setTotalGovVotes(address(token), 0);
+        stake.setGovVotes(address(token), 1, 0);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
@@ -735,10 +736,10 @@ contract LpExecutorTest is LpExecutorTestBase {
     }
 
     function testMintMemberRewardMintsAllWhenCapAboveLpRatio() external {
-        stake.setGovVotes(address(token), 2, 1, 1000e18);
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
+        stake.setGovVotes(address(token), 1, 1000e18);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
@@ -930,17 +931,19 @@ contract LpExecutorTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(5);
+        stake.setTotalGovVotes(address(token), 1200e18);
+        stake.setGovVotes(address(token), 1, 300e18);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _setActionReward(3, 500e18, true);
         _fundExecutor(1500e18);
 
         (uint256 mint2, uint256 burn2) = _mintMemberReward(2, 1);
         (uint256 mint3, uint256 burn3) = _mintMemberReward(3, 1);
-        require(mint2 == 200e18 && burn2 == 800e18, "round 2 settlement");
-        require(mint3 == 100e18 && burn3 == 400e18, "round 3 settlement");
+        require(mint2 == 500e18 && burn2 == 500e18, "round 2 uses the latest votes");
+        require(mint3 == 250e18 && burn3 == 250e18, "round 3 uses the latest votes");
         (uint256 ratio2, bool minted2) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         (uint256 ratio3, bool minted3) = lpExecutor.govRatio(address(token), ACTION_ID, 3, 1);
-        require(minted2 && minted3 && ratio2 == 1e17 && ratio3 == 1e17, "per round snapshots");
+        require(minted2 && minted3 && ratio2 == 25e16 && ratio3 == 25e16, "per round settlement ratios");
     }
 
     function testMintMemberRewardsAlignsByIndex() external {
@@ -1095,25 +1098,33 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(lpExecutor.minGovRatio(address(token), 99) == 0, "min ratio default");
     }
 
-    function testGovRatioReturnsRewardRoundThenRecorded() external {
+    function testGovRatioReturnsLatestThenRecorded() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
-        stake.setGovVotes(address(token), 1, 900e18);
         (uint256 pendingMint, uint256 pendingBurn,) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
-        require(pendingMint == 200e18 && pendingBurn == 800e18, "later votes do not change pending rewards");
-        _mintMemberReward(2, 1);
-
+        require(pendingMint == 200e18 && pendingBurn == 800e18, "initial cap");
+        stake.setTotalGovVotes(address(token), 1200e18);
+        stake.setGovVotes(address(token), 1, 300e18);
+        (pendingMint, pendingBurn,) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
+        require(pendingMint == 500e18 && pendingBurn == 500e18, "latest numerator and denominator set the cap");
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
-        require(minted && ratio == 1e17, "recorded at mint");
+        require(!minted && ratio == 25e16, "pending ratio follows the latest votes");
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
+        require(mintAmount == pendingMint && burnAmount == pendingBurn, "settlement matches the latest quote");
 
-        stake.setGovVotes(address(token), 1, 900e18);
         (ratio, minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
-        require(minted && ratio == 1e17, "stake changes do not rewrite the snapshot");
+        require(minted && ratio == 25e16, "recorded at mint");
+
+        stake.setTotalGovVotes(address(token), 3000e18);
+        (ratio, minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
+        require(minted && ratio == 25e16, "stake changes do not rewrite the settlement ratio");
+        (pendingMint, pendingBurn, minted) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
+        require(minted && pendingMint == 500e18 && pendingBurn == 500e18, "settled rewards stay fixed");
         (ratio, minted) = lpExecutor.govRatio(address(token), ACTION_ID, 3, 1);
-        require(minted == false && ratio == 1e17, "unminted round reads its historical ratio");
+        require(minted == false && ratio == 1e17, "unminted round follows the latest total votes");
     }
 
     function testGovRatioZeroWithoutTotalGovVotes() external {
