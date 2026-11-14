@@ -112,8 +112,8 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction cleared");    }
 
     function testGovRatioFloorRounding() external {
-        stake.setTotalValidGovVotes(address(token), 2, 3);
-        stake.setValidGovVotes(address(token), 2, 1, 1);
+        stake.setTotalGovVotes(address(token), 2, 3);
+        stake.setGovVotes(address(token), 2, 1, 1);
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(minted == false && ratio == 333333333333333333, "one third floors");
     }
@@ -134,8 +134,8 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
             _targetDataWithConfig(GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO, address(secondJoinToken));
         vm.prank(address(actionTarget));
         lpExecutor.onProposalCreated(address(secondToken), ACTION_ID, targetData);
-        stake.setTotalValidGovVotes(address(secondToken), 2, 1000e18);
-        stake.setValidGovVotes(address(secondToken), 2, 1, 100e18);
+        stake.setTotalGovVotes(address(secondToken), 2, 1000e18);
+        stake.setGovVotes(address(secondToken), 2, 1, 100e18);
         secondJoinToken.mintTo(MEMBER1, 100e18);
         vm.prank(MEMBER1);
         secondJoinToken.approve(address(lpExecutor), type(uint256).max);
@@ -157,11 +157,11 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         );
     }
 
-    function testCapDisabledTakesPrecedenceOverZeroTotalValidGovVotes() external {
+    function testCapDisabledTakesPrecedenceOverZeroTotalGovVotes() external {
         _createActionWithConfig(SECOND_ACTION_ID, 0, 0);
         _atPhaseBlock(3, 3000);
         _join(SECOND_ACTION_ID, 1, 100e18);
-        stake.setTotalValidGovVotes(address(token), 2, 0);
+        stake.setTotalGovVotes(address(token), 2, 0);
         _atPhase(4);
         _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);

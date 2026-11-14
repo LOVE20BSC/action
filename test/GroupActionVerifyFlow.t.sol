@@ -20,7 +20,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID && votes[0] == 100e18, "single verifier");
 
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
@@ -73,7 +73,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testUnrankedVerifierRejected() external {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
@@ -96,7 +96,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testOpenBlockGatingByRank() external {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
@@ -354,7 +354,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         // Board capacity is SPLITS().length + 1 = 2 with splits = [5e17].
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
@@ -362,7 +362,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         uint256 thirdId = 11;
         address third = address(0x1009);
         memberNFT.setOwner(thirdId, third);
-        stake.setValidGovVotes(address(token), thirdId, 100e18);
+        stake.setGovVotes(address(token), thirdId, 100e18);
         _fundVerifierStakeFor(third);
         vm.prank(third);
         executor.submitVerifierApplication(address(token), ACTION_ID, thirdId, "v3");
@@ -619,7 +619,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testNextVotePunishesAnUnfinishedApplicationOnlyOnce() external {
         _prepareRound();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "not elected");
@@ -666,7 +666,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testLaterVoteChecksMissedRoundsAndKeepsOtherBondsSeparate() external {
         _prepareRound();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "second round");
@@ -737,7 +737,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
     function testVerifierStakeNeedsBalanceAndAllowance() external {
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
 
         vm.prank(VERIFIER2);
         vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
@@ -784,11 +784,11 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, VERIFIER_ID));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
 
-        stake.setValidGovVotes(address(token), VERIFIER_ID, 0);
+        stake.setGovVotes(address(token), VERIFIER_ID, 0);
         vm.prank(VERIFIER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ZeroVerifyVotes.selector, address(token), VERIFIER_ID));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "v");
-        stake.setValidGovVotes(address(token), VERIFIER_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER_ID, 100e18);
 
         bytes memory longDescription = new bytes(1025);
         for (uint256 i = 0; i < longDescription.length; i++) {
@@ -856,7 +856,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
     function testVerifierStakeIsPerMember() external {
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
 
         _submitApplication();
@@ -964,7 +964,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testApplicationVoterRostersStayPerVerifier() external {
         _submitApplication();
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
-        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER2_ID, 100e18);
         _fundVerifierStakeFor(VERIFIER2);
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");

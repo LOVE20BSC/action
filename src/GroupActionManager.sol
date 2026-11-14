@@ -453,12 +453,12 @@ library GroupActionManager {
 
         IStake stake = IStake(protocol.stakeAddress);
         uint256 currentPhase = IPhase(protocol.phaseAddress).currentPhase();
-        uint256 totalGovVotes = stake.totalValidGovVotes(tokenAddress, currentPhase);
+        uint256 totalGovVotes = stake.totalGovVotes(tokenAddress, currentPhase);
         if (totalGovVotes == 0) {
             revert IGroupActionManagerErrors.NoGovVotes(tokenAddress);
         }
 
-        uint256 ownerGovVotes = stake.validGovVotes(tokenAddress, currentPhase, groupId);
+        uint256 ownerGovVotes = stake.govVotes(tokenAddress, currentPhase, groupId);
         uint256 actualRatio = (ownerGovVotes * GroupActionStorage.PRECISION) / totalGovVotes;
         if (actualRatio < minGovRatio) {
             revert IGroupActionManagerErrors.InsufficientActivationMinGovRatio(groupId, minGovRatio, actualRatio);

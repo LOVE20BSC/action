@@ -86,10 +86,10 @@ abstract contract LpExecutorTestBase {
         stake.setPhaseAddress(address(phase));
         stake.setPairFactoryAddress(address(factory));
         actionTarget.setVoteAddress(address(new MockStakeLocator(address(stake))));
-        stake.setTotalValidGovVotes(address(token), 1000e18);
-        stake.setValidGovVotes(address(token), 1, 100e18);
-        stake.setValidGovVotes(address(token), 2, 200e18);
-        stake.setValidGovVotes(address(token), 3, 300e18);
+        stake.setTotalGovVotes(address(token), 1000e18);
+        stake.setGovVotes(address(token), 1, 100e18);
+        stake.setGovVotes(address(token), 2, 200e18);
+        stake.setGovVotes(address(token), 3, 300e18);
     }
 
     function _configurePhase() internal {

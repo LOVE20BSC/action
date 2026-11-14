@@ -48,9 +48,9 @@ contract MockGroupServiceStake {
     address public launchAddress;
 
     // tokenAddress => total valid gov votes
-    mapping(address => RoundHistoryUint256.History) internal _totalValidGovVotes;
+    mapping(address => RoundHistoryUint256.History) internal _totalGovVotes;
     // tokenAddress => memberId => valid gov votes
-    mapping(address => mapping(uint256 => RoundHistoryUint256.History)) internal _validGovVotes;
+    mapping(address => mapping(uint256 => RoundHistoryUint256.History)) internal _govVotes;
 
     function setMemberNFTAddress(address memberNFTAddress_) external {
         memberNFTAddress = memberNFTAddress_;
@@ -76,32 +76,32 @@ contract MockGroupServiceStake {
         return launchAddress;
     }
 
-    function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
-        _totalValidGovVotes[tokenAddress].record(IPhase(phaseAddress).currentPhase(), votes);
+    function setTotalGovVotes(address tokenAddress, uint256 votes) external {
+        _totalGovVotes[tokenAddress].record(IPhase(phaseAddress).currentPhase(), votes);
     }
 
-    function setValidGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
-        _validGovVotes[tokenAddress][memberId].record(IPhase(phaseAddress).currentPhase(), votes);
+    function setGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
+        _govVotes[tokenAddress][memberId].record(IPhase(phaseAddress).currentPhase(), votes);
     }
 
-    function setTotalValidGovVotes(address tokenAddress, uint256 round, uint256 votes) external {
-        _totalValidGovVotes[tokenAddress].record(round, votes);
+    function setTotalGovVotes(address tokenAddress, uint256 round, uint256 votes) external {
+        _totalGovVotes[tokenAddress].record(round, votes);
     }
 
-    function setValidGovVotes(address tokenAddress, uint256 round, uint256 memberId, uint256 votes) external {
-        _validGovVotes[tokenAddress][memberId].record(round, votes);
+    function setGovVotes(address tokenAddress, uint256 round, uint256 memberId, uint256 votes) external {
+        _govVotes[tokenAddress][memberId].record(round, votes);
     }
 
-    function totalValidGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
-        return _totalValidGovVotes[tokenAddress].value(round);
+    function totalGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
+        return _totalGovVotes[tokenAddress].value(round);
     }
 
-    function validGovVotes(
+    function govVotes(
         address tokenAddress,
         uint256 round,
         uint256 memberId
     ) external view returns (uint256) {
-        return _validGovVotes[tokenAddress][memberId].value(round);
+        return _govVotes[tokenAddress][memberId].value(round);
     }
 }
 

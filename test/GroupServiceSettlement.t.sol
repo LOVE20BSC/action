@@ -67,8 +67,8 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
-        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, 100e18);
-        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
         _atPhase(MINT_PHASE);
 
         // govRatio = 0.1e18, cap = 0.1e18, cap * D = 10e36 < W = 50e36 -> capped.
@@ -105,8 +105,8 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _armServiceReward(SERVICE_REWARD);
         // govRatio = 0.5e18, cap = 0.5e18, cap * D = 50e36 == W = 50e36: the
         // cross-multiplied comparison keeps the boundary on the uncapped side.
-        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, 100e18);
-        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 50e18);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 50e18);
         _atPhase(MINT_PHASE);
 
         (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
@@ -128,9 +128,9 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(60e18, 40e18), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         // Owner A holds 10% of the global votes, owner B 40%.
-        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, 100e18);
-        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
-        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_OWNER_B_ID, 40e18);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_OWNER_B_ID, 40e18);
         _atPhase(MINT_PHASE);
 
         // Owner A: cap = 0.1e18, cap * D = 10e36 < W = 30e36 -> capped at 90e18.
@@ -159,8 +159,8 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         // cap = 1e18, cap * D = 100e36 >= W = 50e36 -> the cap never binds.
-        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, 100e18);
-        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 100e18);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 100e18);
         _atPhase(MINT_PHASE);
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
@@ -179,7 +179,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         // The cap is on but the community has no governance votes at all.
-        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, 0);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 0);
         _atPhase(MINT_PHASE);
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
@@ -642,16 +642,16 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
-        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, 100e18);
-        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100e18);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 10e18);
         _atPhase(MINT_PHASE);
 
         (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
         require(ownerMint == 90e18 && ownerBurn == 360e18, "capped settlement recorded");
 
         // The votes move underneath a settled round.
-        stake.setValidGovVotes(address(token), GROUP_ID, 0);
-        stake.setTotalValidGovVotes(address(token), 1e18);
+        stake.setGovVotes(address(token), GROUP_ID, 0);
+        stake.setTotalGovVotes(address(token), 1e18);
 
         // The recorded result survives: no recompute, no re-burn.
         (,, uint256 ownerBurned,,, bool claimed) =

@@ -98,9 +98,9 @@ abstract contract GroupActionExecutorTestBase {
         stake.setPhaseAddress(address(phase));
         stake.setVoteAddress(address(vote));
         actionTarget.setVoteAddress(address(new MockStakeLocator(address(stake))));
-        stake.setTotalValidGovVotes(address(token), 1000e18);
-        stake.setValidGovVotes(address(token), MEMBER1_ID, 100e18);
-        stake.setValidGovVotes(address(token), VERIFIER_ID, 100e18);
+        stake.setTotalGovVotes(address(token), 1000e18);
+        stake.setGovVotes(address(token), MEMBER1_ID, 100e18);
+        stake.setGovVotes(address(token), VERIFIER_ID, 100e18);
 
         vote.setVotesNum(address(token), CREATION_PHASE, 1000e18);
         vote.setVotesNumByProposalId(address(token), CREATION_PHASE, ACTION_ID, 1000e18);

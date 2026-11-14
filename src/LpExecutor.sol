@@ -327,7 +327,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             return (theoreticalReward, 0);
         }
 
-        if (IStake(STAKE_ADDRESS).totalValidGovVotes(tokenAddress, round) == 0) {
+        if (IStake(STAKE_ADDRESS).totalGovVotes(tokenAddress, round) == 0) {
             return (0, theoreticalReward);
         }
 
@@ -363,12 +363,12 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 currentPhase,
         uint256 memberId
     ) internal view returns (uint256) {
-        uint256 totalValidGovVotes = IStake(STAKE_ADDRESS).totalValidGovVotes(tokenAddress, currentPhase);
-        if (totalValidGovVotes == 0) {
+        uint256 totalGovVotes = IStake(STAKE_ADDRESS).totalGovVotes(tokenAddress, currentPhase);
+        if (totalGovVotes == 0) {
             return 0;
         }
-        uint256 memberGovVotes = IStake(STAKE_ADDRESS).validGovVotes(tokenAddress, currentPhase, memberId);
-        return Math.mulDiv(memberGovVotes, PRECISION, totalValidGovVotes);
+        uint256 memberGovVotes = IStake(STAKE_ADDRESS).govVotes(tokenAddress, currentPhase, memberId);
+        return Math.mulDiv(memberGovVotes, PRECISION, totalGovVotes);
     }
 
     function govRatio(

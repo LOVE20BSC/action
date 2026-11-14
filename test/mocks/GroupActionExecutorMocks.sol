@@ -9,9 +9,9 @@ contract MockGroupActionExecutorStake {
     address public voteAddress;
 
     // tokenAddress => total valid gov votes
-    mapping(address => uint256) internal _totalValidGovVotes;
+    mapping(address => uint256) internal _totalGovVotes;
     // tokenAddress => memberId => valid gov votes
-    mapping(address => mapping(uint256 => uint256)) internal _validGovVotes;
+    mapping(address => mapping(uint256 => uint256)) internal _govVotes;
 
     function setMemberNFTAddress(address memberNFTAddress_) external {
         memberNFTAddress = memberNFTAddress_;
@@ -37,27 +37,27 @@ contract MockGroupActionExecutorStake {
         return voteAddress;
     }
 
-    function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
-        _totalValidGovVotes[tokenAddress] = votes;
+    function setTotalGovVotes(address tokenAddress, uint256 votes) external {
+        _totalGovVotes[tokenAddress] = votes;
     }
 
-    function setValidGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
-        _validGovVotes[tokenAddress][memberId] = votes;
+    function setGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
+        _govVotes[tokenAddress][memberId] = votes;
     }
 
     // The real `Stake` is round-keyed; this double answers only the phase's current round (zero otherwise).
-    function totalValidGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
+    function totalGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
         if (round != IPhase(phaseAddress).currentPhase()) return 0;
-        return _totalValidGovVotes[tokenAddress];
+        return _totalGovVotes[tokenAddress];
     }
 
-    function validGovVotes(
+    function govVotes(
         address tokenAddress,
         uint256 round,
         uint256 memberId
     ) external view returns (uint256) {
         if (round != IPhase(phaseAddress).currentPhase()) return 0;
-        return _validGovVotes[tokenAddress][memberId];
+        return _govVotes[tokenAddress][memberId];
     }
 }
 

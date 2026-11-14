@@ -911,7 +911,7 @@ library GroupActionVerify {
         if (self.createdRoundByActionId[tokenAddress][actionId] == 0) {
             revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
         }
-        if (IStake(protocol.stakeAddress).validGovVotes(tokenAddress, round, verifierId) == 0) {
+        if (IStake(protocol.stakeAddress).govVotes(tokenAddress, round, verifierId) == 0) {
             revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
         }
     }

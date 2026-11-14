@@ -557,12 +557,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         }
 
         uint256 cap = 0;
-        uint256 totalValidGovVotes = IStake(STAKE_ADDRESS).totalValidGovVotes(settlement.actionTokenAddress, round);
-        if (totalValidGovVotes != 0) {
+        uint256 totalGovVotes = IStake(STAKE_ADDRESS).totalGovVotes(settlement.actionTokenAddress, round);
+        if (totalGovVotes != 0) {
             uint256 govRatio = Math.mulDiv(
-                IStake(STAKE_ADDRESS).validGovVotes(settlement.actionTokenAddress, round, memberId),
+                IStake(STAKE_ADDRESS).govVotes(settlement.actionTokenAddress, round, memberId),
                 PRECISION,
-                totalValidGovVotes
+                totalGovVotes
             );
             cap = Math.mulDiv(govRatio, settlement.govRatioMultiplier, PRECISION);
         }
