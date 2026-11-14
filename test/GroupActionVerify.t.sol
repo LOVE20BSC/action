@@ -46,7 +46,8 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
 
         _protocol.memberNFTAddress = address(memberNFT);
         _protocol.phaseAddress = address(phase);
-        _layout.lockedVerifierId[TOKEN][ACTION_ID][ROUND] = VERIFIER_ID;
+        _layout.electedApplicationId[TOKEN][ACTION_ID][ROUND] = VERIFIER_ID;
+        _layout.applicationVerifierId[TOKEN][ACTION_ID][VERIFIER_ID] = VERIFIER_ID;
 
         _seedMember(1, GROUP_A, MEMBER_AMOUNT_A);
         _seedMember(2, GROUP_A, MEMBER_AMOUNT_B);
@@ -305,7 +306,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _submit(GROUP_A, 0, _scores(60));
 
         phase.setCurrentPhase(4);
-        _layout.lockedVerifierId[TOKEN][ACTION_ID][ROUND + 1] = VERIFIER_ID;
+        _layout.electedApplicationId[TOKEN][ACTION_ID][ROUND + 1] = VERIFIER_ID;
         _submit(GROUP_A, 0, _scores(100));
 
         (uint256 score1, bool verified1) = GroupActionVerify.originScore(_layout, TOKEN, ACTION_ID, ROUND, 1);

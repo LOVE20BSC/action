@@ -184,7 +184,7 @@ contract ActionTargetRealIntegrationTest {
     }
 
     function testRealIntegration_GroupActionCreationForwardsPunishmentRatio() external {
-        GroupActionExecutor groupExecutor = new GroupActionExecutor(address(actionTarget), new uint256[](0));
+        GroupActionExecutor groupExecutor = new GroupActionExecutor(address(actionTarget));
         bytes[] memory targetData = new bytes[](7);
         targetData[0] = abi.encode(address(groupExecutor));
         targetData[1] = abi.encode(address(token));

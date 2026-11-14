@@ -326,11 +326,17 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         data[6] = abi.encode(9e17);
         _createActionWith(ACTION_2, data);
         require(executor.verifierPunishmentRatio(address(token), ACTION_2) == 9e17, "configured punishment ratio");
-        require(executor.verifierPunishmentRatio(address(token), ACTION_ID) == PRECISION, "other action ratio unchanged");
+        require(executor.verifierPunishmentRatio(address(token), ACTION_ID) == 9e17, "other action ratio unchanged");
 
         data[6] = abi.encode(uint256(0));
-        _createActionWith(23, data);
-        require(executor.verifierPunishmentRatio(address(token), 23) == 0, "zero ratio accepted");
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio.selector, 0));
+        executor.onProposalCreated(address(token), 23, data);
+
+        data[6] = abi.encode(PRECISION);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio.selector, PRECISION));
+        executor.onProposalCreated(address(token), 23, data);
 
         data[6] = abi.encode(PRECISION + 1);
         vm.prank(address(actionTarget));

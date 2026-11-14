@@ -7,12 +7,17 @@ struct VerifierApplication {
     uint256 applicationId;
     uint256 verifierId;
     string description;
-    bool punished;
-    uint256 punishedForRound;
+    uint256 stoppedRound;
+    uint256 withdrawnRound;
+    uint256 pendingRound;
+    uint256 punishmentAmount;
+    uint256[] failedRounds;
 }
 
 interface IGroupActionVerifyEvents {
-    event VerifierApplicationPunished(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed applicationId, uint256 verifierId, uint256 round, uint256 burnedAmount);
+    event VerifierApplicationPunished(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed applicationId, uint256 verifierId, uint256[] failedRounds, uint256 burnedAmount);
+    event VerifierApplicationStopped(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed verifierId, uint256 applicationId, uint256 round);
+    event VerifierApplicationDescriptionUpdated(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed applicationId, uint256 effectiveRound, string description);
     event OriginScoresSubmitted(
         address indexed tokenAddress,
         uint256 indexed actionId,
@@ -57,12 +62,6 @@ interface IGroupActionVerifyEvents {
         uint256 round,
         uint256 amount
     );
-    event VerifierLocked(
-        address indexed tokenAddress,
-        uint256 indexed actionId,
-        uint256 indexed verifierId,
-        uint256 round
-    );
     event ApplicationVoteRecorded(
         address indexed tokenAddress,
         uint256 indexed actionId,
@@ -76,15 +75,12 @@ interface IGroupActionVerifyEvents {
 }
 
 interface IGroupActionVerifyErrors {
-    error ApplicationPunished(uint256 applicationId);
+    error ApplicationOverdue(uint256 applicationId, uint256 round);
+    error ApplicationStopped(uint256 applicationId);
+    error ReapplicationInStoppedRound(uint256 round);
     error ApplicationStillResponsible(uint256 applicationId, uint256 round);
-    error InsufficientVerifierStake(uint256 verifierId, uint256 available, uint256 required);
     error OriginScoresEmpty();
-    error VerifierNotRanked(
-        uint256 verifierId,
-        uint256 round
-    );
-    error VerifierNotOpen(
+    error VerifierNotElected(
         uint256 verifierId,
         uint256 round
     );
@@ -115,12 +111,6 @@ interface IGroupActionVerifyErrors {
         uint256 verifierId
     );
     error NoActiveApplication(uint256 verifierId);
-    error RoundVerifierLocked(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round,
-        uint256 lockedVerifierId
-    );
 }
 
 interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGroupActionVerifyErrors {
@@ -172,11 +162,22 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 round
     ) external view returns (bool);
 
-    function lockedVerifierId(
+    /// @notice The current leader while voting is open, or the sole elected verifier after it closes.
+    function verifier(
         address tokenAddress,
         uint256 actionId,
         uint256 round
-    ) external view returns (uint256);
+    ) external view returns (uint256 verifierId, uint256 applicationId, uint256 voteAmount);
+
+    /// @notice Final elected rounds only; the still-open voting round is excluded.
+    function verifierElectedRounds(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 applicationId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory rounds, uint256 totalCount);
 
     function submitVerifierApplication(
         address tokenAddress,
@@ -185,13 +186,15 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         string calldata description
     ) external returns (uint256 applicationId);
 
+    function stopVerifierApplication(address tokenAddress, uint256 actionId, uint256 verifierId) external;
+
     function cancelVerifierApplication(
         address tokenAddress,
         uint256 actionId,
         uint256 verifierId
     ) external;
 
-    /// @notice Current shared collateral for this verifier within the action.
+    /// @notice Collateral stays intact until withdrawal, when the derived punishment is burned.
     function verifierStake(
         address tokenAddress,
         uint256 actionId,
@@ -219,7 +222,8 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
             uint256 totalCount
         );
 
-    /// @notice Effective applications and votes at the end of the voting round; punishment fields show their current status.
+    /// @notice Unwithdrawn applications at round end plus voted applications withdrawn in that round.
+    /// @dev Descriptions are round snapshots; lifecycle and punishment fields show current facts.
     function verifierApplicationsByRound(
         address tokenAddress,
         uint256 actionId,
@@ -235,12 +239,6 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 round,
         uint256[] calldata verifierIds
     ) external view returns (uint256[] memory voteAmounts);
-
-    function topVerifiers(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts, bool[] memory punished);
 
     function applicationVoters(
         address tokenAddress,

@@ -351,8 +351,8 @@ contract MockGroupServiceGroupActionExecutor {
     // tokenAddress => actionId => round => the action's own reward; zero means "equal to the group
     // scores it is split by", which keeps the default ledger self-consistent
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _actionReward;
-    // tokenAddress => actionId => round => locked verifier memberId
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _lockedVerifierId;
+    // tokenAddress => actionId => round => elected verifier memberId
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _verifierId;
     // tokenAddress => total staked
     mapping(address => mapping(uint256 => uint256)) internal _totalStaked;
     // tokenAddress => memberId => total staked
@@ -417,8 +417,8 @@ contract MockGroupServiceGroupActionExecutor {
         _groupSliceReadsBlocked = blocked;
     }
 
-    function setLockedVerifierId(address tokenAddress, uint256 actionId, uint256 round, uint256 verifierId) external {
-        _lockedVerifierId[tokenAddress][actionId][round] = verifierId;
+    function setVerifierId(address tokenAddress, uint256 actionId, uint256 round, uint256 verifierId) external {
+        _verifierId[tokenAddress][actionId][round] = verifierId;
     }
 
     function setTotalStaked(address tokenAddress, uint256 round, uint256 amount) external {
@@ -443,7 +443,8 @@ contract MockGroupServiceGroupActionExecutor {
             applicationId = 0;
         }
         application = VerifierApplication({
-            applicationId: applicationId, verifierId: applicationId == 0 ? 0 : memberId, description: "", punished: false, punishedForRound: 0
+            applicationId: applicationId, verifierId: applicationId == 0 ? 0 : memberId, description: "",
+            stoppedRound: 0, withdrawnRound: 0, pendingRound: 0, punishmentAmount: 0, failedRounds: new uint256[](0)
         });
     }
 
@@ -517,8 +518,8 @@ contract MockGroupServiceGroupActionExecutor {
         return Math.mulDiv(actionReward, score, totalScore);
     }
 
-    function lockedVerifierId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
-        return _lockedVerifierId[tokenAddress][actionId][round];
+    function verifier(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256, uint256, uint256) {
+        return (_verifierId[tokenAddress][actionId][round], 0, 0);
     }
 
     function totalActivationStakeByRound(address tokenAddress, uint256 round) external view returns (uint256) {

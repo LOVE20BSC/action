@@ -15,8 +15,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(executor.maxJoinAmountRatio(address(token), ACTION_ID) == PRECISION, "ratio stored");
         require(executor.activationMinGovRatio(address(token), ACTION_ID) == 0, "min gov ratio stored");
         require(executor.requiredVerifierStake(address(token), ACTION_ID) == VERIFIER_STAKE, "verifier stake stored");
-        uint256[] memory splits = executor.SPLITS();
-        require(splits.length == 1 && splits[0] == 5e17, "splits stored");
 
         _atPhase(3);
         require(executor.currentJoinRound() == 2, "join round derived from stake phase");
@@ -30,7 +28,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _submitScores(_scores(100, 60));
 
         require(executor.isRoundVerified(address(token), ACTION_ID, 2), "round verified");
-        require(executor.lockedVerifierId(address(token), ACTION_ID, 2) == VERIFIER_ID, "verifier locked");
+        (uint256 verifierId,,) = executor.verifier(address(token), ACTION_ID, 2);
+        require(verifierId == VERIFIER_ID, "elected verifier");
         require(executor.verifiedMemberCount(address(token), ACTION_ID, 2, GROUP_ID) == 2, "cursor complete");
 
         uint256 memberFinal1 = 100e18 * 100;
@@ -262,9 +261,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
 
         GroupActionExecutor fresh;
         {
-            uint256[] memory splits = new uint256[](1);
-            splits[0] = 5e17;
-            fresh = new GroupActionExecutor(address(actionTarget), splits);
+            fresh = new GroupActionExecutor(address(actionTarget));
         }
 
         phase.setCurrentPhase(0);
@@ -366,12 +363,10 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
         _castVotesForAt(VERIFIER_ID, 100e18, 5);
 
-        (uint256[] memory rankedIds, uint256[] memory rankedVotes,) =
-            executor.topVerifiers(address(token), ACTION_ID, 5);
-        require(rankedIds.length == 1 && rankedIds[0] == VERIFIER_ID, "round 5 ranking");
-        require(rankedVotes[0] == 100e18, "round 5 tally");
-        (uint256[] memory creationIds, ,) = executor.topVerifiers(address(token), ACTION_ID, CREATION_PHASE);
-        require(creationIds.length == 0, "the creation round keeps its own ranking");
+        (uint256 round5Verifier,, uint256 round5Votes) = executor.verifier(address(token), ACTION_ID, 5);
+        require(round5Verifier == VERIFIER_ID && round5Votes == 100e18, "round 5 election");
+        (uint256 creationVerifier,,) = executor.verifier(address(token), ACTION_ID, CREATION_PHASE);
+        require(creationVerifier == 0, "creation round has no votes");
 
         _atPhase(6);
         _fundJoinTokenFor(MEMBER1, 100e18);
@@ -384,7 +379,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _atPhase(7);
         _submitScores(_scores(100));
         require(executor.isRoundVerified(address(token), ACTION_ID, 5), "round 5 verified");
-        require(executor.lockedVerifierId(address(token), ACTION_ID, 5) == VERIFIER_ID, "round 5 verifier");
+        (uint256 verifierId,,) = executor.verifier(address(token), ACTION_ID, 5);
+        require(verifierId == VERIFIER_ID, "round 5 verifier");
 
         _atPhase(8);
         _fundExecutor(PROPOSAL_REWARD);

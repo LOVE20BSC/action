@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Step 3: source verification. Self-contained: loads network.params, verifier.params, action.params,
+# Step 3: source verification. Self-contained: loads network.params, verifier.params,
 # addresses.core.params (for ActionTarget's mint constructor argument) and the addresses.action.params
 # written by the last deployment, without relying on the entrypoint to refresh addresses afterwards.
 # Usage: script/deploy/31_verify.sh <network>
@@ -22,8 +22,8 @@ if [ ! -d "$NETWORK_DIR" ]; then
 fi
 
 # Constructor arguments come from addresses.core.params (ActionTarget's mint), addresses.action.params
-# (ActionTarget, GroupActionExecutor) and action.params (splits).
-for config in network.params action.params addresses.core.params addresses.action.params; do
+# (ActionTarget, GroupActionExecutor) for executor bindings.
+for config in network.params addresses.core.params addresses.action.params; do
     if [ ! -f "$NETWORK_DIR/$config" ]; then
         echo "Error: Missing required configuration: $NETWORK_DIR/$config"
         exit 1
@@ -34,19 +34,13 @@ if [ ! -f "$VERIFIER_PARAMS" ]; then
     exit 1
 fi
 
-# Parameters come from files only: clear every key the files define, so a value exported by the
-# caller cannot override a file value. GROUP_ACTION_SPLITS is the one key whose absence would change
-# behaviour silently (an empty value is legal and means "no tiers"), so its presence is asserted
-# against the file itself, never against the variable - an inherited value could satisfy that.
-params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
-
+# Parameters come from files only; inherited values must not override the configuration.
 params_unset_all "$NETWORK_DIR/network.params" "$VERIFIER_PARAMS" \
-    "$NETWORK_DIR/action.params" "$NETWORK_DIR/addresses.core.params" \
+    "$NETWORK_DIR/addresses.core.params" \
     "$NETWORK_DIR/addresses.action.params"
 
 params_load "$NETWORK_DIR/network.params"
 params_load "$VERIFIER_PARAMS"
-params_load "$NETWORK_DIR/action.params"
 params_load "$NETWORK_DIR/addresses.core.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 
@@ -126,8 +120,8 @@ if ! LP_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
     echo "Error: Failed to encode LpExecutor constructor arguments"
     exit 1
 fi
-if ! GROUP_ACTION_EXECUTOR_ARGS=$(cast abi-encode "constructor(address,uint256[])" \
-    "$ACTION_TARGET_ADDRESS" "[${GROUP_ACTION_SPLITS:-}]"); then
+if ! GROUP_ACTION_EXECUTOR_ARGS=$(cast abi-encode "constructor(address)" \
+    "$ACTION_TARGET_ADDRESS"); then
     echo "Error: Failed to encode GroupActionExecutor constructor arguments"
     exit 1
 fi

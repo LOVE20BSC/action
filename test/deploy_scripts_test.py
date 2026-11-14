@@ -21,7 +21,7 @@ def fake_tool(tool, args):
     data = json.loads(Path(os.environ["MOCK_DATA"]).read_text())
     with Path(os.environ["MOCK_LOG"]).open("a") as log:
         log.write(json.dumps([tool, *args] + [f"env:{k}={os.environ.get(k)}" for k in
-                                              ("MINT_ADDRESS", "STAKE_ADDRESS", "GROUP_ACTION_SPLITS")]) + "\n")
+                                              ("MINT_ADDRESS", "STAKE_ADDRESS")]) + "\n")
     if tool == "osascript":
         print("test-password")
     elif tool == "cast":
@@ -42,11 +42,8 @@ def fake_tool(tool, args):
                         code = code[:position] + "99" + code[position + 2:]
                 print(code)
         elif args[0] == "call":
-            if args[2] == "SPLITS()(uint256[])" and os.environ.get("MOCK_EMPTY_SPLITS"):
-                print("[]")
-            else:
-                key = args[1].lower() + "/" + args[2]
-                print(os.environ.get("BAD_VALUE", "ERROR") if key == os.environ.get("BAD_CALL") else data["calls"][key])
+            key = args[1].lower() + "/" + args[2]
+            print(os.environ.get("BAD_VALUE", "ERROR") if key == os.environ.get("BAD_CALL") else data["calls"][key])
         elif args[0] == "abi-encode":
             if os.environ.get("ABI_ENCODE_FAIL") == args[1]:
                 return 1
@@ -130,7 +127,7 @@ PARAMS_SH_SHA256 = "b3a8f64dc87d9e823a364de92e3bc79144d246f1c1a861cdcf95616042b8
 CONSTRUCTOR_SLOTS = {
     "ActionTarget": ["MINT_ADDRESS"],
     "LpExecutor": ["ACTION_TARGET_ADDRESS"],
-    "GroupActionExecutor": ["ACTION_TARGET_ADDRESS", "GROUP_ACTION_SPLITS"],
+    "GroupActionExecutor": ["ACTION_TARGET_ADDRESS"],
     "GroupServiceExecutor": ["GROUP_ACTION_EXECUTOR_ADDRESS"],
 }
 
@@ -193,7 +190,8 @@ def verify_constructor_arguments(repo: Path, contract: str, log: list, env: dict
                 if call[2] == signature and [value for value in call[3:] if not value.startswith("env:")] == expected]
     assert matching, (contract, "no cast abi-encode call matches the compiled signature and expected slots",
                       signature, expected, [call[2:] for call in encoded])
-    assert len(matching) == 1, (contract, matching)
+    expected_count = sum(slots == keys for slots in CONSTRUCTOR_SLOTS.values())
+    assert len(matching) == expected_count, (contract, matching)
 
 
 def params_shared_copy() -> None:
@@ -358,8 +356,7 @@ def main():
                     "VOTE_ADDRESS": "0x" + "12" * 20, "SUBMIT_ADDRESS": "0x" + "34" * 20,
                     "MEMBER_NFT_ADDRESS": "0x" + "56" * 20, "PHASE_ADDRESS": "0x" + "78" * 20,
                     "LAUNCH_ADDRESS": "0x" + "9a" * 20,
-                    "PAIR_FACTORY_ADDRESS": "0x" + "9b" * 20,
-                    "GROUP_ACTION_SPLITS": "100000000000000000,400000000000000000,700000000000000000"})
+                    "PAIR_FACTORY_ADDRESS": "0x" + "9b" * 20})
         calls = {}
 
         def getters(contract, fields):
@@ -381,9 +378,6 @@ def main():
             "MINT_ADDRESS()(address)": "MINT_ADDRESS",
             "GROUP_ACTION_EXECUTOR_ADDRESS()(address)": "GROUP_ACTION_EXECUTOR_ADDRESS"
         })
-        # cast 的数组返回逐元素带科学计数法标注；21_check.sh 的 strip_sci_notation 会归一化。
-        getters("GROUP_ACTION_EXECUTOR", {"SPLITS()(uint256[])":
-                "[100000000000000000 [1e17], 400000000000000000 [4e17], 700000000000000000 [7e17]]"})
         getters("STAKE", {"MEMBER_NFT_ADDRESS()(address)": "MEMBER_NFT_ADDRESS",
                 "PHASE_ADDRESS()(address)": "PHASE_ADDRESS",
                 "VOTE_ADDRESS()(address)": "VOTE_ADDRESS",
@@ -444,8 +438,6 @@ def main():
         core_names = ["LOVE20_TOKEN", "MEMBER_NFT", "PHASE", "LAUNCH", "MINT", "STAKE", "SUBMIT", "VOTE"]
         network.joinpath("addresses.core.params").write_text("\n".join(
             name + "_ADDRESS=" + env[name + "_ADDRESS"] for name in core_names) + "\n")
-        network.joinpath("action.params").write_text(
-            "GROUP_ACTION_SPLITS=" + env["GROUP_ACTION_SPLITS"] + "\n")
         saved = network / "addresses.action.params"
         all_fields = [name + "_ADDRESS" for name in names] + [lib["field"] for lib in libraries]
 
@@ -584,17 +576,6 @@ def main():
                         MUTATE=f"{env['GROUP_ACTION_EXECUTOR_ADDRESS']}:150")
         assert "GroupActionExecutor runtime does not match" in result.stdout + result.stderr, \
             result.stdout + result.stderr
-        # 空数组表示不分层：链上 SPLITS 也应为空时通过。
-        params_path = network / "action.params"
-        params_text = params_path.read_text()
-        params_path.write_text("GROUP_ACTION_SPLITS=\n")
-        run("21_check.sh", args=("test",), MOCK_EMPTY_SPLITS="1")
-        # 键缺失不能被调用方注入的同名变量顶替：键存在性只看文件。
-        params_path.write_text("")
-        result, _ = run("21_check.sh", False, ("test",), GROUP_ACTION_SPLITS=env["GROUP_ACTION_SPLITS"])
-        assert "GROUP_ACTION_SPLITS must be set" in result.stdout + result.stderr, \
-            result.stdout + result.stderr
-        params_path.write_text(params_text)
         for contract, signature in [("ACTION_TARGET", "MINT_ADDRESS()(address)"), ("ACTION_TARGET", "VOTE_ADDRESS()(address)"),
                 ("ACTION_TARGET", "SUBMIT_ADDRESS()(address)"), ("ACTION_TARGET", "MEMBER_NFT_ADDRESS()(address)"),
                 ("ACTION_TARGET", "PHASE_ADDRESS()(address)"), ("LP_EXECUTOR", "ACTION_TARGET_ADDRESS()(address)"),
@@ -603,8 +584,7 @@ def main():
                 ("GROUP_SERVICE_EXECUTOR", "LAUNCH_ADDRESS()(address)"),
                 ("GROUP_SERVICE_EXECUTOR", "MINT_ADDRESS()(address)"),
                 ("STAKE", "MEMBER_NFT_ADDRESS()(address)"),
-                ("LAUNCH", "PAIR_FACTORY_ADDRESS()(address)"),
-                ("GROUP_ACTION_EXECUTOR", "SPLITS()(uint256[])")]:
+                ("LAUNCH", "PAIR_FACTORY_ADDRESS()(address)")]:
             wrong_value = "0x" + "98" * 20 if signature.endswith("(address)") else "false" if signature.endswith("(bool)") else "[999]"
             run("21_check.sh", False, ("test",), BAD_CALL=env[contract + "_ADDRESS"].lower() + "/" + signature, BAD_VALUE=wrong_value)
         # 地址无代码时每个对象只计一次失败（4 合约 + 4 库 + Stake 派生源 3 = 11），
@@ -657,8 +637,7 @@ def main():
         assert "PASSWORD_SHA=" + hashlib.sha256(b"test-password").hexdigest() in result.stdout + result.stderr, \
             result.stdout + result.stderr
         assert len([call for call in log if call[0] == "osascript"]) == 1, log
-        # splits 以 --sig "run(uint256[])" 传入；环境里不串用调用方传入的依赖地址。
-        assert "[100000000000000000,400000000000000000,700000000000000000]" in command, command
+        assert command[command.index("--sig") + 1] == "run()", command
         assert "env:MINT_ADDRESS=" + env["MINT_ADDRESS"] in command, command
         assert "env:STAKE_ADDRESS=" + env["STAKE_ADDRESS"] in command, command
         assert all(field + "=" + env[field] in saved.read_text() for field in all_fields), saved.read_text()
@@ -772,11 +751,8 @@ def main():
         _, log = run("31_verify.sh", args=("test",))
         assert_verify_plan(log)
         # ActionTarget 与三个 Executor 的构造参数必须回填，且逐槽与 CONSTRUCTOR_SLOTS 对齐；
-        # GroupActionExecutor 的 splits 以数组字面量编码。
         encoder_calls = [call for call in log if call[:2] == ["cast", "abi-encode"]]
         assert len(encoder_calls) == 4, encoder_calls
-        splits_call = next(call for call in encoder_calls if "uint256[]" in call[2])
-        assert "[" + env["GROUP_ACTION_SPLITS"] + "]" in splits_call, splits_call
         for contract in CONSTRUCTOR_SLOTS:
             verify_constructor_arguments(action, contract, log, env)
         by_source = verifies_by_source(log)
@@ -784,16 +760,11 @@ def main():
                        "src/GroupActionExecutor.sol:GroupActionExecutor",
                        "src/GroupServiceExecutor.sol:GroupServiceExecutor"):
             assert by_source[source][by_source[source].index("--constructor-args") + 1] == "0x1234", by_source[source]
-        # ActionTarget、LpExecutor、GroupServiceExecutor 共用 constructor(address) 签名：
-        # 同签名失败会在第一次编码（ActionTarget）处中止，因此先证明三次编码确实共用该签名，
-        # 再用入参地址分别验证三个合约各自的失败路径。
+        # 四个合约都使用 constructor(address)；同签名失败在首次编码处中止。
         ctor_address_calls = [call for call in encoder_calls if call[2] == "constructor(address)"]
-        assert len(ctor_address_calls) == 3, ctor_address_calls
+        assert len(ctor_address_calls) == 4, ctor_address_calls
         result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL="constructor(address)")
         assert "Failed to encode ActionTarget constructor arguments" in result.stdout, result.stdout
-        assert not any(call[0] == "forge" for call in log)
-        result, log = run("31_verify.sh", False, ("test",), ABI_ENCODE_FAIL="constructor(address,uint256[])")
-        assert "Failed to encode GroupActionExecutor constructor arguments" in result.stdout, result.stdout
         assert not any(call[0] == "forge" for call in log)
         for arg_key, label in [("MINT_ADDRESS", "ActionTarget"), ("ACTION_TARGET_ADDRESS", "LpExecutor"),
                                ("GROUP_ACTION_EXECUTOR_ADDRESS", "GroupServiceExecutor")]:

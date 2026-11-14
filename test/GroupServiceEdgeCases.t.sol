@@ -155,7 +155,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _joinService(VERIFIER_ID);
         groupAction.setGroupIds(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID));
         groupAction.setGroupReward(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, GROUP_ID, GROUP_REWARD);
-        groupAction.setLockedVerifierId(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+        groupAction.setVerifierId(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(VERIFY_PHASE);
 
@@ -267,7 +267,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         groupAction.setGroupIds(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, _ids(GROUP_ID, GROUP_OWNER_B_ID));
         groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_ID, 40e18);
         groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_OWNER_B_ID, 0);
-        groupAction.setLockedVerifierId(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, 0);
+        groupAction.setVerifierId(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, 0);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 

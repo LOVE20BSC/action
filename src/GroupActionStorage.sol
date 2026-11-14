@@ -38,8 +38,6 @@ library GroupActionStorage {
     }
 
     struct Layout {
-        uint256[] SPLITS;
-
         // tokenAddress => actionId => join token address
         mapping(address => mapping(uint256 => address)) joinTokenAddressByActionId;
         // tokenAddress => actionId => fixed activation stake required per group
@@ -134,34 +132,32 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) finalScoreByGroupId;
         // tokenAddress => actionId => round => total final score across groups
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) totalFinalScore;
-        // tokenAddress => actionId => round => locked verifier member id (0 = none)
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) lockedVerifierId;
         // tokenAddress => actionId => latest application id
         mapping(address => mapping(uint256 => uint256)) applicationIdCount;
         // tokenAddress => actionId => applicationId => the verifier holding it
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationVerifierId;
-        // tokenAddress => actionId => applicationId => application description
-        mapping(address => mapping(uint256 => mapping(uint256 => string))) applicationDescription;
-        // Load-bearing: every per-round lookup resolves through this history, because a round's rank
-        // holds that round's application id. Reading `currentApplicationId` instead answers a later
-        // round's application and silently rejects whoever replaced or cancelled after the vote round.
+        // tokenAddress => actionId => applicationId => description history; edits take effect next round
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryString.History))) applicationDescription;
         // tokenAddress => actionId => verifierId => application id history by round
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) applicationIdHistory;
         // tokenAddress => actionId => round => applicationId => votes cast in that round
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) voteAmountByApplicationId;
         // tokenAddress => actionId => verifierId => current application id (0 = none)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) currentApplicationId;
-        // tokenAddress => actionId => active application ids history by round
+        // tokenAddress => actionId => unwithdrawn application ids history by round
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) activeApplicationIds;
-        // tokenAddress => actionId => round => ranked application ids (votes desc, applicationId asc)
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) rankedApplicationIds;
-
-        // tokenAddress => actionId => applicationId => voting round causing punishment (0 = not punished)
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) punishedForRoundByApplicationId;
-        // tokenAddress => actionId => verifierId => current verifier stake shared across applications
+        // tokenAddress => actionId => round => leading application id; final after voting closes
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) electedApplicationId;
+        // tokenAddress => actionId => applicationId => ordered elected rounds; current-round entry is provisional
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) electedRoundsByApplicationId;
+        // tokenAddress => actionId => applicationId => round in which accepting votes stopped (0 = accepting)
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationStoppedRound;
+        // tokenAddress => actionId => applicationId => withdrawal round (0 = not withdrawn)
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationWithdrawnRound;
+        // tokenAddress => actionId => round => applications with votes withdrawn during that round
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) withdrawnVotedApplicationIds;
+        // tokenAddress => actionId => verifierId => collateral of the current unwithdrawn application
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierStakeByVerifierId;
-        // tokenAddress => actionId => voted rounds awaiting overdue verification checks
-        mapping(address => mapping(uint256 => Uint256Set.Storage)) pendingVerificationRounds;
 
         // tokenAddress => total activation stake history by round
         mapping(address => RoundHistoryUint256.History) totalActivationStakeHistory;

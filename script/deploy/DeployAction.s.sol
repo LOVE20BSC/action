@@ -7,7 +7,6 @@ import {ActionTarget} from "../../src/ActionTarget.sol";
 import {LpExecutor} from "../../src/LpExecutor.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
-import {GroupActionStorage} from "../../src/GroupActionStorage.sol";
 import {IActionTarget} from "../../src/interfaces/IActionTarget.sol";
 import {ILaunch} from "@core/interfaces/ILaunch.sol";
 import {IMint} from "@core/interfaces/IMint.sol";
@@ -31,22 +30,21 @@ contract DeployAction is Script {
         address expectedPhase;
         address expectedVote;
         address expectedSubmit;
-        uint256[] splits;
     }
 
-    function run(uint256[] memory groupActionSplits) external returns (DeploymentAddresses memory addrs) {
-        ActionConfig memory config = _loadConfig(groupActionSplits);
+    function run() external returns (DeploymentAddresses memory addrs) {
+        ActionConfig memory config = _loadConfig();
         _validateConfig(config);
 
         vm.startBroadcast();
-        addrs = _deployContracts(config.mint, config.splits);
+        addrs = _deployContracts(config.mint);
         vm.stopBroadcast();
 
-        _validateDeployment(config.mint, config.stake, config.splits, addrs);
+        _validateDeployment(config.mint, config.stake, addrs);
         _logDeploymentSummary(addrs);
     }
 
-    function _loadConfig(uint256[] memory groupActionSplits) internal view returns (ActionConfig memory config) {
+    function _loadConfig() internal view returns (ActionConfig memory config) {
         config.chainId = vm.envUint("CHAIN_ID");
         config.mint = vm.envAddress("MINT_ADDRESS");
         config.stake = vm.envAddress("STAKE_ADDRESS");
@@ -54,7 +52,6 @@ contract DeployAction is Script {
         config.expectedPhase = vm.envAddress("PHASE_ADDRESS");
         config.expectedVote = vm.envAddress("VOTE_ADDRESS");
         config.expectedSubmit = vm.envAddress("SUBMIT_ADDRESS");
-        config.splits = groupActionSplits;
     }
 
     function _validateConfig(ActionConfig memory config) internal view {
@@ -116,19 +113,10 @@ contract DeployAction is Script {
         require(ISubmit(submit).MEMBER_NFT_ADDRESS() == memberNFT, "Submit memberNFTAddress mismatch");
         require(ISubmit(submit).PHASE_ADDRESS() == phase, "Submit phaseAddress mismatch");
 
-        uint256 previous = 0;
-        for (uint256 i = 0; i < config.splits.length; i++) {
-            // forge-lint: disable-next-item(require-revert-in-loop)
-            require(
-                config.splits[i] != 0 && config.splits[i] < GroupActionStorage.PRECISION
-                    && config.splits[i] > previous,
-                "Invalid GroupAction splits"
-            );
-            previous = config.splits[i];
-        }
+
     }
 
-    function _deployContracts(address mint, uint256[] memory groupActionSplits)
+    function _deployContracts(address mint)
         internal
         returns (DeploymentAddresses memory addrs)
     {
@@ -138,7 +126,7 @@ contract DeployAction is Script {
         addrs.lpExecutor = address(new LpExecutor(addrs.actionTarget));
         console2.log("LpExecutor deployed at:", addrs.lpExecutor);
 
-        addrs.groupActionExecutor = address(new GroupActionExecutor(addrs.actionTarget, groupActionSplits));
+        addrs.groupActionExecutor = address(new GroupActionExecutor(addrs.actionTarget));
         console2.log("GroupActionExecutor deployed at:", addrs.groupActionExecutor);
 
         addrs.groupServiceExecutor = address(new GroupServiceExecutor(addrs.groupActionExecutor));
@@ -148,7 +136,6 @@ contract DeployAction is Script {
     function _validateDeployment(
         address mintAddress,
         address stakeAddress,
-        uint256[] memory expectedSplits,
         DeploymentAddresses memory addrs
     ) internal view {
         IMint mint = IMint(mintAddress);
@@ -180,13 +167,6 @@ contract DeployAction is Script {
             "GroupActionExecutor member NFT mismatch"
         );
         require(groupActionExecutor.PHASE_ADDRESS() == mint.PHASE_ADDRESS(), "GroupActionExecutor phase mismatch");
-        uint256[] memory splits = groupActionExecutor.SPLITS();
-        require(splits.length == expectedSplits.length, "GroupActionExecutor splits length mismatch");
-        for (uint256 i = 0; i < splits.length; i++) {
-            // forge-lint: disable-next-item(require-revert-in-loop)
-            require(splits[i] == expectedSplits[i], "GroupActionExecutor split mismatch");
-        }
-
         GroupServiceExecutor groupServiceExecutor = GroupServiceExecutor(addrs.groupServiceExecutor);
         require(
             groupServiceExecutor.ACTION_TARGET_ADDRESS() == addrs.actionTarget,

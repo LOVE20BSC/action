@@ -49,7 +49,7 @@ contract GroupActionEventsTest is
         require(maxJoinAmountRatio == PRECISION, "max join ratio");
         require(activationMinGovRatio == 0, "activation min gov ratio");
         require(verifierStakeAmount == VERIFIER_STAKE, "verifier stake");
-        require(verifierPunishmentRatio == PRECISION, "verifier punishment ratio");
+        require(verifierPunishmentRatio == 9e17, "verifier punishment ratio");
         require(keys.length == 0 && descriptions.length == 0, "empty schema");
     }
 
@@ -68,7 +68,7 @@ contract GroupActionEventsTest is
             maxJoinAmountRatio: PRECISION,
             activationMinGovRatio: 0,
             verifierStakeAmount: VERIFIER_STAKE,
-            verifierPunishmentRatio: PRECISION,
+            verifierPunishmentRatio: 9e17,
             verificationKeys: keys,
             verificationDescriptions: descriptions
         });
@@ -508,13 +508,6 @@ contract GroupActionEventsTest is
         uint256[] memory scores = _scores(100, 60);
         uint256 expectedTotal = 100e18 * 100 + PROVIDER_QUOTA * 60;
         vm.expectEmit(true, true, true, true, address(executor));
-        emit VerifierLocked({
-            tokenAddress: address(token),
-            actionId: ACTION_ID,
-            verifierId: VERIFIER_ID,
-            round: 2
-        });
-        vm.expectEmit(true, true, true, true, address(executor));
         emit OriginScoresSubmitted({
             tokenAddress: address(token),
             actionId: ACTION_ID,
@@ -655,22 +648,12 @@ contract GroupActionEventsTest is
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
     }
 
-    function testVerifierApplicationReplacementCarriesThePreviousId() external {
+    function testVerifierDescriptionUpdateCarriesItsEffectiveRound() external {
         _submitApplication();
-
         vm.expectEmit(true, true, true, true, address(executor));
-        emit VerifierApplicationSubmitted({
-            tokenAddress: address(token),
-            actionId: ACTION_ID,
-            verifierId: VERIFIER_ID,
-            round: 2,
-            applicationId: 2,
-            previousApplicationId: 1,
-            hasPreviousApplication: true,
-            description: "replaced"
-        });
+        emit VerifierApplicationDescriptionUpdated(address(token), ACTION_ID, 1, 3, "updated");
         vm.prank(VERIFIER);
-        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "updated");
     }
 
     function testVerifierStakeEventsFireOncePerPayment() external {
@@ -696,7 +679,7 @@ contract GroupActionEventsTest is
                 submissions++;
             }
         }
-        require(deposits == 1 && submissions == 2, "stake paid once across replacement");
+        require(deposits == 1 && submissions == 1, "editing does not submit or deposit again");
 
         vm.recordLogs();
         vm.prank(VERIFIER);
@@ -777,7 +760,7 @@ contract GroupActionEventsTest is
             maxJoinAmountRatio: PRECISION,
             activationMinGovRatio: 0,
             verifierStakeAmount: VERIFIER_STAKE,
-            verifierPunishmentRatio: PRECISION,
+            verifierPunishmentRatio: 9e17,
             verificationKeys: keys,
             verificationDescriptions: descriptions
         });

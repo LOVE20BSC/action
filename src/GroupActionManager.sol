@@ -110,7 +110,7 @@ library GroupActionManager {
         if (activationMinGovRatio > GroupActionStorage.PRECISION) {
             revert IGroupActionExecutorErrors.InvalidActivationMinGovRatio(activationMinGovRatio);
         }
-        if (verifierPunishmentRatio > GroupActionStorage.PRECISION) {
+        if (verifierPunishmentRatio == 0 || verifierPunishmentRatio >= GroupActionStorage.PRECISION) {
             revert IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio(verifierPunishmentRatio);
         }
 

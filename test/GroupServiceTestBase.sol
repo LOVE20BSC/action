@@ -262,7 +262,7 @@ abstract contract GroupServiceTestBase {
         for (uint256 i = 0; i < groupIds.length; i++) {
             groupAction.setGroupReward(address(token), actionId, SERVICE_ROUND, groupIds[i], rewards[i]);
         }
-        groupAction.setLockedVerifierId(address(token), actionId, SERVICE_ROUND, verifierId);
+        groupAction.setVerifierId(address(token), actionId, SERVICE_ROUND, verifierId);
     }
 
     /// @dev Funds the executor with the service reward the way ActionTarget's

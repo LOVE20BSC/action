@@ -27,26 +27,19 @@ rm -f "$NETWORK_DIR/.addresses.action.params."*
 # Required configuration. addresses.core.params holds the addresses already deployed by the
 # dependency (core) and is copied over after that deployment; .account provides the keystore account
 # and password and is mandatory (local chains also sign through the keystore, never --unlocked).
-for config in network.params addresses.core.params action.params .account; do
+for config in network.params addresses.core.params .account; do
     if [ ! -f "$NETWORK_DIR/$config" ]; then
         echo "Error: Missing required configuration: $NETWORK_DIR/$config"
         exit 1
     fi
 done
 
-# Parameters come from files only: clear every key the files define, so a value exported by the
-# caller cannot override a file value. GROUP_ACTION_SPLITS is the one key whose absence would change
-# behaviour silently (an empty value is legal and means "no tiers"), so its presence is asserted
-# against the file itself, never against the variable - an inherited value could satisfy that.
-params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
-
-params_unset_all "$NETWORK_DIR/network.params" "$NETWORK_DIR/addresses.core.params" \
-    "$NETWORK_DIR/action.params"
+# Parameters come from files only; inherited values must not override the configuration.
+params_unset_all "$NETWORK_DIR/network.params" "$NETWORK_DIR/addresses.core.params"
 
 env_password="${KEYSTORE_PASSWORD:-}"
 params_load "$NETWORK_DIR/network.params"
 params_load "$NETWORK_DIR/addresses.core.params"
-params_load "$NETWORK_DIR/action.params"
 # .account is plain-sourced: the password may contain "#" and must not go through parameter expansion.
 set -a
 source "$NETWORK_DIR/.account"
@@ -137,12 +130,8 @@ fi' EXIT
 chmod 600 "$PASSWORD_FILE"
 printf '%s' "$KEYSTORE_PASSWORD" > "$PASSWORD_FILE"
 
-# GroupActionExecutor splits come from action.params as a comma-separated list; empty means an empty
-# array.
-SPLITS_LITERAL="[${GROUP_ACTION_SPLITS:-}]"
-
 # Build the forge script command: keystore signing (same on local chains, never --unlocked).
-FORGE_CMD=(forge script script/deploy/DeployAction.s.sol:DeployAction --sig "run(uint256[])" "$SPLITS_LITERAL" --rpc-url "$RPC_URL" --chain-id "$CHAIN_ID" --account "$KEYSTORE_ACCOUNT" --sender "$ACCOUNT_ADDRESS" --password-file "$PASSWORD_FILE" --broadcast --slow -vvv)
+FORGE_CMD=(forge script script/deploy/DeployAction.s.sol:DeployAction --sig "run()" --rpc-url "$RPC_URL" --chain-id "$CHAIN_ID" --account "$KEYSTORE_ACCOUNT" --sender "$ACCOUNT_ADDRESS" --password-file "$PASSWORD_FILE" --broadcast --slow -vvv)
 
 # Run the deployment.
 cd "$PROJECT_ROOT"

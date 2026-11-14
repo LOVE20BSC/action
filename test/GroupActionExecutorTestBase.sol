@@ -73,9 +73,7 @@ abstract contract GroupActionExecutorTestBase {
 
     function setUp() public virtual {
         _deployMocks();
-        uint256[] memory splits = new uint256[](1);
-        splits[0] = 5e17;
-        executor = new GroupActionExecutor(address(actionTarget), splits);
+        executor = new GroupActionExecutor(address(actionTarget));
         _configurePhase();
         _createAction(ACTION_ID);
         _fundTokenFor(VERIFIER, VERIFIER_STAKE);
@@ -139,7 +137,7 @@ abstract contract GroupActionExecutorTestBase {
         targetData[3] = abi.encode(ratio);
         targetData[4] = abi.encode(minGovRatio);
         targetData[5] = abi.encode(verifierStake);
-        targetData[6] = abi.encode(PRECISION);
+        targetData[6] = abi.encode(uint256(9e17));
     }
 
     function _createAction(uint256 actionId) internal {

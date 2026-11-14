@@ -638,7 +638,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             ownerWeight += GroupServiceStorage.groupReward(
                 GROUP_ACTION_EXECUTOR_ADDRESS, scope.actionTokenAddress, actionId, scope.round, memberId
             );
-            if (_lockedVerifierId(scope.actionTokenAddress, actionId, scope.round) == memberId) {
+            if (_verifierId(scope.actionTokenAddress, actionId, scope.round) == memberId) {
                 verifierWeight += IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionReward(
                     scope.actionTokenAddress, actionId, scope.round
                 );
@@ -679,12 +679,13 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         );
     }
 
-    function _lockedVerifierId(
+    function _verifierId(
         address sourceTokenAddress,
         uint256 actionId,
         uint256 round
     ) internal view returns (uint256) {
-        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).lockedVerifierId(sourceTokenAddress, actionId, round);
+        (uint256 verifierId,,) = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).verifier(sourceTokenAddress, actionId, round);
+        return verifierId;
     }
 
     function _isSettleableRound(

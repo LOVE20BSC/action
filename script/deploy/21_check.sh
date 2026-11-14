@@ -4,7 +4,7 @@ set -euo pipefail
 # Deployment and initialization check: read-only over config and chain state (forge inspect
 # compiles locally and refreshes out/cache, never writes an address file). Loads its own
 # check inputs instead of relying on a preloaded environment: network.params provides RPC and
-# chain ID, addresses.core.params the expected core bindings, action.params the expected splits
+# chain ID and addresses.core.params the expected core bindings
 # and addresses.action.params the deployed addresses to verify.
 # Usage: script/deploy/21_check.sh <network>
 
@@ -32,18 +32,12 @@ if [ ! -f "$NETWORK_DIR/addresses.action.params" ]; then
     exit 1
 fi
 
-# Parameters come from files only: clear every key the files define, so a value exported by the
-# caller cannot override a file value. GROUP_ACTION_SPLITS is the one key whose absence would change
-# behaviour silently (an empty value is legal and means "no tiers"), so its presence is asserted
-# against the file itself, never against the variable - an inherited value could satisfy that.
-params_require_keys "$NETWORK_DIR/action.params" GROUP_ACTION_SPLITS || exit 1
-
+# Parameters come from files only; inherited values must not override the configuration.
 params_unset_all "$NETWORK_DIR/network.params" "$NETWORK_DIR/addresses.core.params" \
-    "$NETWORK_DIR/action.params" "$NETWORK_DIR/addresses.action.params"
+    "$NETWORK_DIR/addresses.action.params"
 
 params_load "$NETWORK_DIR/network.params"
 params_load "$NETWORK_DIR/addresses.core.params"
-params_load "$NETWORK_DIR/action.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 
 # The address file's key set must equal the expected contract/library set: a renamed key would leave
@@ -377,31 +371,6 @@ verify_deployed_and_runtime "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRES
 ACTUAL_TARGET=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "ACTION_TARGET_ADDRESS()(address)" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
 verify_value "actionTarget" "$ACTION_TARGET_ADDRESS" "$ACTUAL_TARGET" || ((FAILED+=1))
 verify_executor_bindings "GroupActionExecutor" "$GROUP_ACTION_EXECUTOR_ADDRESS" "VOTE_ADDRESS:$VOTE_ADDRESS"
-
-# splits are configured comma-separated and cast returns "[a [1e17], b [4e17]]": strip the
-# scientific-notation markers and spaces element by element before comparing (a marker looks like
-# [1e17] and never touches the array's outer brackets).
-strip_sci_notation() {
-    echo "$1" | sed -E 's/\[[0-9.]+e[0-9]+\]//g' | tr -d ' '
-}
-ACTUAL_SPLITS=$(cast call "$GROUP_ACTION_EXECUTOR_ADDRESS" "SPLITS()(uint256[])" --rpc-url "$RPC_URL" 2>/dev/null || echo "ERROR")
-EXPECTED_SPLITS="[${GROUP_ACTION_SPLITS:-}]"
-verify_value "SPLITS" "$(strip_sci_notation "$EXPECTED_SPLITS")" "$(strip_sci_notation "$ACTUAL_SPLITS")" || ((FAILED+=1))
-
-if [ -n "${GROUP_ACTION_SPLITS:-}" ]; then
-    previous=0
-    IFS=',' read -ra split_items <<< "$GROUP_ACTION_SPLITS"
-    for item in "${split_items[@]}"; do
-        item=$(echo "$item" | tr -d ' ')
-        if [[ ! "$item" =~ ^[0-9]+$ ]] || [ "$item" -eq 0 ] \
-            || [ "$item" -ge 1000000000000000000 ] || [ "$item" -le "$previous" ]; then
-            echo -e "  ${RED}✗${NC} GROUP_ACTION_SPLITS must be strictly increasing in (0, 1e18)"
-            ((FAILED+=1))
-            break
-        fi
-        previous=$item
-    done
-fi
 
 # 5. GroupServiceExecutor.
 print_contract_header "5" "GroupServiceExecutor" "$GROUP_SERVICE_EXECUTOR_ADDRESS"

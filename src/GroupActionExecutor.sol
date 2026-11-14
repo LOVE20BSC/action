@@ -14,6 +14,7 @@ import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
 import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
 import {JoinInfo} from "./interfaces/IGroupActionJoin.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
+import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -28,9 +29,8 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     address public immutable override VOTE_ADDRESS;
 
     // forge-lint: disable-next-item(missing-zero-check)
-    constructor(address actionTargetAddress, uint256[] memory splits) ExecutorBase(actionTargetAddress) {
+    constructor(address actionTargetAddress) ExecutorBase(actionTargetAddress) {
         VOTE_ADDRESS = IStake(STAKE_ADDRESS).VOTE_ADDRESS();
-        _layout.SPLITS = splits;
     }
 
     function _protocol() internal view returns (GroupActionStorage.Protocol memory protocol) {
@@ -66,10 +66,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
 
     function verifierPunishmentRatio(address tokenAddress, uint256 actionId) external view returns (uint256) {
         return _layout.verifierPunishmentRatioByActionId[tokenAddress][actionId];
-    }
-
-    function SPLITS() external view returns (uint256[] memory) {
-        return _layout.SPLITS;
     }
 
     function currentVerifyRound() external view returns (uint256) {
@@ -376,8 +372,22 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionVerify.isRoundVerified(_layout, tokenAddress, actionId, round);
     }
 
-    function lockedVerifierId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
-        return GroupActionVerify.lockedVerifierId(_layout, tokenAddress, actionId, round);
+    function verifier(address tokenAddress, uint256 actionId, uint256 round)
+        external view returns (uint256 verifierId, uint256 applicationId, uint256 voteAmount)
+    {
+        return GroupActionVerify.verifier(_layout, tokenAddress, actionId, round);
+    }
+
+    function verifierElectedRounds(
+        address tokenAddress, uint256 actionId, uint256 applicationId, uint256 offset, uint256 limit, bool reverse
+    ) external view returns (uint256[] memory rounds, uint256 totalCount) {
+        return GroupActionVerify.verifierElectedRounds(_layout, tokenAddress, actionId, applicationId,
+            GroupActionVerify.ApplicationPage({round: IPhase(PHASE_ADDRESS).currentPhase(), offset: offset, limit: limit, reverse: reverse}));
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function stopVerifierApplication(address tokenAddress, uint256 actionId, uint256 verifierId) external nonReentrant {
+        GroupActionVerify.stopVerifierApplication(_layout, _protocol(), tokenAddress, actionId, verifierId);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -415,7 +425,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 verifierId
     ) external view returns (VerifierApplication memory application) {
-        return GroupActionVerify.verifierApplication(_layout, tokenAddress, actionId, round, verifierId);
+        return GroupActionVerify.verifierApplication(_layout, _protocol(), tokenAddress, actionId, round, verifierId);
     }
 
     function verifierApplications(
@@ -425,7 +435,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (VerifierApplication[] memory applications, uint256 totalCount) {
-        return GroupActionVerify.verifierApplications(_layout, tokenAddress, actionId, offset, limit, reverse);
+        return GroupActionVerify.verifierApplications(_layout, _protocol(), tokenAddress, actionId, offset, limit, reverse);
     }
 
     function verifierApplicationsByRound(
@@ -438,6 +448,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     ) external view returns (VerifierApplication[] memory applications, uint256[] memory voteAmounts, uint256 totalCount) {
         return GroupActionVerify.verifierApplicationsByRound(
             _layout,
+            _protocol(),
             tokenAddress,
             actionId,
             GroupActionVerify.ApplicationPage({round: round, offset: offset, limit: limit, reverse: reverse})
@@ -451,14 +462,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256[] calldata verifierIds
     ) external view returns (uint256[] memory voteAmounts) {
         return GroupActionVerify.voteAmountsByVerifierIds(_layout, tokenAddress, actionId, round, verifierIds);
-    }
-
-    function topVerifiers(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts, bool[] memory punished) {
-        return GroupActionVerify.topVerifiers(_layout, tokenAddress, actionId, round);
     }
 
     function applicationVoters(

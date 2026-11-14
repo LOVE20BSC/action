@@ -69,8 +69,6 @@ interface IGroupActionExecutor is
 
     function verifierPunishmentRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
 
-    function SPLITS() external view returns (uint256[] memory);
-
     function VOTE_ADDRESS() external view returns (address);
 
     function currentVerifyRound() external view returns (uint256);

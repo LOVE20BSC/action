@@ -9,21 +9,20 @@ contract DeployActionHarness is DeployAction {
         _validateConfig(config);
     }
 
-    function deployForTest(address mint, address stake, uint256[] memory splits)
+    function deployForTest(address mint, address stake)
         external
         returns (DeploymentAddresses memory addrs)
     {
-        addrs = _deployContracts(mint, splits);
-        _validateDeployment(mint, stake, splits, addrs);
+        addrs = _deployContracts(mint);
+        _validateDeployment(mint, stake, addrs);
     }
 
     function validateDeploymentForTest(
         address mint,
         address stake,
-        uint256[] memory splits,
         DeploymentAddresses memory addrs
     ) external view {
-        _validateDeployment(mint, stake, splits, addrs);
+        _validateDeployment(mint, stake, addrs);
     }
 }
 
@@ -265,7 +264,7 @@ contract DeployActionTest is Test {
     function testDeploymentBindingGraph() public {
         DeployAction.ActionConfig memory config = _validConfig();
         DeployAction.DeploymentAddresses memory addrs =
-            deployer.deployForTest(config.mint, config.stake, config.splits);
+            deployer.deployForTest(config.mint, config.stake);
         require(addrs.actionTarget != address(0), "action target deployed");
         require(addrs.lpExecutor != address(0), "lp executor deployed");
         require(addrs.groupActionExecutor != address(0), "group action executor deployed");
@@ -275,7 +274,7 @@ contract DeployActionTest is Test {
     function testRejectsGroupServicePhaseMismatch() public {
         DeployAction.ActionConfig memory config = _validConfig();
         DeployAction.DeploymentAddresses memory addrs =
-            deployer.deployForTest(config.mint, config.stake, config.splits);
+            deployer.deployForTest(config.mint, config.stake);
 
         MockGroupServiceExecutor mismatched = new MockGroupServiceExecutor();
         mismatched.set(
@@ -288,46 +287,7 @@ contract DeployActionTest is Test {
         addrs.groupServiceExecutor = address(mismatched);
 
         vm.expectRevert("GroupServiceExecutor phase mismatch");
-        deployer.validateDeploymentForTest(config.mint, config.stake, config.splits, addrs);
-    }
-
-    function testRejectsZeroSplit() public {
-        DeployAction.ActionConfig memory config = _validConfig();
-        config.splits = new uint256[](1);
-        config.splits[0] = 0;
-        vm.expectRevert("Invalid GroupAction splits");
-        deployer.validateConfigForTest(config);
-    }
-
-    function testRejectsSplitAtPrecision() public {
-        DeployAction.ActionConfig memory config = _validConfig();
-        config.splits = new uint256[](1);
-        config.splits[0] = 1e18;
-        vm.expectRevert("Invalid GroupAction splits");
-        deployer.validateConfigForTest(config);
-    }
-
-    function testRejectsNonIncreasingSplits() public {
-        DeployAction.ActionConfig memory config = _validConfig();
-        config.splits = new uint256[](2);
-        config.splits[0] = 4e17;
-        config.splits[1] = 3e17;
-        vm.expectRevert("Invalid GroupAction splits");
-        deployer.validateConfigForTest(config);
-    }
-
-    function testAcceptsEmptySplits() public view {
-        DeployAction.ActionConfig memory config = _validConfig();
-        config.splits = new uint256[](0);
-        deployer.validateConfigForTest(config);
-    }
-
-    function testDeploymentWithEmptySplits() public {
-        DeployAction.ActionConfig memory config = _validConfig();
-        config.splits = new uint256[](0);
-        DeployAction.DeploymentAddresses memory addrs =
-            deployer.deployForTest(config.mint, config.stake, config.splits);
-        require(addrs.groupActionExecutor != address(0), "group action executor deployed");
+        deployer.validateDeploymentForTest(config.mint, config.stake, addrs);
     }
 
     function testRejectsInvalidChainId() public {
@@ -520,9 +480,6 @@ contract DeployActionTest is Test {
         config.expectedPhase = phase;
         config.expectedVote = vote;
         config.expectedSubmit = submit;
-        config.splits = new uint256[](3);
-        config.splits[0] = 1e17;
-        config.splits[1] = 4e17;
-        config.splits[2] = 7e17;
+
     }
 }

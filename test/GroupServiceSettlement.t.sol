@@ -304,7 +304,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _joinService(VERIFIER_ID);
         groupAction.setGroupIds(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID));
         groupAction.setGroupReward(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, GROUP_ID, GROUP_REWARD);
-        groupAction.setLockedVerifierId(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+        groupAction.setVerifierId(actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
         _armServiceRewardOn(SERVICE_ACTION_ID, SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 

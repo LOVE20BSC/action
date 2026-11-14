@@ -343,7 +343,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         // recipients configured there anyway.
         groupAction.setGroupIds(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, _ids(GROUP_ID));
         groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_ID, 0);
-        groupAction.setLockedVerifierId(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, VERIFIER_ID);
+        groupAction.setVerifierId(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, VERIFIER_ID);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
         _setRecipients(GROUP_ID, GROUP_ACTION_ID_B, _ids(MEMBER2_ID), _ratios(PRECISION / 2));
         _atPhase(MINT_PHASE);
