@@ -354,9 +354,9 @@ contract MockGroupServiceGroupActionExecutor {
     // tokenAddress => actionId => round => locked verifier memberId
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _lockedVerifierId;
     // tokenAddress => total staked
-    mapping(address => uint256) internal _totalStaked;
+    mapping(address => mapping(uint256 => uint256)) internal _totalStaked;
     // tokenAddress => memberId => total staked
-    mapping(address => mapping(uint256 => uint256)) internal _stakedByMemberId;
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _stakedByMemberId;
 
     // tokenAddress => actionId => join token address (zero = action never created)
     mapping(address => mapping(uint256 => address)) internal _joinTokenAddress;
@@ -421,12 +421,12 @@ contract MockGroupServiceGroupActionExecutor {
         _lockedVerifierId[tokenAddress][actionId][round] = verifierId;
     }
 
-    function setTotalStaked(address tokenAddress, uint256 amount) external {
-        _totalStaked[tokenAddress] = amount;
+    function setTotalStaked(address tokenAddress, uint256 round, uint256 amount) external {
+        _totalStaked[tokenAddress][round] = amount;
     }
 
-    function setStakedByMemberId(address tokenAddress, uint256 memberId, uint256 amount) external {
-        _stakedByMemberId[tokenAddress][memberId] = amount;
+    function setStakedByMemberId(address tokenAddress, uint256 round, uint256 memberId, uint256 amount) external {
+        _stakedByMemberId[tokenAddress][round][memberId] = amount;
     }
 
     function hasActiveGroups(address tokenAddress, uint256 memberId) external view returns (bool) {
@@ -521,12 +521,12 @@ contract MockGroupServiceGroupActionExecutor {
         return _lockedVerifierId[tokenAddress][actionId][round];
     }
 
-    function totalStaked(address tokenAddress) external view returns (uint256) {
-        return _totalStaked[tokenAddress];
+    function totalStakedByRound(address tokenAddress, uint256 round) external view returns (uint256) {
+        return _totalStaked[tokenAddress][round];
     }
 
-    function stakedByMemberId(address tokenAddress, uint256 memberId) external view returns (uint256) {
-        return _stakedByMemberId[tokenAddress][memberId];
+    function stakedByMemberIdByRound(address tokenAddress, uint256 round, uint256 memberId) external view returns (uint256) {
+        return _stakedByMemberId[tokenAddress][round][memberId];
     }
 }
 

@@ -197,6 +197,10 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(!executor.isGroupActive(address(token), ACTION_ID, GROUP_ID), "inactive");
         require(executor.staked(address(token), ACTION_ID) == 0, "staked cleared");
         require(executor.totalStaked(address(token)) == 0, "total cleared");
+        require(executor.totalStakedByRound(address(token), 1) == 0, "before activation");
+        require(executor.totalStakedByRound(address(token), 2) == ACTIVATION_STAKE, "join round keeps activation stake");
+        require(executor.stakedByMemberIdByRound(address(token), 2, GROUP_ID) == ACTIVATION_STAKE, "member history retained");
+        require(executor.totalStakedByRound(address(token), 3) == 0, "next join round clears stake");
         require(executor.stakedByMemberId(address(token), GROUP_ID) == 0, "owner cleared");
 
         (uint256[] memory groupIds, uint256 total) = executor.activeGroupIds(address(token), ACTION_ID, 0, 10, false);

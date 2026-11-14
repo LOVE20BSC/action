@@ -5,6 +5,7 @@ import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
+import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
 import {IGroupActionExecutorErrors, IGroupActionExecutorEvents} from "./interfaces/IGroupActionExecutor.sol";
@@ -18,6 +19,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
 library GroupActionManager {
+    using RoundHistoryUint256 for RoundHistoryUint256.History;
     using AddressSet for AddressSet.Storage;
     using GroupActionStorage for GroupActionStorage.Layout;
     using RoundHistoryString for RoundHistoryString.History;
@@ -184,6 +186,8 @@ library GroupActionManager {
         self.stakedByActionId[tokenAddress][actionId] += stakeAmount;
         self.totalStaked[tokenAddress] += stakeAmount;
         self.stakedByMemberId[tokenAddress][groupId] += stakeAmount;
+        self.totalStakedHistory[tokenAddress].record(round - 1, self.totalStaked[tokenAddress]);
+        self.stakedByMemberIdHistory[tokenAddress][groupId].record(round - 1, self.stakedByMemberId[tokenAddress][groupId]);
         self.tokenAddressesByGroupId[groupId].add(tokenAddress);
         self.actionIdsByGroupId[tokenAddress][groupId].add(actionId);
         self.activeActionIds[tokenAddress].add(actionId);
@@ -222,6 +226,8 @@ library GroupActionManager {
         self.stakedByActionId[tokenAddress][actionId] -= stakeAmount;
         self.totalStaked[tokenAddress] -= stakeAmount;
         self.stakedByMemberId[tokenAddress][groupId] -= stakeAmount;
+        self.totalStakedHistory[tokenAddress].record(round - 1, self.totalStaked[tokenAddress]);
+        self.stakedByMemberIdHistory[tokenAddress][groupId].record(round - 1, self.stakedByMemberId[tokenAddress][groupId]);
         self.actionIdsByGroupId[tokenAddress][groupId].remove(actionId);
         if (self.actionIdsByGroupId[tokenAddress][groupId].count() == 0) {
             self.tokenAddressesByGroupId[groupId].remove(tokenAddress);

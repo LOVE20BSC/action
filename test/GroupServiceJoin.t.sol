@@ -266,12 +266,12 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "no snapshot written");
     }
 
-    function testJoinedAmountFamilyProxiesCommunityStake() external {
+    function testJoinedAmountsPreserveHistoricalCommunityStake() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        groupAction.setTotalStaked(address(token), 777e18);
-        groupAction.setStakedByMemberId(address(token), GROUP_ID, 123e18);
+        groupAction.setTotalStaked(address(token), SERVICE_ROUND, 777e18);
+        groupAction.setStakedByMemberId(address(token), SERVICE_ROUND, GROUP_ID, 123e18);
 
         require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 777e18, "action total");
         require(
@@ -286,8 +286,10 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
             "future round member reads zero"
         );
 
-        // The proxy is the live community stake, not a per-round history.
-        groupAction.setTotalStaked(address(token), 888e18);
-        require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 888e18, "live value");
+        _atPhase(VERIFY_PHASE);
+        groupAction.setTotalStaked(address(token), SERVICE_ROUND + 1, 888e18);
+        require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 777e18, "historical total is unchanged");
+        groupAction.setStakedByMemberId(address(token), SERVICE_ROUND + 1, GROUP_ID, 0);
+        require(executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID) == 123e18, "historical member stake is unchanged");
     }
 }

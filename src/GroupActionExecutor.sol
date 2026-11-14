@@ -578,6 +578,14 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionManager.totalStaked(_layout, tokenAddress);
     }
 
+    function totalStakedByRound(address tokenAddress, uint256 round) external view returns (uint256) {
+        return _layout.totalStakedHistory[tokenAddress].value(round);
+    }
+
+    function stakedByMemberIdByRound(address tokenAddress, uint256 round, uint256 memberId) external view returns (uint256) {
+        return _layout.stakedByMemberIdHistory[tokenAddress][memberId].value(round);
+    }
+
     function stakedByMemberId(address tokenAddress, uint256 memberId) external view returns (uint256) {
         return GroupActionManager.stakedByMemberId(_layout, tokenAddress, memberId);
     }
