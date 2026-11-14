@@ -156,8 +156,8 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => ranked application ids (votes desc, applicationId asc)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) rankedApplicationIds;
 
-        // tokenAddress => actionId => applicationId => whether the application has been punished
-        mapping(address => mapping(uint256 => mapping(uint256 => bool))) applicationPunished;
+        // tokenAddress => actionId => applicationId => voting round causing punishment (0 = not punished)
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) punishedForRoundByApplicationId;
         // tokenAddress => actionId => verifierId => current verifier stake shared across applications
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierStakeByVerifierId;
         // tokenAddress => actionId => voted rounds awaiting overdue verification checks

@@ -60,7 +60,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
             executor.verifierApplications(address(token), ACTION_ID, 0, 10, false);
         require(total == 1 && applications[0].applicationId == 3, "active applications");
         application = executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID);
-        require(application.applicationId == 0, "cancelled member has no application");
+        require(application.applicationId == 0 && !application.punished && application.punishedForRound == 0, "cancelled member has no application");
 
         uint256[] memory ids = new uint256[](2);
         ids[0] = VERIFIER_ID;
@@ -571,6 +571,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "refill after settlement");
         require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER_ID).punished, "second historical application punished");
+        require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER_ID).punishedForRound == 3, "empty collateral still records the responsible round");
         require(token.totalSupply() == supply, "already empty collateral is not burned twice");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "expired duties settle before the top-up");
         vm.prank(VERIFIER);
@@ -596,6 +597,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.onProposalVoted(address(token), 6, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
         require(token.totalSupply() == supply - VERIFIER_STAKE, "one application punished only once across rounds");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "shared stake remains refilled");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 2, "later rounds do not overwrite the punishment cause");
         _castVotesForAt(VERIFIER_ID, 1, 6);
     }
 
@@ -626,15 +628,18 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _atPhase(4);
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 4, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
-        require(!executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "verification still open");
+        VerifierApplication memory application = executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID);
+        require(!application.punished && application.punishedForRound == 0, "verification still open");
         _atPhase(5);
         uint256 supply = token.totalSupply();
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
         require(token.totalSupply() == supply - VERIFIER_STAKE, "only application bond burned");
-        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "historical application reports current punishment");
+        application = executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID);
+        require(application.punished && application.punishedForRound == 2, "historical application reports the responsible round");
         (VerifierApplication[] memory applications,) = executor.verifierApplications(address(token), ACTION_ID, 0, 10, false);
         require(applications[0].punished && !applications[1].punished, "list reports each punishment");
+        require(applications[0].punishedForRound == 2 && applications[1].punishedForRound == 0, "list reports each punishment cause");
         (,, bool[] memory punished) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(punished[0], "rank reports current punishment");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == VERIFIER_STAKE, "other application bond untouched");
@@ -647,7 +652,9 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "fresh bond");
-        require(!executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).punished, "new application starts clean");
+        application = executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID);
+        require(!application.punished && application.punishedForRound == 0, "new application starts clean");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 2, "replacement preserves the old punishment cause");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "new application pays again");
         _castVotesForAt(VERIFIER_ID, 1, 5);
     }
@@ -661,6 +668,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         require(token.balanceOf(VERIFIER) == 0, "unfinished duty cannot escape through cancellation");
         require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "partial verification is unfinished");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 2, "cancellation records the responsible round");
     }
 
     function testLaterVoteChecksMissedRoundsAndKeepsOtherBondsSeparate() external {
@@ -677,6 +685,8 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.onProposalVoted(address(token), 9, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
         require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "older round checked");
         require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER2_ID).punished, "later missed round checked");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 2, "older responsibility is not the settlement round");
+        require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER2_ID).punishedForRound == 3, "later responsibility keeps its own round");
         require(token.totalSupply() == supply - 2 * VERIFIER_STAKE, "both own bonds burned");
         require(token.balanceOf(address(executor)) == ACTIVATION_STAKE, "group stake untouched");
     }
@@ -691,6 +701,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
         require(!executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "completed round exempt");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 0, "completed round has no punishment cause");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "bond retained");
     }
 
@@ -701,6 +712,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 8, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
         require(!executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "no verification duty without participants");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 0, "no participants means no punishment cause");
     }
 
     function testVerifierApplicationReplacementKeepsTheBond() external {

@@ -8,6 +8,7 @@ struct VerifierApplication {
     uint256 verifierId;
     string description;
     bool punished;
+    uint256 punishedForRound;
 }
 
 interface IGroupActionVerifyEvents {

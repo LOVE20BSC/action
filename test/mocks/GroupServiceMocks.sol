@@ -443,7 +443,7 @@ contract MockGroupServiceGroupActionExecutor {
             applicationId = 0;
         }
         application = VerifierApplication({
-            applicationId: applicationId, verifierId: applicationId == 0 ? 0 : memberId, description: "", punished: false
+            applicationId: applicationId, verifierId: applicationId == 0 ? 0 : memberId, description: "", punished: false, punishedForRound: 0
         });
     }
 

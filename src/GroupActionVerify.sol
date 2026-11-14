@@ -243,13 +243,15 @@ library GroupActionVerify {
     ) external view returns (VerifierApplication memory application) {
         uint256 applicationId = self.applicationIdHistory[tokenAddress][actionId][verifierId].value(round);
         if (applicationId == 0) {
-            return VerifierApplication({applicationId: 0, verifierId: 0, description: "", punished: false});
+            return VerifierApplication({applicationId: 0, verifierId: 0, description: "", punished: false, punishedForRound: 0});
         }
+        uint256 punishedForRound = self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId];
         return VerifierApplication({
             applicationId: applicationId,
             verifierId: self.applicationVerifierId[tokenAddress][actionId][applicationId],
             description: self.applicationDescription[tokenAddress][actionId][applicationId],
-            punished: self.applicationPunished[tokenAddress][actionId][applicationId]
+            punished: punishedForRound != 0,
+            punishedForRound: punishedForRound
         });
     }
 
@@ -266,11 +268,13 @@ library GroupActionVerify {
         applications = new VerifierApplication[](applicationIds.length);
         for (uint256 i = 0; i < applicationIds.length; i++) {
             uint256 applicationId = applicationIds[i];
+            uint256 punishedForRound = self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId];
             applications[i] = VerifierApplication({
                 applicationId: applicationId,
                 verifierId: self.applicationVerifierId[tokenAddress][actionId][applicationId],
                 description: self.applicationDescription[tokenAddress][actionId][applicationId],
-                punished: self.applicationPunished[tokenAddress][actionId][applicationId]
+                punished: punishedForRound != 0,
+                punishedForRound: punishedForRound
             });
         }
     }
@@ -303,7 +307,7 @@ library GroupActionVerify {
         punished = new bool[](rankedApplicationIds.length);
         for (uint256 i = 0; i < rankedApplicationIds.length; i++) {
             uint256 applicationId = rankedApplicationIds[i];
-            punished[i] = self.applicationPunished[tokenAddress][actionId][applicationId];
+            punished[i] = self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] != 0;
             verifierIds[i] = self.applicationVerifierId[tokenAddress][actionId][applicationId];
             voteAmounts[i] = self.voteAmountByApplicationId[tokenAddress][actionId][round][applicationId];
         }
@@ -410,7 +414,7 @@ library GroupActionVerify {
             revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         }
 
-        if (self.applicationPunished[tokenAddress][actionId][applicationId]) {
+        if (self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] != 0) {
             revert IGroupActionVerifyErrors.ApplicationPunished(applicationId);
         }
         {
@@ -463,8 +467,8 @@ library GroupActionVerify {
             uint256[] storage ranked = self.rankedApplicationIds[tokenAddress][actionId][round];
             if (ranked.length == 0) continue;
             uint256 applicationId = ranked[0];
-            if (self.applicationPunished[tokenAddress][actionId][applicationId]) continue;
-            self.applicationPunished[tokenAddress][actionId][applicationId] = true;
+            if (self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] != 0) continue;
+            self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] = round;
             uint256 verifierId = self.applicationVerifierId[tokenAddress][actionId][applicationId];
             uint256 amount = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
             delete self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
@@ -489,7 +493,7 @@ library GroupActionVerify {
                 || self.roundVerified[tokenAddress][actionId][rounds[i]]) continue;
             uint256 applicationId = ranked[0];
             if (self.applicationVerifierId[tokenAddress][actionId][applicationId] != verifierId
-                || self.applicationPunished[tokenAddress][actionId][applicationId]) continue;
+                || self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] != 0) continue;
             // forge-lint: disable-next-item(require-revert-in-loop)
             revert IGroupActionVerifyErrors.ApplicationStillResponsible(applicationId, rounds[i]);
         }
