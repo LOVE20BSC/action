@@ -64,6 +64,7 @@ interface IGroupActionJoinEvents {
 }
 
 interface IGroupActionJoinErrors {
+    error InexactJoinTokenTransfer(uint256 expected, uint256 received);
     error ZeroParticipationAmount();
     error AlreadyInOtherGroup(
         uint256 memberId,

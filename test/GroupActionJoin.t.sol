@@ -8,6 +8,29 @@ import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.s
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
 contract GroupActionJoinTest is GroupActionExecutorTestBase {
+    function testJoinRejectsTaxedOwnDepositWithoutCreditingTheMember() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(MEMBER1, 100e18);
+        joinToken.setTransferFeeBps(1000);
+        vm.prank(MEMBER1);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InexactJoinTokenTransfer.selector, 100e18, 90e18));
+        executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 100e18, 0, new string[](0));
+        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "no unbacked credit");
+        require(joinToken.balanceOf(MEMBER1) == 100e18, "deposit rolled back");
+    }
+
+    function testQuotaRejectsTaxedDepositWithoutCreditingTheProvider() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(PROVIDER, 100e18);
+        joinToken.setTransferFeeBps(1000);
+        vm.prank(PROVIDER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InexactJoinTokenTransfer.selector, 100e18, 90e18));
+        executor.addProviderQuota(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, _ids(MEMBER1_ID), _ids(100e18));
+        (,,, uint256 total) = executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
+        require(total == 0, "no unbacked quota");
+        require(joinToken.balanceOf(PROVIDER) == 100e18, "deposit rolled back");
+    }
+
     function testJoinChecksOwnerBeforeAmount() external {
         _openJoinPhase();
         vm.prank(MEMBER2);

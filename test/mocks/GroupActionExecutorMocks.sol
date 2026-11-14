@@ -195,6 +195,11 @@ contract MockGroupActionToken {
     mapping(address => uint256) internal _balanceOf;
     mapping(address => mapping(address => uint256)) internal _allowance;
     uint256 internal _totalSupply;
+    uint256 public transferFeeBps;
+
+    function setTransferFeeBps(uint256 feeBps) external {
+        transferFeeBps = feeBps;
+    }
 
     function mint(address to, uint256 amount) external {
         _totalSupply += amount;
@@ -229,8 +234,10 @@ contract MockGroupActionToken {
         if (allowed != type(uint256).max) {
             _allowance[from][msg.sender] = allowed - amount;
         }
+        uint256 fee = amount * transferFeeBps / 10_000;
         _balanceOf[from] -= amount;
-        _balanceOf[to] += amount;
+        _balanceOf[to] += amount - fee;
+        _totalSupply -= fee;
         return true;
     }
 }

@@ -111,7 +111,13 @@ library GroupActionJoin {
         uint256 actionId,
         uint256 amount
     ) internal {
-        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20 joinToken = IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]);
+        uint256 balanceBefore = joinToken.balanceOf(address(this));
+        joinToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = joinToken.balanceOf(address(this)) - balanceBefore;
+        if (received != amount) {
+            revert IGroupActionJoinErrors.InexactJoinTokenTransfer(amount, received);
+        }
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -359,7 +365,7 @@ library GroupActionJoin {
             });
         }
 
-        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransferFrom(msg.sender, address(this), totalAmount);
+        _pullJoinToken(self, tokenAddress, actionId, totalAmount);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
