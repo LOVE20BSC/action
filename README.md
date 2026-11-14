@@ -2,6 +2,8 @@
 
 Action 负责 `ActionTarget`、LP、GroupAction 和 GroupService 四类行动执行合约，依赖 `core`。
 
+完整业务规则、轮次、资金流、验证者履约与处罚、奖励公式见 [Action 设计白皮书](docs/DESIGN_WHITEPAPER.md)。
+
 迁移方式：每个合约先以固定旧提交建立原始快照，再按小步提交改造成 BSC 版本。旧代码来源：`LOVE20TKM/extension`、`LOVE20TKM/extension-group`、`LOVE20TKM/extension-lp`（提交版本见 [repositories.md](https://github.com/LOVE20BSC/matt-gov/blob/main/docs/repositories.md#旧代码基线)）。
 
 ## 依赖
@@ -20,7 +22,7 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 - 仓库骨架与工具链已建立，编译基线为 Solidity `0.8.37`、Foundry `1.8.1`、`evm_version = "osaka"`，不使用 `via_ir`。
 - ActionTarget 与 LP 迁移完成：旧代码基线、改名、BSC 实现与测试均已提交（第 2-4 步）；LP 含真实 core 栈集成测试（`test/integration/LpExecutorRealIntegration.t.sol`）。覆盖率不在 CI 门禁内，需要时用 `forge coverage --ir-minimum` 本地复核（`--ir-minimum` 用于规避默认设置下的 stack too deep）。
 - acceptance.md 的 LP 全周期集成场景（`love20-anvil/scenarios/lp-action-full-cycle.yml`）依赖 BSC 版 `love20-anvil` 仓库，该仓库尚在规划中未创建，属仓库级阻塞项，不影响 LP 四步迁移收口；仓库创建后补跑该场景。
-- GroupAction 已完成旧代码基线、改名、BSC 实现与单元测试（第 1-4 步），测试含事件、边界、fuzz 与 invariant 覆盖；GroupService 已完成旧代码基线、改名、BSC 实现与单元测试，`test/GroupService*.t.sol` 覆盖构造、加入、结算、二次分配、事件与边界，`test/audit/` 另有服务结算与 core 回归。
+- GroupAction 已完成旧代码基线、改名、BSC 实现与单元测试（第 1-4 步），测试含事件、边界、fuzz 与 invariant 覆盖；GroupService 已完成旧代码基线、改名、BSC 实现与单元测试，`test/GroupService*.t.sol` 覆盖构造、加入、结算、二次分配、事件与边界。
 - 自有接口以本仓 `src/interfaces/` 为唯一来源：`matt-gov` 的 `interfaces/` 自迁移后只保留说明（`interfaces/action/` 已迁出），不再存副本；Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
 
 ## 构建与测试
