@@ -151,8 +151,8 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) voteAmountByApplicationId;
         // tokenAddress => actionId => verifierId => current application id (0 = none)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) currentApplicationId;
-        // tokenAddress => actionId => active application ids
-        mapping(address => mapping(uint256 => Uint256Set.Storage)) activeApplicationIds;
+        // tokenAddress => actionId => active application ids history by round
+        mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) activeApplicationIds;
         // tokenAddress => actionId => round => ranked application ids (votes desc, applicationId asc)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) rankedApplicationIds;
 

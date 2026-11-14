@@ -219,6 +219,16 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
             uint256 totalCount
         );
 
+    /// @notice Effective applications and votes at the end of the voting round; punishment fields show their current status.
+    function verifierApplicationsByRound(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (VerifierApplication[] memory applications, uint256[] memory voteAmounts, uint256 totalCount);
+
     function voteAmountsByVerifierIds(
         address tokenAddress,
         uint256 actionId,

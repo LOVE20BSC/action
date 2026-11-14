@@ -428,6 +428,22 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionVerify.verifierApplications(_layout, tokenAddress, actionId, offset, limit, reverse);
     }
 
+    function verifierApplicationsByRound(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (VerifierApplication[] memory applications, uint256[] memory voteAmounts, uint256 totalCount) {
+        return GroupActionVerify.verifierApplicationsByRound(
+            _layout,
+            tokenAddress,
+            actionId,
+            GroupActionVerify.ApplicationPage({round: round, offset: offset, limit: limit, reverse: reverse})
+        );
+    }
+
     function voteAmountsByVerifierIds(
         address tokenAddress,
         uint256 actionId,
