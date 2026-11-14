@@ -9,6 +9,7 @@ import {
     IGroupActionVerifyEvents,
     IGroupActionVerifyErrors
 } from "./interfaces/IGroupActionVerify.sol";
+import {ILOVE20Token} from "@core/interfaces/ILOVE20Token.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
@@ -162,14 +163,21 @@ library GroupActionVerify {
     ) external onlyMemberOwner(self, protocol, verifierId) returns (uint256 applicationId) {
         uint256 round = _checkApplicationSubmission(self, protocol, tokenAddress, actionId, verifierId, description);
 
+        _settleExpiredRounds(self, tokenAddress, actionId, round);
         uint256 previousApplicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
-        applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
-        self.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
-        self.applicationDescription[tokenAddress][actionId][applicationId] = description;
+        _checkApplicationReleased(self, tokenAddress, actionId, previousApplicationId, round);
+        {
+            uint256 previousStake = self.applicationStake[tokenAddress][actionId][previousApplicationId];
+            delete self.applicationStake[tokenAddress][actionId][previousApplicationId];
+            applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
+            self.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
+            self.applicationDescription[tokenAddress][actionId][applicationId] = description;
 
-        uint256 stakeAmount = previousApplicationId == 0 ? self.verifierStakeAmountByActionId[tokenAddress][actionId] : 0;
-        if (stakeAmount != 0) {
-            _depositVerifierStake(tokenAddress, actionId, round, verifierId, stakeAmount);
+            uint256 stakeAmount = self.verifierStakeAmountByActionId[tokenAddress][actionId];
+            self.applicationStake[tokenAddress][actionId][applicationId] = stakeAmount;
+            if (stakeAmount > previousStake) {
+                _depositVerifierStake(tokenAddress, actionId, round, verifierId, stakeAmount - previousStake);
+            }
         }
 
         _emitVerifierApplicationSubmitted(
@@ -191,13 +199,15 @@ library GroupActionVerify {
             revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         }
 
+        _settleExpiredRounds(self, tokenAddress, actionId, round);
+        _checkApplicationReleased(self, tokenAddress, actionId, applicationId, round);
         self.activeApplicationIds[tokenAddress][actionId].remove(applicationId);
         _removeFromRank(self, tokenAddress, actionId, round, applicationId);
         self.currentApplicationId[tokenAddress][actionId][verifierId] = 0;
         self.applicationIdHistory[tokenAddress][actionId][verifierId].record(round, 0);
 
-        // Load-bearing: staked is equivalent to holding a current application.
-        uint256 stakeAmount = self.verifierStakeAmountByActionId[tokenAddress][actionId];
+        uint256 stakeAmount = self.applicationStake[tokenAddress][actionId][applicationId];
+        delete self.applicationStake[tokenAddress][actionId][applicationId];
         if (stakeAmount != 0) {
             IERC20(tokenAddress).safeTransfer(IMemberNFT(protocol.memberNFTAddress).ownerOf(verifierId), stakeAmount);
             emit IGroupActionVerifyEvents.VerifierStakeRefunded({
@@ -227,7 +237,7 @@ library GroupActionVerify {
         if (self.currentApplicationId[tokenAddress][actionId][verifierId] == 0) {
             return 0;
         }
-        return self.verifierStakeAmountByActionId[tokenAddress][actionId];
+        return self.applicationStake[tokenAddress][actionId][self.currentApplicationId[tokenAddress][actionId][verifierId]];
     }
 
     function verifierApplication(
@@ -239,12 +249,13 @@ library GroupActionVerify {
     ) external view returns (VerifierApplication memory application) {
         uint256 applicationId = self.applicationIdHistory[tokenAddress][actionId][verifierId].value(round);
         if (applicationId == 0) {
-            return VerifierApplication({applicationId: 0, verifierId: 0, description: ""});
+            return VerifierApplication({applicationId: 0, verifierId: 0, description: "", punished: false});
         }
         return VerifierApplication({
             applicationId: applicationId,
             verifierId: self.applicationVerifierId[tokenAddress][actionId][applicationId],
-            description: self.applicationDescription[tokenAddress][actionId][applicationId]
+            description: self.applicationDescription[tokenAddress][actionId][applicationId],
+            punished: self.applicationPunished[tokenAddress][actionId][applicationId]
         });
     }
 
@@ -264,7 +275,8 @@ library GroupActionVerify {
             applications[i] = VerifierApplication({
                 applicationId: applicationId,
                 verifierId: self.applicationVerifierId[tokenAddress][actionId][applicationId],
-                description: self.applicationDescription[tokenAddress][actionId][applicationId]
+                description: self.applicationDescription[tokenAddress][actionId][applicationId],
+                punished: self.applicationPunished[tokenAddress][actionId][applicationId]
             });
         }
     }
@@ -290,12 +302,14 @@ library GroupActionVerify {
         address tokenAddress,
         uint256 actionId,
         uint256 round
-    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts) {
+    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts, bool[] memory punished) {
         uint256[] storage rankedApplicationIds = self.rankedApplicationIds[tokenAddress][actionId][round];
         verifierIds = new uint256[](rankedApplicationIds.length);
         voteAmounts = new uint256[](rankedApplicationIds.length);
+        punished = new bool[](rankedApplicationIds.length);
         for (uint256 i = 0; i < rankedApplicationIds.length; i++) {
             uint256 applicationId = rankedApplicationIds[i];
+            punished[i] = self.applicationPunished[tokenAddress][actionId][applicationId];
             verifierIds[i] = self.applicationVerifierId[tokenAddress][actionId][applicationId];
             voteAmounts[i] = self.voteAmountByApplicationId[tokenAddress][actionId][round][applicationId];
         }
@@ -383,6 +397,7 @@ library GroupActionVerify {
         uint256 voteAmount,
         bytes[] calldata targetData
     ) external {
+        _settleExpiredRounds(self, tokenAddress, actionId, round);
         if (targetData.length < VOTE_TARGET_DATA_LENGTH) {
             return;
         }
@@ -401,9 +416,13 @@ library GroupActionVerify {
             revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         }
 
+        if (self.applicationPunished[tokenAddress][actionId][applicationId]) {
+            revert IGroupActionVerifyErrors.ApplicationPunished(applicationId);
+        }
         if (voteAmount == 0) {
             return;
         }
+        self.pendingVerificationRounds[tokenAddress][actionId].add(round);
         self.voteAmountByApplicationId[tokenAddress][actionId][round][applicationId] += voteAmount;
         self.voterIdsByApplicationId[tokenAddress][actionId][round][applicationId].add(voterId);
         self.voteAmountByApplicationIdByVoterId[tokenAddress][actionId][round][applicationId][voterId] += voteAmount;
@@ -421,6 +440,58 @@ library GroupActionVerify {
                 voteAmountAdded: voteAmount
             })
         );
+    }
+
+    function _settleExpiredRounds(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 currentRound
+    ) private {
+        Uint256Set.Storage storage pending = self.pendingVerificationRounds[tokenAddress][actionId];
+        uint256 i = 0;
+        while (i < pending.items.length) {
+            uint256 round = pending.items[i];
+            if (currentRound <= round + 2) {
+                i++;
+                continue;
+            }
+            pending.remove(round);
+            if (self.roundVerified[tokenAddress][actionId][round]
+                || self.groupIdsByRound[tokenAddress][actionId].countByRound(round) == 0) continue;
+            uint256[] storage ranked = self.rankedApplicationIds[tokenAddress][actionId][round];
+            if (ranked.length == 0) continue;
+            uint256 applicationId = ranked[0];
+            if (self.applicationPunished[tokenAddress][actionId][applicationId]) continue;
+            self.applicationPunished[tokenAddress][actionId][applicationId] = true;
+            uint256 amount = self.applicationStake[tokenAddress][actionId][applicationId];
+            delete self.applicationStake[tokenAddress][actionId][applicationId];
+            if (amount != 0) ILOVE20Token(tokenAddress).burn(amount);
+            emit IGroupActionVerifyEvents.VerifierApplicationPunished(
+                tokenAddress, actionId, applicationId,
+                self.applicationVerifierId[tokenAddress][actionId][applicationId], round, amount
+            );
+        }
+    }
+
+    function _checkApplicationReleased(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 applicationId,
+        uint256 currentRound
+    ) private view {
+        if (applicationId == 0 || self.applicationPunished[tokenAddress][actionId][applicationId]) return;
+        uint256[] storage rounds = self.pendingVerificationRounds[tokenAddress][actionId].items;
+        for (uint256 i = 0; i < rounds.length; i++) {
+            uint256 round = rounds[i];
+            uint256[] storage ranked = self.rankedApplicationIds[tokenAddress][actionId][round];
+            if (round < currentRound && ranked.length != 0 && ranked[0] == applicationId
+                && !self.roundVerified[tokenAddress][actionId][round]) {
+                // forge-lint: disable-next-item(require-revert-in-loop)
+                revert IGroupActionVerifyErrors.ApplicationStillResponsible(applicationId, round);
+            }
+        }
     }
 
     function _scoreBatch(

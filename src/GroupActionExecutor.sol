@@ -437,7 +437,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         address tokenAddress,
         uint256 actionId,
         uint256 round
-    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts) {
+    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts, bool[] memory punished) {
         return GroupActionVerify.topVerifiers(_layout, tokenAddress, actionId, round);
     }
 

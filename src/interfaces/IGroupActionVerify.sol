@@ -7,9 +7,11 @@ struct VerifierApplication {
     uint256 applicationId;
     uint256 verifierId;
     string description;
+    bool punished;
 }
 
 interface IGroupActionVerifyEvents {
+    event VerifierApplicationPunished(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed applicationId, uint256 verifierId, uint256 round, uint256 burnedAmount);
     event OriginScoresSubmitted(
         address indexed tokenAddress,
         uint256 indexed actionId,
@@ -73,6 +75,8 @@ interface IGroupActionVerifyEvents {
 }
 
 interface IGroupActionVerifyErrors {
+    error ApplicationPunished(uint256 applicationId);
+    error ApplicationStillResponsible(uint256 applicationId, uint256 round);
     error OriginScoresEmpty();
     error VerifierNotRanked(
         uint256 verifierId,
@@ -223,7 +227,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         address tokenAddress,
         uint256 actionId,
         uint256 round
-    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts);
+    ) external view returns (uint256[] memory verifierIds, uint256[] memory voteAmounts, bool[] memory punished);
 
     function applicationVoters(
         address tokenAddress,

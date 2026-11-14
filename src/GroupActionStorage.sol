@@ -157,6 +157,10 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => ranked application ids (votes desc, applicationId asc)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) rankedApplicationIds;
 
+        mapping(address => mapping(uint256 => mapping(uint256 => bool))) applicationPunished;
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationStake;
+        mapping(address => mapping(uint256 => Uint256Set.Storage)) pendingVerificationRounds;
+
         mapping(address => RoundHistoryUint256.History) totalStakedHistory;
         mapping(address => mapping(uint256 => RoundHistoryUint256.History)) stakedByMemberIdHistory;
 

@@ -16,7 +16,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testVerifierApplicationLifecycle() external {
         _submitApplication();
         _castVotesFor(VERIFIER_ID, 100e18);
-        (uint256[] memory verifierIds, uint256[] memory votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (uint256[] memory verifierIds, uint256[] memory votes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID && votes[0] == 100e18, "single verifier");
 
         memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
@@ -26,14 +26,14 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         _castVotesFor(VERIFIER2_ID, 150e18);
 
-        (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (verifierIds, votes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 2, "two verifiers");
         require(verifierIds[0] == VERIFIER2_ID && verifierIds[1] == VERIFIER_ID, "votes descending");
         require(votes[0] == 150e18 && votes[1] == 100e18, "ranked votes");
 
         vm.prank(VERIFIER2);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2b");
-        (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (verifierIds, votes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "replaced verifier leaves the rank");
         uint256[] memory replacedIds = new uint256[](1);
         replacedIds[0] = VERIFIER2_ID;
@@ -48,7 +48,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
-        (verifierIds, ) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (verifierIds, ,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 0, "cancelled verifier leaves the rank");
 
         (VerifierApplication[] memory applications, uint256 total) =
@@ -299,13 +299,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 0, votedData);
-        (uint256[] memory verifierIds, ) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (uint256[] memory verifierIds, ,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 0, "zero votes rank nothing");
         (, , uint256 rosterTotal) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
         require(rosterTotal == 0, "zero votes name no voter");
 
         _castVotesFor(VERIFIER_ID, 5e18);
-        (verifierIds, ) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (verifierIds, ,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 1 && verifierIds[0] == VERIFIER_ID, "vote ranks the verifier");
     }
 
@@ -365,16 +365,16 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _castVotesFor(VERIFIER_ID, 100e18);
         _castVotesFor(VERIFIER2_ID, 200e18);
         _castVotesFor(thirdId, 150e18);
-        (uint256[] memory verifierIds, uint256[] memory votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (uint256[] memory verifierIds, uint256[] memory votes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 2 && verifierIds[1] == thirdId, "third verifier replaces the last");
         require(votes[0] == 200e18 && votes[1] == 150e18, "replacement votes");
 
         _castVotesFor(VERIFIER_ID, 50e18);
-        (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (verifierIds, votes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds.length == 2 && verifierIds[1] == thirdId, "equal votes do not replace");
 
         _castVotesFor(VERIFIER_ID, 1);
-        (verifierIds, votes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (verifierIds, votes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(verifierIds[0] == VERIFIER2_ID && verifierIds[1] == VERIFIER_ID, "strictly above replaces");
         require(votes[1] == 150e18 + 1, "replacing votes accumulate");
     }
@@ -479,44 +479,123 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         );
     }
 
-    function testReplacingAfterTheVoteRoundKeepsTheVerificationRight() external {
+    function testElectedApplicationCannotBeReplacedBeforeVerificationCompletes() external {
         _prepareRound();
-        // The round-2 votes are already in the rank; a fresh application in round 3 only changes what
-        // later rounds answer, so the elected verifier still owns the round-2 verification.
         vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationStillResponsible.selector, 1, 2));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
-
         _atPhase(4);
         _submitScores(_scores(100));
-        require(executor.lockedVerifierId(address(token), ACTION_ID, 2) == VERIFIER_ID, "round 2 still verifiable");
-    }
-
-    function testCancellingAfterTheVoteRoundKeepsTheVerificationRight() external {
-        _prepareRound();
-        vm.prank(VERIFIER);
-        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "bond returned");
-
-        _atPhase(4);
-        _submitScores(_scores(100));
-        require(executor.lockedVerifierId(address(token), ACTION_ID, 2) == VERIFIER_ID, "round 2 still verifiable");
-    }
-
-    function testLockedVerifierKeepsVerifyingAfterCancelling() external {
-        _prepareRound();
-        _atPhase(4);
-        _submitScores(_scores(100));
-        require(executor.lockedVerifierId(address(token), ACTION_ID, 2) == VERIFIER_ID, "locked");
-
-        // The bond covers holding an application, not the verification duty: cancelling refunds it and
-        // leaves the lock on the member.
-        vm.prank(VERIFIER);
-        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
-        require(token.balanceOf(VERIFIER) == VERIFIER_STAKE, "bond returned");
-
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _scores(100));
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "the locked verifier finishes the round");
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).applicationId == 1, "history retained");
+        require(executor.verifierApplication(address(token), ACTION_ID, 4, VERIFIER_ID).applicationId == 2, "replacement after duty");
+    }
+
+    function testElectedVerifierCannotRefundTheBondBeforeCompletingVerification() external {
+        _prepareRound();
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationStillResponsible.selector, 1, 2));
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        _atPhase(4);
+        _submitScores(_scores(100));
+        vm.prank(VERIFIER);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationStillResponsible.selector, 1, 2));
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        vm.prank(VERIFIER);
+        executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _scores(100));
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(token.balanceOf(VERIFIER) == VERIFIER_STAKE, "completed duty releases the bond");
+    }
+
+    function testNextVotePunishesAnUnfinishedApplicationOnlyOnce() external {
+        _prepareRound();
+        memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
+        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
+        vm.prank(VERIFIER2);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "not elected");
+        _atPhase(4);
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 4, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        require(!executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "verification still open");
+        _atPhase(5);
+        uint256 supply = token.totalSupply();
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        require(token.totalSupply() == supply - VERIFIER_STAKE, "only application bond burned");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "historical application reports current punishment");
+        (VerifierApplication[] memory applications,) = executor.verifierApplications(address(token), ACTION_ID, 0, 10, false);
+        require(applications[0].punished && !applications[1].punished, "list reports each punishment");
+        (,, bool[] memory punished) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        require(punished[0], "rank reports current punishment");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == VERIFIER_STAKE, "other application bond untouched");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "burned bond cannot be refunded");
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        require(token.totalSupply() == supply - VERIFIER_STAKE, "not burned twice");
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationPunished.selector, 1));
+        _castVotesForAt(VERIFIER_ID, 1, 5);
+        _fundVerifierStakeFor(VERIFIER);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "fresh bond");
+        require(!executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).punished, "new application starts clean");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "new application pays again");
+        _castVotesForAt(VERIFIER_ID, 1, 5);
+    }
+
+    function testCancellationAfterDeadlineBurnsInsteadOfRefunding() external {
+        _prepareRound();
+        _atPhase(4);
+        _submitScores(_scores(100));
+        _atPhase(5);
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(token.balanceOf(VERIFIER) == 0, "unfinished duty cannot escape through cancellation");
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "partial verification is unfinished");
+    }
+
+    function testLaterVoteChecksMissedRoundsAndKeepsOtherBondsSeparate() external {
+        _prepareRound();
+        memberNFT.setOwner(VERIFIER2_ID, VERIFIER2);
+        stake.setValidGovVotes(address(token), VERIFIER2_ID, 100e18);
+        _fundVerifierStakeFor(VERIFIER2);
+        vm.prank(VERIFIER2);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "second round");
+        _castVotesForAt(VERIFIER2_ID, 1, 3);
+        uint256 supply = token.totalSupply();
+        _atPhase(9);
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 9, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "older round checked");
+        require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER2_ID).punished, "later missed round checked");
+        require(token.totalSupply() == supply - 2 * VERIFIER_STAKE, "both own bonds burned");
+        require(token.balanceOf(address(executor)) == ACTIVATION_STAKE, "group stake untouched");
+    }
+
+    function testCompletedRoundDoesNotPunishApplicants() external {
+        _prepareRound();
+        _atPhase(4);
+        _submitScores(_scores(100));
+        vm.prank(VERIFIER);
+        executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _scores(100));
+        _atPhase(5);
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        require(!executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "completed round exempt");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "bond retained");
+    }
+
+    function testRoundWithoutParticipantsDoesNotPunishApplicants() external {
+        _submitApplication();
+        _castVerifierVotes();
+        _atPhase(8);
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 8, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        require(!executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "no verification duty without participants");
     }
 
     function testVerifierApplicationReplacementKeepsTheBond() external {
@@ -724,7 +803,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(voterIds[0] == MEMBER2_ID && voterIds[1] == PROVIDER_ID, "first-vote order");
         require(votes[0] == 40e18 && votes[1] == 20e18, "repeat votes accumulate on the voter row");
 
-        (uint256[] memory topIds, uint256[] memory topVotes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (uint256[] memory topIds, uint256[] memory topVotes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(topIds.length == 1 && topVotes[0] == votes[0] + votes[1], "the roster folds into the tally");
 
         (voterIds, votes, ) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, true);
@@ -758,11 +837,11 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         );
         require(total == 1 && voterIds[0] == PROVIDER_ID && votes[0] == 60e18, "round 4 keeps only round-4 votes");
 
-        _atPhase(5);
+        _atPhase(7);
         vm.prank(VERIFIER);
-        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "round 5");
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "round 7");
         (voterIds, votes, total) = executor.applicationVotersByVerifierId(
-            address(token), ACTION_ID, 5, VERIFIER_ID, 0, 10, false
+            address(token), ACTION_ID, 7, VERIFIER_ID, 0, 10, false
         );
         require(total == 0 && voterIds.length == 0 && votes.length == 0, "a fresh application starts empty");
 
@@ -796,7 +875,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         (voterIds, votes, total) = executor.applicationVoters(address(token), ACTION_ID, 2, 2, 0, 10, false);
         require(total == 2 && votes[0] == 90e18 && votes[1] == 10e18, "verifier two keeps both voters");
 
-        (uint256[] memory topIds, uint256[] memory topVotes) = executor.topVerifiers(address(token), ACTION_ID, 2);
+        (uint256[] memory topIds, uint256[] memory topVotes,) = executor.topVerifiers(address(token), ACTION_ID, 2);
         require(topIds[0] == VERIFIER2_ID && topVotes[0] == 100e18, "the split roster does not disturb the ranking");
     }
 

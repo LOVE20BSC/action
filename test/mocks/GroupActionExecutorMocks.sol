@@ -210,6 +210,11 @@ contract MockGroupActionToken {
         return _balanceOf[account];
     }
 
+    function burn(uint256 amount) external {
+        _balanceOf[msg.sender] -= amount;
+        _totalSupply -= amount;
+    }
+
     function totalSupply() external view returns (uint256) {
         return _totalSupply;
     }

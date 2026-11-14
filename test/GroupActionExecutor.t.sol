@@ -366,11 +366,11 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
         _castVotesForAt(VERIFIER_ID, 100e18, 5);
 
-        (uint256[] memory rankedIds, uint256[] memory rankedVotes) =
+        (uint256[] memory rankedIds, uint256[] memory rankedVotes,) =
             executor.topVerifiers(address(token), ACTION_ID, 5);
         require(rankedIds.length == 1 && rankedIds[0] == VERIFIER_ID, "round 5 ranking");
         require(rankedVotes[0] == 100e18, "round 5 tally");
-        (uint256[] memory creationIds, ) = executor.topVerifiers(address(token), ACTION_ID, CREATION_PHASE);
+        (uint256[] memory creationIds, ,) = executor.topVerifiers(address(token), ACTION_ID, CREATION_PHASE);
         require(creationIds.length == 0, "the creation round keeps its own ranking");
 
         _atPhase(6);
