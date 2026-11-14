@@ -29,7 +29,7 @@ contract GroupActionEventsTest is
         require(logs[0].emitter == address(executor), "emitter is the executor");
         require(
             logs[0].topics[0]
-                == keccak256("GroupActionCreated(address,uint256,address,uint256,uint256,uint256,uint256,string[],string[])"),
+                == keccak256("GroupActionCreated(address,uint256,address,uint256,uint256,uint256,uint256,uint256,string[],string[])"),
             "creation signature"
         );
         require(logs[0].topics[1] == bytes32(uint256(uint160(address(token)))), "token topic");
@@ -40,14 +40,16 @@ contract GroupActionEventsTest is
             uint256 maxJoinAmountRatio,
             uint256 activationMinGovRatio,
             uint256 verifierStakeAmount,
+            uint256 verifierPunishmentRatio,
             string[] memory keys,
             string[] memory descriptions
-        ) = abi.decode(logs[0].data, (address, uint256, uint256, uint256, uint256, string[], string[]));
+        ) = abi.decode(logs[0].data, (address, uint256, uint256, uint256, uint256, uint256, string[], string[]));
         require(joinTokenAddress == address(joinToken), "join token");
         require(activationStakeAmount == ACTIVATION_STAKE, "activation stake");
         require(maxJoinAmountRatio == PRECISION, "max join ratio");
         require(activationMinGovRatio == 0, "activation min gov ratio");
         require(verifierStakeAmount == VERIFIER_STAKE, "verifier stake");
+        require(verifierPunishmentRatio == PRECISION, "verifier punishment ratio");
         require(keys.length == 0 && descriptions.length == 0, "empty schema");
     }
 
@@ -66,6 +68,7 @@ contract GroupActionEventsTest is
             maxJoinAmountRatio: PRECISION,
             activationMinGovRatio: 0,
             verifierStakeAmount: VERIFIER_STAKE,
+            verifierPunishmentRatio: PRECISION,
             verificationKeys: keys,
             verificationDescriptions: descriptions
         });
@@ -774,6 +777,7 @@ contract GroupActionEventsTest is
             maxJoinAmountRatio: PRECISION,
             activationMinGovRatio: 0,
             verifierStakeAmount: VERIFIER_STAKE,
+            verifierPunishmentRatio: PRECISION,
             verificationKeys: keys,
             verificationDescriptions: descriptions
         });

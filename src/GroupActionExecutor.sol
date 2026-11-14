@@ -64,6 +64,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return _layout.requiredVerifierStakeByActionId[tokenAddress][actionId];
     }
 
+    function verifierPunishmentRatio(address tokenAddress, uint256 actionId) external view returns (uint256) {
+        return _layout.verifierPunishmentRatioByActionId[tokenAddress][actionId];
+    }
+
     function SPLITS() external view returns (uint256[] memory) {
         return _layout.SPLITS;
     }

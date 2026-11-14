@@ -321,6 +321,28 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.maxJoinAmount(address(token), ACTION_2) == 0, "uncreated action caps at zero");
     }
 
+    function testVerifierPunishmentRatioConfiguration() external {
+        bytes[] memory data = _targetData();
+        data[6] = abi.encode(9e17);
+        _createActionWith(ACTION_2, data);
+        require(executor.verifierPunishmentRatio(address(token), ACTION_2) == 9e17, "configured punishment ratio");
+        require(executor.verifierPunishmentRatio(address(token), ACTION_ID) == PRECISION, "other action ratio unchanged");
+
+        data[6] = abi.encode(uint256(0));
+        _createActionWith(23, data);
+        require(executor.verifierPunishmentRatio(address(token), 23) == 0, "zero ratio accepted");
+
+        data[6] = abi.encode(PRECISION + 1);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio.selector, PRECISION + 1));
+        executor.onProposalCreated(address(token), 24, data);
+
+        data[6] = new bytes(31);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 6, 31));
+        executor.onProposalCreated(address(token), 24, data);
+    }
+
     function testOnProposalCreatedReverts() external {
         bytes[] memory data = _targetData();
 
@@ -332,21 +354,21 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             four[i] = data[i];
         }
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InsufficientTargetDataItems.selector, 4, 6));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InsufficientTargetDataItems.selector, 4, 7));
         executor.onProposalCreated(address(token), ACTION_2, four);
 
-        bytes[] memory five = new bytes[](5);
-        for (uint256 i = 0; i < 5; i++) {
-            five[i] = data[i];
+        bytes[] memory six = new bytes[](6);
+        for (uint256 i = 0; i < 6; i++) {
+            six[i] = data[i];
         }
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InsufficientTargetDataItems.selector, 5, 6));
-        executor.onProposalCreated(address(token), ACTION_2, five);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InsufficientTargetDataItems.selector, 6, 7));
+        executor.onProposalCreated(address(token), ACTION_2, six);
 
-        bytes[] memory eight = new bytes[](8);
+        bytes[] memory nine = new bytes[](9);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TooManyTargetDataItems.selector, 8, 7));
-        executor.onProposalCreated(address(token), ACTION_2, eight);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TooManyTargetDataItems.selector, 9, 8));
+        executor.onProposalCreated(address(token), ACTION_2, nine);
 
         bytes[] memory badItem = _clone(data);
         badItem[2] = new bytes(31);
@@ -383,14 +405,9 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         string[] memory descriptions = new string[](2);
         descriptions[0] = "a";
         descriptions[1] = "b";
-        bytes[] memory seven = new bytes[](7);
-        for (uint256 i = 0; i < 6; i++) {
-            seven[i] = data[i];
-        }
-        seven[6] = abi.encode(keys, descriptions);
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.VerificationInfoLengthMismatch.selector, 1, 2));
-        executor.onProposalCreated(address(token), ACTION_2, seven);
+        executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(keys, descriptions));
 
         string[] memory tooManyKeys = new string[](17);
         string[] memory tooManyDescriptions = new string[](17);

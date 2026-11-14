@@ -34,9 +34,10 @@ library GroupActionManager {
     uint256 private constant SLOT_MAX_JOIN_AMOUNT_RATIO = 3;
     uint256 private constant SLOT_ACTIVATION_MIN_GOV_RATIO = 4;
     uint256 private constant SLOT_VERIFIER_STAKE_AMOUNT = 5;
-    uint256 private constant SLOT_VERIFICATION_INFO = 6;
-    uint256 private constant TARGET_DATA_MIN_LENGTH = 6;
-    uint256 private constant TARGET_DATA_MAX_LENGTH = 7;
+    uint256 private constant SLOT_VERIFIER_PUNISHMENT_RATIO = 6;
+    uint256 private constant SLOT_VERIFICATION_INFO = 7;
+    uint256 private constant TARGET_DATA_MIN_LENGTH = 7;
+    uint256 private constant TARGET_DATA_MAX_LENGTH = 8;
 
     modifier onlyGroupOwner(
         GroupActionStorage.Layout storage self,
@@ -91,6 +92,8 @@ library GroupActionManager {
             abi.decode(targetData[SLOT_ACTIVATION_MIN_GOV_RATIO], (uint256));
         uint256 verifierStakeAmount =
             abi.decode(targetData[SLOT_VERIFIER_STAKE_AMOUNT], (uint256));
+        uint256 verifierPunishmentRatio =
+            abi.decode(targetData[SLOT_VERIFIER_PUNISHMENT_RATIO], (uint256));
         if (joinTokenAddress == address(0)) {
             revert IGroupActionExecutorErrors.ZeroJoinTokenAddress();
         }
@@ -107,6 +110,9 @@ library GroupActionManager {
         if (activationMinGovRatio > GroupActionStorage.PRECISION) {
             revert IGroupActionExecutorErrors.InvalidActivationMinGovRatio(activationMinGovRatio);
         }
+        if (verifierPunishmentRatio > GroupActionStorage.PRECISION) {
+            revert IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio(verifierPunishmentRatio);
+        }
 
         self.joinTokenAddressByActionId[tokenAddress][actionId] = joinTokenAddress;
         // Load-bearing: written only here. Refunds read this value instead of a per-group ledger, so a
@@ -115,6 +121,7 @@ library GroupActionManager {
         self.maxJoinAmountRatioByActionId[tokenAddress][actionId] = maxJoinAmountRatio;
         self.activationMinGovRatioByActionId[tokenAddress][actionId] = activationMinGovRatio;
         self.requiredVerifierStakeByActionId[tokenAddress][actionId] = verifierStakeAmount;
+        self.verifierPunishmentRatioByActionId[tokenAddress][actionId] = verifierPunishmentRatio;
 
         if (targetData.length == TARGET_DATA_MAX_LENGTH) {
             (string[] memory keys, string[] memory descriptions) =
@@ -478,6 +485,7 @@ library GroupActionManager {
             maxJoinAmountRatio: self.maxJoinAmountRatioByActionId[tokenAddress][actionId],
             activationMinGovRatio: self.activationMinGovRatioByActionId[tokenAddress][actionId],
             verifierStakeAmount: self.requiredVerifierStakeByActionId[tokenAddress][actionId],
+            verifierPunishmentRatio: self.verifierPunishmentRatioByActionId[tokenAddress][actionId],
             verificationKeys: self.verificationKeysByActionId[tokenAddress][actionId],
             verificationDescriptions: self.verificationDescriptionsByActionId[tokenAddress][actionId]
         });

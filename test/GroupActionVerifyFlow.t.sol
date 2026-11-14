@@ -203,19 +203,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     }
 
     function testSchemaAndVerificationInfoFlow() external {
-        bytes[] memory data = new bytes[](7);
-        bytes[] memory baseData = _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE);
-        for (uint256 i = 0; i < 6; i++) {
-            data[i] = baseData[i];
-        }
         string[] memory keys = new string[](2);
         keys[0] = "name";
         keys[1] = "city";
         string[] memory descriptions = new string[](2);
         descriptions[0] = "n";
         descriptions[1] = "c";
-        data[6] = abi.encode(keys, descriptions);
-        _createActionWith(ACTION_2, data);
+        _createActionWith(ACTION_2, _targetDataWithSchema(keys, descriptions));
 
         (string[] memory schemaKeys, string[] memory schemaDescriptions) =
             executor.verificationSchema(address(token), ACTION_2);
@@ -657,6 +651,42 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punishedForRound == 2, "replacement preserves the old punishment cause");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "new application pays again");
         _castVotesForAt(VERIFIER_ID, 1, 5);
+    }
+
+    function testFuzzPartialPunishmentRefundsTheRemainder(uint64 ratioSeed) external {
+        uint256 ratio = uint256(ratioSeed) % PRECISION;
+        uint256 stakeAmount = VERIFIER_STAKE + 1;
+        bytes[] memory data = _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, stakeAmount);
+        data[6] = abi.encode(ratio);
+        _createActionWith(ACTION_2, data);
+        vote.setVotesNumByProposalId(address(token), 2, ACTION_2, 1000e18);
+        _fundTokenFor(VERIFIER, stakeAmount);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "partial punishment");
+        bytes[] memory voteData = new bytes[](2);
+        voteData[0] = abi.encode(address(executor));
+        voteData[1] = abi.encode(VERIFIER_ID);
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 2, ACTION_2, MEMBER1_ID, 1, voteData);
+        _atPhase(3);
+        _fundTokenFor(GROUP_OWNER, ACTIVATION_STAKE);
+        _activateGroupOn(address(token), ACTION_2, GROUP_ID);
+        _fundJoinTokenFor(MEMBER1, 1e18);
+        _joinOn(address(token), ACTION_2, GROUP_ID, MEMBER1_ID, 1e18);
+        _atPhase(5);
+        uint256 supply = token.totalSupply();
+        uint256 balance = token.balanceOf(VERIFIER);
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), 5, ACTION_2, MEMBER1_ID, 1, new bytes[](0));
+        uint256 burnedAmount = stakeAmount * ratio / PRECISION;
+        require(token.totalSupply() == supply - burnedAmount, "only the configured proportion burned");
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == stakeAmount - burnedAmount, "remaining stake retained");
+        require(executor.verifierApplication(address(token), ACTION_2, 2, VERIFIER_ID).punishedForRound == 2, "punishment recorded even if rounded to zero");
+        vm.prank(VERIFIER);
+        executor.cancelVerifierApplication(address(token), ACTION_2, VERIFIER_ID);
+        require(token.balanceOf(VERIFIER) == balance + stakeAmount - burnedAmount, "withdrawal refunds the remainder");
+        require(executor.verifierStake(address(token), ACTION_2, VERIFIER_ID) == 0, "withdrawal clears the shared stake");
+        require(token.balanceOf(address(executor)) == ACTIVATION_STAKE, "activation stake untouched");
     }
 
     function testCancellationAfterDeadlineBurnsInsteadOfRefunding() external {

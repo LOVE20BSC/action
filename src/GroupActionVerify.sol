@@ -470,8 +470,12 @@ library GroupActionVerify {
             if (self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] != 0) continue;
             self.punishedForRoundByApplicationId[tokenAddress][actionId][applicationId] = round;
             uint256 verifierId = self.applicationVerifierId[tokenAddress][actionId][applicationId];
-            uint256 amount = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
-            delete self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
+            uint256 amount = Math.mulDiv(
+                self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId],
+                self.verifierPunishmentRatioByActionId[tokenAddress][actionId],
+                GroupActionStorage.PRECISION
+            );
+            self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId] -= amount;
             if (amount != 0) ILOVE20Token(tokenAddress).burn(amount);
             emit IGroupActionVerifyEvents.VerifierApplicationPunished(
                 tokenAddress, actionId, applicationId, verifierId, round, amount

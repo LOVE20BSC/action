@@ -184,6 +184,8 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => applicationId => voterId => votes that voter cast
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))))
             voteAmountByApplicationIdByVoterId;
+        // tokenAddress => actionId => fixed verifier punishment ratio (1e18 precision)
+        mapping(address => mapping(uint256 => uint256)) verifierPunishmentRatioByActionId;
     }
 
     function memberAmountAt(

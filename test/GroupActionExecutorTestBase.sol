@@ -132,13 +132,14 @@ abstract contract GroupActionExecutorTestBase {
         uint256 minGovRatio,
         uint256 verifierStake
     ) internal view returns (bytes[] memory targetData) {
-        targetData = new bytes[](6);
+        targetData = new bytes[](7);
         targetData[0] = abi.encode(address(executor));
         targetData[1] = abi.encode(joinTokenAddress);
         targetData[2] = abi.encode(stakeAmount);
         targetData[3] = abi.encode(ratio);
         targetData[4] = abi.encode(minGovRatio);
         targetData[5] = abi.encode(verifierStake);
+        targetData[6] = abi.encode(PRECISION);
     }
 
     function _createAction(uint256 actionId) internal {
@@ -151,11 +152,11 @@ abstract contract GroupActionExecutorTestBase {
         string[] memory descriptions
     ) internal view returns (bytes[] memory targetData) {
         bytes[] memory base = _targetData();
-        targetData = new bytes[](7);
-        for (uint256 i = 0; i < 6; i++) {
+        targetData = new bytes[](8);
+        for (uint256 i = 0; i < 7; i++) {
             targetData[i] = base[i];
         }
-        targetData[6] = abi.encode(keys, descriptions);
+        targetData[7] = abi.encode(keys, descriptions);
     }
 
     function _createActionWith(uint256 actionId, bytes[] memory targetData) internal {

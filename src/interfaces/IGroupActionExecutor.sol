@@ -16,6 +16,7 @@ interface IGroupActionExecutorEvents {
         uint256 maxJoinAmountRatio,
         uint256 activationMinGovRatio,
         uint256 verifierStakeAmount,
+        uint256 verifierPunishmentRatio,
         string[] verificationKeys,
         string[] verificationDescriptions
     );
@@ -26,6 +27,7 @@ interface IGroupActionExecutorErrors {
     error InvalidJoinTokenAddress(address joinTokenAddress);
     error InvalidMaxJoinAmountRatio(uint256 value);
     error InvalidActivationMinGovRatio(uint256 value);
+    error InvalidVerifierPunishmentRatio(uint256 value);
     error InsufficientTargetDataItems(
         uint256 count,
         uint256 minCount
@@ -64,6 +66,8 @@ interface IGroupActionExecutor is
     function activationMinGovRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
 
     function requiredVerifierStake(address tokenAddress, uint256 actionId) external view returns (uint256);
+
+    function verifierPunishmentRatio(address tokenAddress, uint256 actionId) external view returns (uint256);
 
     function SPLITS() external view returns (uint256[] memory);
 

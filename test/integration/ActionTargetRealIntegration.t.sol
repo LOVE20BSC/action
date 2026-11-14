@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {ActionTarget} from "../../src/ActionTarget.sol";
+import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
 import {MockExecutor} from "../mocks/ActionTargetMocks.sol";
 import {MockUniswapV2Factory, MockUniswapV2Router} from "../mocks/UniswapV2Mocks.sol";
@@ -180,6 +181,33 @@ contract ActionTargetRealIntegrationTest {
         targetData[0] = proposalTargetData;
         vm.prank(memberId == 1 ? member1 : member2);
         vote.vote(address(token), memberId, proposalIds, amounts, targetData);
+    }
+
+    function testRealIntegration_GroupActionCreationForwardsPunishmentRatio() external {
+        GroupActionExecutor groupExecutor = new GroupActionExecutor(address(actionTarget), new uint256[](0));
+        bytes[] memory targetData = new bytes[](7);
+        targetData[0] = abi.encode(address(groupExecutor));
+        targetData[1] = abi.encode(address(token));
+        targetData[2] = abi.encode(uint256(0));
+        targetData[3] = abi.encode(uint256(1e18));
+        targetData[4] = abi.encode(uint256(0));
+        targetData[5] = abi.encode(uint256(40));
+        targetData[6] = abi.encode(uint256(9e17));
+        vm.prank(member1);
+        uint256 proposalId = submit.submitNewProposal(
+            address(token),
+            1,
+            ProposalBody({
+                title: "Group action",
+                details: "details",
+                target: address(actionTarget),
+                targetMode: TargetMode.Callback,
+                targetData: targetData
+            })
+        );
+        require(actionTarget.executorByActionId(address(token), proposalId) == address(groupExecutor), "group executor bound");
+        require(groupExecutor.requiredVerifierStake(address(token), proposalId) == 40, "stake forwarded");
+        require(groupExecutor.verifierPunishmentRatio(address(token), proposalId) == 9e17, "punishment ratio forwarded through both callbacks");
     }
 
     function testRealIntegration_ActionLifecycle() external {
