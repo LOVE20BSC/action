@@ -115,19 +115,18 @@ library GroupActionStorage {
         // groupId => member ids currently in the group
         mapping(uint256 => Uint256Set.Storage) joinedMemberIdsByGroupId;
 
-        // tokenAddress => actionId => round => memberId => origin score deduction from MAX_ORIGIN_SCORE
-        // (0 = full score or unverified).
         // Load-bearing: verified-ness is positional — scored members are exactly the first
         // `verifiedMemberCount` slots of the round's member set. The set is written only at the current
         // join round (phase - 1) while verification runs for `phase - 2`; a later write to that round
         // would shift the prefix and silently misreport scores.
+        // tokenAddress => actionId => round => memberId => origin score deduction (0 = full score or unverified)
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) originScoreDeductionByMemberId;
         // tokenAddress => actionId => round => groupId => verified member count
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifiedMemberCountByGroupId;
-        // tokenAddress => actionId => round => number of groups whose cursor reached its member count
         // Load-bearing: the count only reaches the group count because a completed group cannot submit
         // again (`GroupVerificationAlreadyComplete`) and `groupIdsByRound[round]` never holds a zero-member group;
         // otherwise the round stays unverified forever with no revert.
+        // tokenAddress => actionId => round => number of groups whose cursor reached its member count
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifiedGroupCountByRound;
         // tokenAddress => actionId => round => every group in the round is fully verified
         mapping(address => mapping(uint256 => mapping(uint256 => bool))) roundVerified;
@@ -143,10 +142,10 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationVerifierId;
         // tokenAddress => actionId => applicationId => application description
         mapping(address => mapping(uint256 => mapping(uint256 => string))) applicationDescription;
-        // tokenAddress => actionId => verifierId => round => application the verifier stood with
         // Load-bearing: every per-round lookup resolves through this history, because a round's rank
         // holds that round's application id. Reading `currentApplicationId` instead answers a later
         // round's application and silently rejects whoever replaced or cancelled after the vote round.
+        // tokenAddress => actionId => verifierId => application id history by round
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256.History))) applicationIdHistory;
         // tokenAddress => actionId => round => applicationId => votes cast in that round
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) voteAmountByApplicationId;
@@ -157,11 +156,16 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => ranked application ids (votes desc, applicationId asc)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) rankedApplicationIds;
 
+        // tokenAddress => actionId => applicationId => whether the application has been punished
         mapping(address => mapping(uint256 => mapping(uint256 => bool))) applicationPunished;
+        // tokenAddress => actionId => verifierId => shared verifier stake amount
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierStakeByMemberId;
+        // tokenAddress => actionId => voted rounds awaiting overdue verification checks
         mapping(address => mapping(uint256 => Uint256Set.Storage)) pendingVerificationRounds;
 
+        // tokenAddress => total active-group stake history by round
         mapping(address => RoundHistoryUint256.History) totalStakedHistory;
+        // tokenAddress => memberId => active-group stake history by round
         mapping(address => mapping(uint256 => RoundHistoryUint256.History)) stakedByMemberIdHistory;
 
         // tokenAddress => actionId => memberId => schema key index => value history
@@ -172,9 +176,9 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => memberId => minted amount
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) memberMintedReward;
 
-        // tokenAddress => actionId => round => applicationId => voter ids, in first-vote order
         // Load-bearing: append-only, never removed — a round's tally stops growing when its vote
         // phase closes — so `reverse` is exactly the reverse of first-vote order (no swap-and-pop).
+        // tokenAddress => actionId => round => applicationId => voter ids, in first-vote order
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))))
             voterIdsByApplicationId;
         // tokenAddress => actionId => round => applicationId => voterId => votes that voter cast

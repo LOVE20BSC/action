@@ -35,11 +35,15 @@ library GroupServiceStorage {
         // actionTokenAddress => round => cached divisor (0 = not cached)
         mapping(address => mapping(uint256 => uint256)) totalGroupActionRewardByRound;
 
-        // serviceTokenAddress => serviceActionId => round => memberId => settlement record
+        // serviceTokenAddress => serviceActionId => round => memberId => whether the member reward is settled
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) memberMinted;
+        // serviceTokenAddress => serviceActionId => round => memberId => settled verifier reward
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifierRewardByMemberId;
+        // serviceTokenAddress => serviceActionId => round => memberId => owner reward burned at settlement
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerBurnedByMemberId;
+        // serviceTokenAddress => serviceActionId => round => memberId => owner reward paid to recipients
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerDistributedByMemberId;
+        // serviceTokenAddress => serviceActionId => round => memberId => owner reward retained by the member
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerRemainingByMemberId;
 
         // sourceTokenAddress => sourceActionId => groupId => round => recipient ids
