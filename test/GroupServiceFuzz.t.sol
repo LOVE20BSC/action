@@ -166,9 +166,9 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         // Owner B holds a group in action A, the plain owner in action B.
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(rewardA, rewardB), VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(rewardA), MEMBER1_ID);
-        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
-        stake.setValidGovVotes(address(token), GROUP_ID, validVotes);
-        stake.setValidGovVotes(address(token), GROUP_OWNER_B_ID, validVotes);
+        stake.setTotalValidGovVotes(address(token), SERVICE_ROUND, totalValidGovVotes);
+        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_ID, validVotes);
+        stake.setValidGovVotes(address(token), SERVICE_ROUND, GROUP_OWNER_B_ID, validVotes);
         _armServiceReward(serviceReward);
         _atPhase(VERIFY_PHASE);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(recipientRatio));

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
+
 import {IPhase} from "@core/interfaces/IPhase.sol";
 
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
@@ -38,14 +40,15 @@ contract MockLpPhase {
 }
 
 contract MockLpStake {
+    using RoundHistoryUint256 for RoundHistoryUint256.History;
     address public memberNFTAddress;
     address public phaseAddress;
     address public pairFactoryAddress;
 
     // tokenAddress => total valid gov votes
-    mapping(address => uint256) internal _totalValidGovVotes;
+    mapping(address => RoundHistoryUint256.History) internal _totalValidGovVotes;
     // tokenAddress => memberId => valid gov votes
-    mapping(address => mapping(uint256 => uint256)) internal _validGovVotes;
+    mapping(address => mapping(uint256 => RoundHistoryUint256.History)) internal _validGovVotes;
 
     function setMemberNFTAddress(address memberNFTAddress_) external {
         memberNFTAddress = memberNFTAddress_;
@@ -72,17 +75,23 @@ contract MockLpStake {
     }
 
     function setTotalValidGovVotes(address tokenAddress, uint256 votes) external {
-        _totalValidGovVotes[tokenAddress] = votes;
+        _totalValidGovVotes[tokenAddress].record(IPhase(phaseAddress).currentPhase(), votes);
     }
 
     function setValidGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
-        _validGovVotes[tokenAddress][memberId] = votes;
+        _validGovVotes[tokenAddress][memberId].record(IPhase(phaseAddress).currentPhase(), votes);
     }
 
-    // The real `Stake` is round-keyed; this double answers only the phase's current round (zero otherwise).
+    function setTotalValidGovVotes(address tokenAddress, uint256 round, uint256 votes) external {
+        _totalValidGovVotes[tokenAddress].record(round, votes);
+    }
+
+    function setValidGovVotes(address tokenAddress, uint256 round, uint256 memberId, uint256 votes) external {
+        _validGovVotes[tokenAddress][memberId].record(round, votes);
+    }
+
     function totalValidGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
-        if (round != IPhase(phaseAddress).currentPhase()) return 0;
-        return _totalValidGovVotes[tokenAddress];
+        return _totalValidGovVotes[tokenAddress].value(round);
     }
 
     function validGovVotes(
@@ -90,8 +99,7 @@ contract MockLpStake {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256) {
-        if (round != IPhase(phaseAddress).currentPhase()) return 0;
-        return _validGovVotes[tokenAddress][memberId];
+        return _validGovVotes[tokenAddress][memberId].value(round);
     }
 }
 

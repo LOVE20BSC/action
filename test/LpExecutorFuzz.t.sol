@@ -74,8 +74,8 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         _createActionWithConfig(SECOND_ACTION_ID, multiplier, 0);
         _atPhaseBlock(3, 3000);
         _join(SECOND_ACTION_ID, 1, 100e18);
-        stake.setValidGovVotes(address(token), 1, validVotes);
-        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
+        stake.setValidGovVotes(address(token), 2, 1, validVotes);
+        stake.setTotalValidGovVotes(address(token), 2, totalValidGovVotes);
         _atPhase(4);
         _setActionReward(SECOND_ACTION_ID, 2, reward, true);
         _fundExecutor(reward);
@@ -117,8 +117,8 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
     function testFuzzGovRatioFloor(uint96 validSeed, uint96 totalValidGovVotesSeed) external {
         uint256 totalValidGovVotes = uint256(totalValidGovVotesSeed) % 1e24 + 1;
         uint256 validVotes = uint256(validSeed) % 1e24;
-        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
-        stake.setValidGovVotes(address(token), 1, validVotes);
+        stake.setTotalValidGovVotes(address(token), 2, totalValidGovVotes);
+        stake.setValidGovVotes(address(token), 2, 1, validVotes);
 
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(minted == false && ratio == validVotes * 1e18 / totalValidGovVotes, "floor division");
@@ -140,8 +140,8 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000);
         _join(SECOND_ACTION_ID, 1, memberAmount);
         _join(SECOND_ACTION_ID, 2, 1e18);
-        stake.setValidGovVotes(address(token), 1, validVotes);
-        stake.setTotalValidGovVotes(address(token), totalValidGovVotes);
+        stake.setValidGovVotes(address(token), 2, 1, validVotes);
+        stake.setTotalValidGovVotes(address(token), 2, totalValidGovVotes);
         _atPhase(4);
         _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);

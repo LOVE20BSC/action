@@ -532,11 +532,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             return settlement;
         }
 
-        _applyFormulas(settlement, memberId);
+        _applyFormulas(settlement, round, memberId);
     }
 
     function _applyFormulas(
         Settlement memory settlement,
+        uint256 round,
         uint256 memberId
     ) internal view {
         settlement.ownerBurned = 0;
@@ -556,11 +557,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         }
 
         uint256 cap = 0;
-        uint256 currentPhase = IPhase(PHASE_ADDRESS).currentPhase();
-        uint256 totalValidGovVotes = IStake(STAKE_ADDRESS).totalValidGovVotes(settlement.actionTokenAddress, currentPhase);
+        uint256 totalValidGovVotes = IStake(STAKE_ADDRESS).totalValidGovVotes(settlement.actionTokenAddress, round);
         if (totalValidGovVotes != 0) {
             uint256 govRatio = Math.mulDiv(
-                IStake(STAKE_ADDRESS).validGovVotes(settlement.actionTokenAddress, currentPhase, memberId),
+                IStake(STAKE_ADDRESS).validGovVotes(settlement.actionTokenAddress, round, memberId),
                 PRECISION,
                 totalValidGovVotes
             );
@@ -731,7 +731,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (!settlement.actionMinted) {
             // forge-lint: disable-next-line(reentrancy-no-eth)
             settlement.serviceReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
-            _applyFormulas(settlement, memberId);
+            _applyFormulas(settlement, round, memberId);
             mintAmount = settlement.verifierReward + settlement.ownerReward;
             burnAmount = settlement.ownerBurned;
         }

@@ -721,7 +721,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testMintMemberRewardBurnsAllWhenNoGovVotes() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
-        stake.setTotalValidGovVotes(address(token), 0);
+        stake.setTotalValidGovVotes(address(token), 2, 0);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
@@ -735,7 +735,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     }
 
     function testMintMemberRewardMintsAllWhenCapAboveLpRatio() external {
-        stake.setValidGovVotes(address(token), 1, 1000e18);
+        stake.setValidGovVotes(address(token), 2, 1, 1000e18);
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
@@ -1095,12 +1095,15 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(lpExecutor.minGovRatio(address(token), 99) == 0, "min ratio default");
     }
 
-    function testGovRatioReturnsCurrentThenRecorded() external {
+    function testGovRatioReturnsRewardRoundThenRecorded() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
+        stake.setValidGovVotes(address(token), 1, 900e18);
+        (uint256 pendingMint, uint256 pendingBurn,) = lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
+        require(pendingMint == 200e18 && pendingBurn == 800e18, "later votes do not change pending rewards");
         _mintMemberReward(2, 1);
 
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
@@ -1110,11 +1113,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         (ratio, minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(minted && ratio == 1e17, "stake changes do not rewrite the snapshot");
         (ratio, minted) = lpExecutor.govRatio(address(token), ACTION_ID, 3, 1);
-        require(minted == false && ratio == 9e17, "unminted round reads the current ratio");
+        require(minted == false && ratio == 1e17, "unminted round reads its historical ratio");
     }
 
     function testGovRatioZeroWithoutTotalValidGovVotes() external {
-        stake.setTotalValidGovVotes(address(token), 0);
+        stake.setTotalValidGovVotes(address(token), 2, 0);
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
         require(ratio == 0 && minted == false, "zero denominator returns zero");
     }
