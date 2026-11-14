@@ -165,16 +165,30 @@ library GroupActionVerify {
 
         _settleExpiredRounds(self, tokenAddress, actionId, round);
         uint256 previousApplicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
+        if (previousApplicationId != 0
+            && self.punishedForRoundByApplicationId[tokenAddress][actionId][previousApplicationId] != 0) {
+            revert IGroupActionVerifyErrors.ApplicationPunished(previousApplicationId);
+        }
+        uint256 requiredStake = self.requiredVerifierStakeByActionId[tokenAddress][actionId];
+        if (previousApplicationId != 0) {
+            uint256 depositedStake = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
+            if (depositedStake < requiredStake) {
+                revert IGroupActionVerifyErrors.InsufficientVerifierStake(verifierId, depositedStake, requiredStake);
+            }
+        }
         applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
         self.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
         self.applicationDescription[tokenAddress][actionId][applicationId] = description;
-        {
-            uint256 requiredStake = self.requiredVerifierStakeByActionId[tokenAddress][actionId];
-            uint256 depositedStake = self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
-            if (requiredStake > depositedStake) {
-                self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId] = requiredStake;
-                _depositVerifierStake(tokenAddress, actionId, round, verifierId, requiredStake - depositedStake);
-            }
+        if (previousApplicationId == 0 && requiredStake != 0) {
+            self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId] = requiredStake;
+            IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), requiredStake);
+            emit IGroupActionVerifyEvents.VerifierStakeDeposited({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                verifierId: verifierId,
+                round: round,
+                amount: requiredStake
+            });
         }
 
         _emitVerifierApplicationSubmitted(
@@ -922,22 +936,5 @@ library GroupActionVerify {
         if (IStake(protocol.stakeAddress).govVotes(tokenAddress, round, verifierId) == 0) {
             revert IGroupActionVerifyErrors.ZeroVerifyVotes(tokenAddress, verifierId);
         }
-    }
-
-    function _depositVerifierStake(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round,
-        uint256 verifierId,
-        uint256 stakeAmount
-    ) private {
-        IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), stakeAmount);
-        emit IGroupActionVerifyEvents.VerifierStakeDeposited({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            verifierId: verifierId,
-            round: round,
-            amount: stakeAmount
-        });
     }
 }
