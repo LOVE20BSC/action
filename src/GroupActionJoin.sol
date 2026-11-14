@@ -120,6 +120,21 @@ library GroupActionJoin {
         }
     }
 
+    function _pushJoinToken(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 amount
+    ) private {
+        IERC20 joinToken = IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]);
+        uint256 balanceBefore = joinToken.balanceOf(msg.sender);
+        joinToken.safeTransfer(msg.sender, amount);
+        uint256 received = joinToken.balanceOf(msg.sender) - balanceBefore;
+        if (received != amount) {
+            revert IGroupActionJoinErrors.InexactJoinTokenTransfer(amount, received);
+        }
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control)
     function withdraw(
         GroupActionStorage.Layout storage self,
@@ -142,7 +157,7 @@ library GroupActionJoin {
 
         _decreaseOwnAmount(self, tokenAddress, actionId, round, groupId, memberId, ownAmount, amount);
 
-        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
+        _pushJoinToken(self, tokenAddress, actionId, amount);
 
         emit IGroupActionJoinEvents.GroupActionWithdrawn({
             tokenAddress: tokenAddress,
@@ -197,7 +212,7 @@ library GroupActionJoin {
 
         if (ownAmount != 0) {
             _decreaseOwnAmount(self, tokenAddress, actionId, round, groupId, memberId, ownAmount, ownAmount);
-            IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, ownAmount);
+            _pushJoinToken(self, tokenAddress, actionId, ownAmount);
             emit IGroupActionJoinEvents.GroupActionWithdrawn({
                 tokenAddress: tokenAddress,
                 actionId: actionId,
@@ -392,7 +407,7 @@ library GroupActionJoin {
             totalRefund += _revokeQuota(self, protocol, tokenAddress, actionId, round, groupId, providerId, memberIds[i]);
         }
 
-        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, totalRefund);
+        _pushJoinToken(self, tokenAddress, actionId, totalRefund);
     }
 
     function _revokeQuota(
@@ -840,7 +855,7 @@ library GroupActionJoin {
             self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].remove(memberId);
         }
 
-        IERC20(self.joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
+        _pushJoinToken(self, tokenAddress, actionId, amount);
 
         emit IGroupActionJoinEvents.ProviderQuotaRemoved({
             tokenAddress: tokenAddress,

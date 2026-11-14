@@ -229,8 +229,10 @@ contract MockGroupActionToken {
     }
 
     function transfer(address to, uint256 amount) external returns (bool) {
+        uint256 fee = amount * transferFeeBps / 10_000;
         _balanceOf[msg.sender] -= amount;
-        _balanceOf[to] += amount;
+        _balanceOf[to] += amount - fee;
+        _totalSupply -= fee;
         return true;
     }
 
