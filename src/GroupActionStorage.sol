@@ -158,7 +158,6 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) rankedApplicationIds;
 
         mapping(address => mapping(uint256 => mapping(uint256 => bool))) applicationPunished;
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) applicationStake;
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierStakeByMemberId;
         mapping(address => mapping(uint256 => Uint256Set.Storage)) pendingVerificationRounds;
 

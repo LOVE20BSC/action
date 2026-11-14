@@ -168,7 +168,14 @@ library GroupActionVerify {
         applicationId = _replaceApplication(self, tokenAddress, actionId, round, verifierId);
         self.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
         self.applicationDescription[tokenAddress][actionId][applicationId] = description;
-        _fundVerifierApplication(self, tokenAddress, actionId, verifierId, round, applicationId);
+        {
+            uint256 requiredStake = self.verifierStakeAmountByActionId[tokenAddress][actionId];
+            uint256 depositedStake = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+            if (requiredStake > depositedStake) {
+                self.verifierStakeByMemberId[tokenAddress][actionId][verifierId] = requiredStake;
+                _depositVerifierStake(tokenAddress, actionId, round, verifierId, requiredStake - depositedStake);
+            }
+        }
 
         _emitVerifierApplicationSubmitted(
             tokenAddress, actionId, round, verifierId, applicationId, previousApplicationId, description
@@ -190,15 +197,7 @@ library GroupActionVerify {
         }
 
         _settleExpiredRounds(self, tokenAddress, actionId, round);
-        {
-            (, uint256 responsibleRound) =
-                _lockedVerifierStake(self, tokenAddress, actionId, verifierId, round);
-            if (responsibleRound != 0) {
-                revert IGroupActionVerifyErrors.ApplicationStillResponsible(
-                    self.rankedApplicationIds[tokenAddress][actionId][responsibleRound][0], responsibleRound
-                );
-            }
-        }
+        _checkVerifierReleased(self, tokenAddress, actionId, verifierId, round);
         self.activeApplicationIds[tokenAddress][actionId].remove(applicationId);
         _removeFromRank(self, tokenAddress, actionId, round, applicationId);
         self.currentApplicationId[tokenAddress][actionId][verifierId] = 0;
@@ -206,7 +205,6 @@ library GroupActionVerify {
 
         uint256 stakeAmount = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
         delete self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
-        delete self.applicationStake[tokenAddress][actionId][applicationId];
         if (stakeAmount != 0) {
             IERC20(tokenAddress).safeTransfer(IMemberNFT(protocol.memberNFTAddress).ownerOf(verifierId), stakeAmount);
             emit IGroupActionVerifyEvents.VerifierStakeRefunded({
@@ -415,6 +413,13 @@ library GroupActionVerify {
         if (self.applicationPunished[tokenAddress][actionId][applicationId]) {
             revert IGroupActionVerifyErrors.ApplicationPunished(applicationId);
         }
+        {
+            uint256 available = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+            uint256 required = self.verifierStakeAmountByActionId[tokenAddress][actionId];
+            if (available < required) {
+                revert IGroupActionVerifyErrors.InsufficientVerifierStake(verifierId, available, required);
+            }
+        }
         if (voteAmount == 0) {
             return;
         }
@@ -460,10 +465,9 @@ library GroupActionVerify {
             uint256 applicationId = ranked[0];
             if (self.applicationPunished[tokenAddress][actionId][applicationId]) continue;
             self.applicationPunished[tokenAddress][actionId][applicationId] = true;
-            uint256 amount = self.applicationStake[tokenAddress][actionId][applicationId];
-            delete self.applicationStake[tokenAddress][actionId][applicationId];
             uint256 verifierId = self.applicationVerifierId[tokenAddress][actionId][applicationId];
-            self.verifierStakeByMemberId[tokenAddress][actionId][verifierId] -= amount;
+            uint256 amount = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
+            delete self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
             if (amount != 0) ILOVE20Token(tokenAddress).burn(amount);
             emit IGroupActionVerifyEvents.VerifierApplicationPunished(
                 tokenAddress, actionId, applicationId, verifierId, round, amount
@@ -471,34 +475,14 @@ library GroupActionVerify {
         }
     }
 
-    function _fundVerifierApplication(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 actionId,
-        uint256 verifierId,
-        uint256 round,
-        uint256 applicationId
-    ) private {
-        uint256 stakeAmount = self.verifierStakeAmountByActionId[tokenAddress][actionId];
-        self.applicationStake[tokenAddress][actionId][applicationId] = stakeAmount;
-        (uint256 requiredStake,) = _lockedVerifierStake(self, tokenAddress, actionId, verifierId, round);
-        requiredStake += stakeAmount;
-        uint256 depositedStake = self.verifierStakeByMemberId[tokenAddress][actionId][verifierId];
-        if (requiredStake > depositedStake) {
-            self.verifierStakeByMemberId[tokenAddress][actionId][verifierId] = requiredStake;
-            _depositVerifierStake(tokenAddress, actionId, round, verifierId, requiredStake - depositedStake);
-        }
-    }
-
-    function _lockedVerifierStake(
+    function _checkVerifierReleased(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 actionId,
         uint256 verifierId,
         uint256 currentRound
-    ) private view returns (uint256 stakeAmount, uint256 responsibleRound) {
+    ) private view {
         uint256[] storage rounds = self.pendingVerificationRounds[tokenAddress][actionId].items;
-        uint256[] memory applications = new uint256[](rounds.length);
         for (uint256 i = 0; i < rounds.length; i++) {
             uint256[] storage ranked = self.rankedApplicationIds[tokenAddress][actionId][rounds[i]];
             if (rounds[i] > currentRound || ranked.length == 0
@@ -506,11 +490,8 @@ library GroupActionVerify {
             uint256 applicationId = ranked[0];
             if (self.applicationVerifierId[tokenAddress][actionId][applicationId] != verifierId
                 || self.applicationPunished[tokenAddress][actionId][applicationId]) continue;
-            responsibleRound = rounds[i];
-            applications[i] = applicationId;
-            uint256 j = 0;
-            while (j < i && applications[j] != applicationId) j++;
-            if (j == i) stakeAmount += self.applicationStake[tokenAddress][actionId][applicationId];
+            // forge-lint: disable-next-item(require-revert-in-loop)
+            revert IGroupActionVerifyErrors.ApplicationStillResponsible(applicationId, rounds[i]);
         }
     }
 

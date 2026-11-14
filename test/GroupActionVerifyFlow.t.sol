@@ -484,27 +484,21 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         );
     }
 
-    function testElectedApplicationReplacementRequiresAnAdditionalBond() external {
+    function testElectedApplicationReplacementReusesSharedStake() external {
         _prepareRound();
-        vm.prank(VERIFIER);
-        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
-        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
-        require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER_ID).applicationId == 1, "failed deposit keeps the old application");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "failed deposit keeps the old bond");
-
-        _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "replaced");
         require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).applicationId == 1, "history retained");
         require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER_ID).applicationId == 2, "replacement before verification");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 2 * VERIFIER_STAKE, "both bonds retained");
+        require(token.balanceOf(VERIFIER) == 0, "replacement neither charges nor refunds");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "one shared stake");
+        require(token.balanceOf(address(executor)) == ACTIVATION_STAKE + VERIFIER_STAKE, "no additional bond held");
         _castVotesForAt(VERIFIER_ID, 1, 3);
     }
 
     function testReplacementCannotCancelUntilHistoricalVerificationCompletes() external {
         _prepareRound();
         _atPhase(4);
-        _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "during verification");
         vm.prank(VERIFIER);
@@ -517,82 +511,92 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _scores(100));
         vm.prank(VERIFIER);
-        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "reuse released stake");
-        require(token.balanceOf(VERIFIER) == 0, "replacement does not refund or charge released collateral");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 2 * VERIFIER_STAKE, "released bond remains deposited");
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "reuse shared stake");
+        require(token.balanceOf(VERIFIER) == 0, "replacement neither charges nor refunds");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "shared stake remains deposited");
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
-        require(token.balanceOf(VERIFIER) == 2 * VERIFIER_STAKE, "both bonds refunded after all duties complete");
+        require(token.balanceOf(VERIFIER) == VERIFIER_STAKE, "only the shared stake refunded");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "all collateral cleared");
     }
 
-    function testReplacedApplicationCanStillBePunishedWithoutBurningTheNewBond() external {
+    function testExpiredHistoricalApplicationBurnsSharedStakeAndBlocksCurrentApplication() external {
         _prepareRound();
-        _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "fresh application");
         uint256 supply = token.totalSupply();
         _atPhase(5);
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.InsufficientVerifierStake.selector, VERIFIER_ID, 0, VERIFIER_STAKE));
+        _castVotesForAt(VERIFIER_ID, 1, 5);
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
-        require(token.totalSupply() == supply - VERIFIER_STAKE, "only the historical bond burned");
+        require(token.totalSupply() == supply - VERIFIER_STAKE, "shared stake burned");
         require(executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER_ID).punished, "historical application punished");
-        require(!executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).punished, "new application remains clean");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "new bond retained");
+        require(!executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).punished, "current application was not itself punished");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "no separate application bond remains");
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.InsufficientVerifierStake.selector, VERIFIER_ID, 0, VERIFIER_STAKE));
+        _castVotesForAt(VERIFIER_ID, 1, 5);
         vm.prank(VERIFIER);
-        executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
-        require(token.balanceOf(VERIFIER) == VERIFIER_STAKE, "only the new bond refunded");
-        vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
-        require(token.totalSupply() == supply - VERIFIER_STAKE, "historical bond not burned twice");
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "not funded");
+        require(executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).applicationId == 2, "failed top-up preserves the current application");
+        _fundVerifierStakeFor(VERIFIER);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "refilled");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "only the missing stake deposited");
+        require(token.balanceOf(VERIFIER) == 0, "top-up collected");
+        _castVotesForAt(VERIFIER_ID, 1, 5);
     }
 
-    function testSeveralResponsibleApplicationsEachKeepTheirOwnBond() external {
+    function testSeveralApplicationsShareOneStakeAndSettleBeforeRefilling() external {
         _prepareRound();
-        _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "round 3");
         _castVotesForAt(VERIFIER_ID, 1, 3);
         _atPhase(4);
-        _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "round 4");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 3 * VERIFIER_STAKE, "two historical bonds and one new bond");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "all applications share one stake");
 
         _atPhase(5);
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 2 * VERIFIER_STAKE, "first historical bond burned");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "first punishment consumes the shared stake");
         vm.prank(VERIFIER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationStillResponsible.selector, 2, 3));
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         _atPhase(6);
-        vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), 6, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        _fundVerifierStakeFor(VERIFIER);
+        uint256 supply = token.totalSupply();
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "refill after settlement");
         require(executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER_ID).punished, "second historical application punished");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "second historical bond burned");
+        require(token.totalSupply() == supply, "already empty collateral is not burned twice");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "expired duties settle before the top-up");
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
-        require(token.balanceOf(VERIFIER) == VERIFIER_STAKE, "remaining bond refunded");
+        require(token.balanceOf(VERIFIER) == VERIFIER_STAKE, "only the refilled stake refunded");
+        require(token.balanceOf(address(executor)) == ACTIVATION_STAKE, "group stake untouched");
     }
 
-    function testOneApplicationWinningSeveralRoundsNeedsOnlyOneRetainedBond() external {
+    function testOneApplicationIsNotPunishedAgainAfterStakeIsRefilled() external {
         _prepareRound();
         _castVotesForAt(VERIFIER_ID, 1, 3);
         _atPhase(4);
-        _fundVerifierStakeFor(VERIFIER);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "new application");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 2 * VERIFIER_STAKE, "one bond per distinct application");
-        uint256 supply = token.totalSupply();
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "one shared stake");
         _atPhase(5);
-        vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), 5, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
+        _fundVerifierStakeFor(VERIFIER);
+        uint256 supply = token.totalSupply();
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "refilled");
         _atPhase(6);
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 6, ACTION_ID, MEMBER1_ID, 1, new bytes[](0));
         require(token.totalSupply() == supply - VERIFIER_STAKE, "one application punished only once across rounds");
-        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "new application bond untouched");
+        require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == VERIFIER_STAKE, "shared stake remains refilled");
+        _castVotesForAt(VERIFIER_ID, 1, 6);
     }
 
     function testElectedVerifierCannotRefundTheBondBeforeCompletingVerification() external {

@@ -77,6 +77,7 @@ interface IGroupActionVerifyEvents {
 interface IGroupActionVerifyErrors {
     error ApplicationPunished(uint256 applicationId);
     error ApplicationStillResponsible(uint256 applicationId, uint256 round);
+    error InsufficientVerifierStake(uint256 verifierId, uint256 available, uint256 required);
     error OriginScoresEmpty();
     error VerifierNotRanked(
         uint256 verifierId,
@@ -189,7 +190,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 verifierId
     ) external;
 
-    /// @notice Total unburned collateral held for this verifier, including earlier applications.
+    /// @notice Current shared collateral for this verifier within the action.
     function verifierStake(
         address tokenAddress,
         uint256 actionId,
