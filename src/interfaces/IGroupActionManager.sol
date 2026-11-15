@@ -71,6 +71,11 @@ interface IGroupActionManagerErrors {
         uint256 count,
         uint256 maxCount
     );
+    error VerificationKeyEmpty(uint256 index);
+    error DuplicateVerificationKey(
+        uint256 index,
+        uint256 previousIndex
+    );
     error VerificationKeyTooLong(
         uint256 index,
         uint256 length,

@@ -204,9 +204,7 @@ contract ActionTarget is IActionTarget {
         uint256 round,
         uint256 memberId
     ) external view returns (bool) {
-        if (round > _joinRound()) {
-            return false;
-        }
+        _checkJoinRound(round);
         return _memberIdsByActionId[tokenAddress][actionId].containsByRound(
             memberId,
             round
@@ -249,9 +247,7 @@ contract ActionTarget is IActionTarget {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
-        if (round > _joinRound()) {
-            return (new uint256[](0), 0);
-        }
+        _checkJoinRound(round);
         (memberIds, totalCount) = _memberIdsByActionId[tokenAddress][actionId]
             .valuesByRound(round, offset, limit, reverse);
     }
@@ -434,6 +430,11 @@ contract ActionTarget is IActionTarget {
 
     function _joinRound() internal view returns (uint256) {
         return ActionRoundAxis.joinRound(PHASE_ADDRESS);
+    }
+
+    function _checkJoinRound(uint256 round) private view {
+        uint256 joinRound = _joinRound();
+        if (round > joinRound) revert RoundNotStarted(round, joinRound);
     }
 
     function _executorFromSlot(bytes calldata item) internal pure returns (address) {

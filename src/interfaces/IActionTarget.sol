@@ -32,6 +32,10 @@ interface IActionTargetEvents {
 }
 
 interface IActionTargetErrors {
+    error RoundNotStarted(
+        uint256 requiredRound,
+        uint256 currentRound
+    );
     error NotSubmit(address caller);
     error NotVote(address caller);
     error NotMemberOwner(uint256 memberId);

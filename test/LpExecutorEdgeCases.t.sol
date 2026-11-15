@@ -38,11 +38,11 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
 
     function testJoinedAmountQueriesAtUint256Max() external {
         _join(1, 100e18);
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, type(uint256).max) == 0, "total query");
-        require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, type(uint256).max, 1) == 0,
-            "member query"
-        );
+        bytes memory expected = abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, type(uint256).max, 2);
+        vm.expectRevert(expected);
+        lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, type(uint256).max);
+        vm.expectRevert(expected);
+        lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, type(uint256).max, 1);
     }
 
     function testJoinExitSameBlockLeavesNoEffectiveAmount() external {

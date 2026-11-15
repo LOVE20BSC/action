@@ -135,6 +135,7 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
             address(executor),
             submitAddress
         );
+        phase.setPhase(handler.JOIN_PHASE());
     }
 
     function targetContracts() public view returns (address[] memory targets) {

@@ -278,13 +278,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
             executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID) == 123e18,
             "member total"
         );
-        require(
-            executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1) == 0, "future round reads zero"
-        );
-        require(
-            executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID) == 0,
-            "future round member reads zero"
-        );
+        bytes memory expected = abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, SERVICE_ROUND + 1, SERVICE_ROUND);
+        vm.expectRevert(expected);
+        executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1);
+        vm.expectRevert(expected);
+        executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID);
 
         _atPhase(VERIFY_PHASE);
         groupAction.setTotalStaked(address(token), SERVICE_ROUND + 1, 888e18);

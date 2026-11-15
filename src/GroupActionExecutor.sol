@@ -169,6 +169,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (JoinInfo memory info) {
+        _checkJoinRound(round);
         return GroupActionJoin.joinInfo(_layout, tokenAddress, actionId, round, memberId);
     }
 
@@ -178,6 +179,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 groupId
     ) external view returns (uint256) {
+        _checkJoinRound(round);
         return GroupActionJoin.joinedAmountByGroupId(_layout, tokenAddress, actionId, round, groupId);
     }
 
@@ -189,6 +191,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
+        _checkJoinRound(round);
         return GroupActionJoin.groupIdsByRound(_layout, tokenAddress, actionId, round, offset, limit, reverse);
     }
 
@@ -201,6 +204,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
+        _checkJoinRound(round);
         return GroupActionJoin.memberIdsByGroupId(_layout, tokenAddress, actionId, round, groupId, offset, limit, reverse);
     }
 
@@ -269,6 +273,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
             uint256 totalCount
         )
     {
+        _checkJoinRound(round);
         return GroupActionJoin.providerAmountsByMemberId(_layout, tokenAddress, actionId, round, memberId, offset, limit, reverse);
     }
 
@@ -521,6 +526,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (string[] memory keys, string[] memory values) {
+        _checkJoinRound(round);
         return GroupActionVerify.verificationInfosByRound(_layout, tokenAddress, actionId, round, memberId);
     }
 
@@ -602,10 +608,12 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     }
 
     function totalActivationStakeByRound(address tokenAddress, uint256 round) external view returns (uint256) {
+        _checkJoinRound(round);
         return _layout.totalActivationStakeHistory[tokenAddress].value(round);
     }
 
     function activationStakeByGroupIdByRound(address tokenAddress, uint256 round, uint256 groupId) external view returns (uint256) {
+        _checkJoinRound(round);
         return _layout.activationStakeHistoryByGroupId[tokenAddress][groupId].value(round);
     }
 
@@ -646,9 +654,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     }
 
     function joinedAmountByActionId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256 amount) {
-        if (round > _joinRound()) {
-            return 0;
-        }
+        _checkJoinRound(round);
         return _layout.joinedAmountByActionId[tokenAddress][actionId].value(round);
     }
 
@@ -658,9 +664,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 amount) {
-        if (round > _joinRound()) {
-            return 0;
-        }
+        _checkJoinRound(round);
         return _layout.memberAmountAt(tokenAddress, actionId, round, memberId);
     }
 

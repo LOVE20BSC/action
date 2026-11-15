@@ -450,6 +450,28 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(oneKey, longDescription));
     }
 
+    function testVerificationKeysMustBeNonemptyAndUnique() external {
+        string[] memory keys = new string[](3);
+        keys[0] = "proof";
+        keys[1] = "account";
+        keys[2] = "proof";
+        string[] memory descriptions = new string[](3);
+
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.DuplicateVerificationKey.selector, 2, 0));
+        executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(keys, descriptions));
+
+        keys[2] = "";
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.VerificationKeyEmpty.selector, 2));
+        executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(keys, descriptions));
+
+        keys[2] = "link";
+        _createActionWith(ACTION_2, _targetDataWithSchema(keys, descriptions));
+        (string[] memory storedKeys,) = executor.verificationSchema(address(token), ACTION_2);
+        require(storedKeys.length == 3 && keccak256(bytes(storedKeys[2])) == keccak256(bytes("link")), "valid schema stored");
+    }
+
     function testActivateGroupRevertsForUncreatedAction() external {
         _atPhase(3);
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);

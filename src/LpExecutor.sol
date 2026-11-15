@@ -406,9 +406,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     }
 
     function joinedAmountByActionId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256 amount) {
-        if (round > _joinRound()) {
-            return 0;
-        }
+        _checkJoinRound(round);
         return _joinedAmountByActionId[tokenAddress][actionId].value(round);
     }
 
@@ -418,9 +416,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 round,
         uint256 memberId
     ) external view returns (uint256 amount) {
-        if (round > _joinRound()) {
-            return 0;
-        }
+        _checkJoinRound(round);
         return _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(round);
     }
 

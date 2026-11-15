@@ -1077,7 +1077,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(1, 100e18);
 
         require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18, "current round");
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 3) == 0, "beyond join round");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 3, 2));
+        lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 3);
         require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 1) == 0, "before first record");
         require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 2) == 0, "unknown member");
     }

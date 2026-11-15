@@ -421,7 +421,8 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(4);
         _join(11, 1);
         require(actionTarget.isJoinedByRound(address(token), 11, 3, 1), "rejoined as of round 3");
-        require(actionTarget.isJoinedByRound(address(token), 11, 4, 1) == false, "future round is not started");
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 4, 3));
+        actionTarget.isJoinedByRound(address(token), 11, 4, 1);
         require(actionTarget.isJoined(address(token), 11, 1), "currently joined");
     }
 
@@ -484,9 +485,9 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(2);
         _join(11, 1);
         phase.setPhase(4);
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 5, 0, 10, false);
-        require(total == 0 && memberIds.length == 0, "future round is empty");
-        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 11, 3, 0, 10, false);
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 5, 3));
+        actionTarget.memberIdsByActionId(address(token), 11, 5, 0, 10, false);
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 3, 0, 10, false);
         require(total == 1 && memberIds[0] == 1, "nearest snapshot at round 3");
         (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 11, 0, 0, 10, false);
         require(total == 0 && memberIds.length == 0, "before first join is empty");

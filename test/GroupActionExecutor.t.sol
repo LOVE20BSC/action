@@ -200,12 +200,14 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _prepareRound();
 
         require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18 + PROVIDER_QUOTA, "round total");
-        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 3) == 0, "future round zero");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 3, 2));
+        executor.joinedAmountByActionId(address(token), ACTION_ID, 3);
         require(
             executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == 100e18,
             "member round amount"
         );
-        require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 3, MEMBER1_ID) == 0, "member future zero");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 3, 2));
+        executor.joinedAmountByMemberId(address(token), ACTION_ID, 3, MEMBER1_ID);
         require(executor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token");
         require(executor.currentJoinRound() == 2, "join round getter");
         require(executor.currentVoteRound() == 3, "vote round getter");

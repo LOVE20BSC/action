@@ -135,6 +135,11 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         return ActionRoundAxis.joinRound(PHASE_ADDRESS);
     }
 
+    function _checkJoinRound(uint256 round) internal view {
+        uint256 joinRound = _joinRound();
+        if (round > joinRound) revert IActionExecutorErrors.RoundNotStarted(round, joinRound);
+    }
+
     function _mintRound() internal view virtual returns (uint256);
 
     function _mintMemberReward(

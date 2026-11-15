@@ -390,6 +390,9 @@ contract LpExecutorRealIntegrationTest {
         lpExecutor.join(address(token), proposalId, 1, LP_JOIN_AMOUNT);
 
         require(lpPair.balanceOf(member1) == lpBefore, "lp not moved");
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, round, round - 1));
+        lpExecutor.joinedAmountByActionId(address(token), proposalId, round);
+        _advanceToPhaseStart(round + 1);
         require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == 0, "join ledger rolled back");
         require(lpExecutor.deductionByRound(address(token), proposalId, round) == 0, "deduction rolled back");
     }

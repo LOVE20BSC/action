@@ -148,9 +148,10 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
 
         (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
         require(total == 1 && page[0] == 1, "join round readable");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
-        require(total == 0 && page.length == 0, "next round is not started");
-        require(actionTarget.isJoinedByRound(address(token), 11, 2, 1) == false, "flag matches boundary");
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 2, 1));
+        actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 2, 1));
+        actionTarget.isJoinedByRound(address(token), 11, 2, 1);
     }
 
     function testCreateAcceptsMultipleBusinessItems() external {

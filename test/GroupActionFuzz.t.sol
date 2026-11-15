@@ -202,7 +202,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         require(page.length == expected, "reverse page bounds");
     }
 
-    function testFuzzJoinedAmountRoundGuard(uint96 amountSeed, uint8 aheadSeed) external {
+    function testFuzzParticipationQueriesRejectFutureRounds(uint96 amountSeed, uint8 aheadSeed) external {
         _openJoinPhase();
         uint256 amount = uint256(amountSeed) % 100e18 + 1e18;
         _fundJoinTokenFor(MEMBER1, amount);
@@ -210,8 +210,27 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
 
         require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == amount, "current");
         uint256 ahead = uint256(aheadSeed) % 10 + 3;
-        require(executor.joinedAmountByMemberId(address(token), ACTION_ID, ahead, MEMBER1_ID) == 0, "future zero");
-        require(executor.joinedAmountByActionId(address(token), ACTION_ID, ahead) == 0, "future total zero");
+        bytes memory expected = abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, ahead, 2);
+        vm.expectRevert(expected);
+        executor.joinedAmountByMemberId(address(token), ACTION_ID, ahead, MEMBER1_ID);
+        vm.expectRevert(expected);
+        executor.joinedAmountByActionId(address(token), ACTION_ID, ahead);
+        vm.expectRevert(expected);
+        executor.joinInfo(address(token), ACTION_ID, ahead, MEMBER1_ID);
+        vm.expectRevert(expected);
+        executor.joinedAmountByGroupId(address(token), ACTION_ID, ahead, GROUP_ID);
+        vm.expectRevert(expected);
+        executor.groupIdsByRound(address(token), ACTION_ID, ahead, 0, 10, false);
+        vm.expectRevert(expected);
+        executor.memberIdsByGroupId(address(token), ACTION_ID, ahead, GROUP_ID, 0, 10, false);
+        vm.expectRevert(expected);
+        executor.providerAmountsByMemberId(address(token), ACTION_ID, ahead, MEMBER1_ID, 0, 10, false);
+        vm.expectRevert(expected);
+        executor.verificationInfosByRound(address(token), ACTION_ID, ahead, MEMBER1_ID);
+        vm.expectRevert(expected);
+        executor.totalActivationStakeByRound(address(token), ahead);
+        vm.expectRevert(expected);
+        executor.activationStakeByGroupIdByRound(address(token), ahead, GROUP_ID);
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

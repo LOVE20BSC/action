@@ -136,6 +136,10 @@ library GroupActionManager {
             }
             for (uint256 i = 0; i < keys.length; i++) {
                 uint256 keyLength = bytes(keys[i]).length;
+                if (keyLength == 0) {
+                    // forge-lint: disable-next-item(require-revert-in-loop)
+                    revert IGroupActionManagerErrors.VerificationKeyEmpty(i);
+                }
                 if (keyLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
                     // forge-lint: disable-next-item(require-revert-in-loop)
                     revert IGroupActionManagerErrors.VerificationKeyTooLong(
@@ -148,6 +152,12 @@ library GroupActionManager {
                     revert IGroupActionManagerErrors.VerificationDescriptionTooLong(
                         i, descriptionLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
                     );
+                }
+                for (uint256 j = 0; j < i; j++) {
+                    if (keccak256(bytes(keys[i])) == keccak256(bytes(keys[j]))) {
+                        // forge-lint: disable-next-item(require-revert-in-loop)
+                        revert IGroupActionManagerErrors.DuplicateVerificationKey(i, j);
+                    }
                 }
             }
             self.verificationKeysByActionId[tokenAddress][actionId] = keys;

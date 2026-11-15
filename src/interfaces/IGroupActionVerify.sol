@@ -75,10 +75,16 @@ interface IGroupActionVerifyEvents {
 }
 
 interface IGroupActionVerifyErrors {
-    error ApplicationOverdue(uint256 applicationId, uint256 round);
+    error ApplicationOverdue(
+        uint256 applicationId,
+        uint256 round
+    );
     error ApplicationStopped(uint256 applicationId);
     error ReapplicationInStoppedRound(uint256 round);
-    error ApplicationStillResponsible(uint256 applicationId, uint256 round);
+    error ApplicationStillResponsible(
+        uint256 applicationId,
+        uint256 round
+    );
     error OriginScoresEmpty();
     error VerifierNotElected(
         uint256 verifierId,
