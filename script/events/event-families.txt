@@ -24,10 +24,12 @@ ProviderQuotaRemoved action.quota
 ProviderQuotaRestored action.quota
 OriginScoresSubmitted action.verification
 VerifierApplicationSubmitted action.verification
+VerifierApplicationDescriptionUpdated action.verification
+VerifierApplicationPunished action.verification
+VerifierApplicationStopped action.verification
 VerifierApplicationCancelled action.verification
 VerifierStakeDeposited action.verification
 VerifierStakeRefunded action.verification
-VerifierLocked action.verification
 ApplicationVoteRecorded action.verification
 RecipientsChanged action.recipients
 RecipientPaid action.service

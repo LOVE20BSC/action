@@ -651,7 +651,13 @@ contract GroupActionEventsTest is
     function testVerifierDescriptionUpdateCarriesItsEffectiveRound() external {
         _submitApplication();
         vm.expectEmit(true, true, true, true, address(executor));
-        emit VerifierApplicationDescriptionUpdated(address(token), ACTION_ID, 1, 3, "updated");
+        emit VerifierApplicationDescriptionUpdated({
+            tokenAddress: address(token),
+            actionId: ACTION_ID,
+            applicationId: 1,
+            effectiveRound: 3,
+            description: "updated"
+        });
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "updated");
     }

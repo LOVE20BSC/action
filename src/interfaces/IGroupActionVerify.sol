@@ -15,9 +15,28 @@ struct VerifierApplication {
 }
 
 interface IGroupActionVerifyEvents {
-    event VerifierApplicationPunished(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed applicationId, uint256 verifierId, uint256[] failedRounds, uint256 burnedAmount);
-    event VerifierApplicationStopped(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed verifierId, uint256 applicationId, uint256 round);
-    event VerifierApplicationDescriptionUpdated(address indexed tokenAddress, uint256 indexed actionId, uint256 indexed applicationId, uint256 effectiveRound, string description);
+    event VerifierApplicationPunished(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed applicationId,
+        uint256 verifierId,
+        uint256[] failedRounds,
+        uint256 burnedAmount
+    );
+    event VerifierApplicationStopped(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed verifierId,
+        uint256 applicationId,
+        uint256 round
+    );
+    event VerifierApplicationDescriptionUpdated(
+        address indexed tokenAddress,
+        uint256 indexed actionId,
+        uint256 indexed applicationId,
+        uint256 effectiveRound,
+        string description
+    );
     event OriginScoresSubmitted(
         address indexed tokenAddress,
         uint256 indexed actionId,

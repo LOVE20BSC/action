@@ -197,9 +197,13 @@ library GroupActionVerify {
         if (applicationId != 0) {
             _checkAcceptingVotes(self, tokenAddress, actionId, applicationId, round);
             self.applicationDescription[tokenAddress][actionId][applicationId].record(round + 1, description);
-            emit IGroupActionVerifyEvents.VerifierApplicationDescriptionUpdated(
-                tokenAddress, actionId, applicationId, round + 1, description
-            );
+            emit IGroupActionVerifyEvents.VerifierApplicationDescriptionUpdated({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                applicationId: applicationId,
+                effectiveRound: round + 1,
+                description: description
+            });
             return applicationId;
         }
         uint256 previousApplicationId = self.applicationIdHistory[tokenAddress][actionId][verifierId].latestValue();
@@ -217,9 +221,13 @@ library GroupActionVerify {
         self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId] = requiredStake;
         if (requiredStake != 0) {
             IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), requiredStake);
-            emit IGroupActionVerifyEvents.VerifierStakeDeposited(
-                tokenAddress, actionId, verifierId, round, requiredStake
-            );
+            emit IGroupActionVerifyEvents.VerifierStakeDeposited({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                verifierId: verifierId,
+                round: round,
+                amount: requiredStake
+            });
         }
         _emitVerifierApplicationSubmitted(
             tokenAddress, actionId, round, verifierId, applicationId, previousApplicationId, description
@@ -251,9 +259,13 @@ library GroupActionVerify {
         uint256 round
     ) private {
         self.applicationStoppedRound[tokenAddress][actionId][applicationId] = round;
-        emit IGroupActionVerifyEvents.VerifierApplicationStopped(
-            tokenAddress, actionId, verifierId, applicationId, round
-        );
+        emit IGroupActionVerifyEvents.VerifierApplicationStopped({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            verifierId: verifierId,
+            applicationId: applicationId,
+            round: round
+        });
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -284,19 +296,32 @@ library GroupActionVerify {
         delete self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId];
         if (penalty.amount != 0) ILOVE20Token(tokenAddress).burn(penalty.amount);
         if (penalty.failedRounds.length != 0) {
-            emit IGroupActionVerifyEvents.VerifierApplicationPunished(
-                tokenAddress, actionId, applicationId, verifierId, penalty.failedRounds, penalty.amount
-            );
+            emit IGroupActionVerifyEvents.VerifierApplicationPunished({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                applicationId: applicationId,
+                verifierId: verifierId,
+                failedRounds: penalty.failedRounds,
+                burnedAmount: penalty.amount
+            });
         }
         if (refund != 0) {
             IERC20(tokenAddress).safeTransfer(msg.sender, refund);
-            emit IGroupActionVerifyEvents.VerifierStakeRefunded(
-                tokenAddress, actionId, verifierId, round, refund
-            );
+            emit IGroupActionVerifyEvents.VerifierStakeRefunded({
+                tokenAddress: tokenAddress,
+                actionId: actionId,
+                verifierId: verifierId,
+                round: round,
+                amount: refund
+            });
         }
-        emit IGroupActionVerifyEvents.VerifierApplicationCancelled(
-            tokenAddress, actionId, verifierId, round, applicationId
-        );
+        emit IGroupActionVerifyEvents.VerifierApplicationCancelled({
+            tokenAddress: tokenAddress,
+            actionId: actionId,
+            verifierId: verifierId,
+            round: round,
+            applicationId: applicationId
+        });
     }
 
     function verifierStake(
