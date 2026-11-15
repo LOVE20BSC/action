@@ -2,7 +2,7 @@
 
 Action 负责 `ActionTarget`、LP、GroupAction 和 GroupService 四类行动执行合约，依赖 `core`。
 
-面向普通读者的说明见 [Action 白皮书](docs/DESIGN_WHITEPAPER.md)，涵盖行动运作、群行动、群服务和流动性行动。
+面向普通读者的说明见 [Action 白皮书](docs/DESIGN_WHITEPAPER.md)，涵盖行动运作、链群行动、链群服务和流动性行动。
 
 迁移方式：每个合约先以固定旧提交建立原始快照，再按小步提交改造成 BSC 版本。旧代码来源：`LOVE20TKM/extension`、`LOVE20TKM/extension-group`、`LOVE20TKM/extension-lp`（提交版本见 [repositories.md](https://github.com/LOVE20BSC/matt-gov/blob/main/docs/repositories.md#旧代码基线)）。
 
