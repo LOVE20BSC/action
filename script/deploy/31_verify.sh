@@ -59,7 +59,15 @@ fi
 
 # The endpoint is a mandatory key: an empty URL would be passed straight to forge.
 params_require_values "$VERIFIER_PARAMS" ETHERSCAN_VERIFIER_URL || exit 1
-: "${ETHERSCAN_API_KEY:?Set an Etherscan API key; source verification has not run.}"
+unset ETHERSCAN_API_KEY
+if [ ! -f "$NETWORK_DIR/.account" ]; then
+    echo "Error: Missing required configuration: $NETWORK_DIR/.account" >&2
+    exit 1
+fi
+set -a
+source "$NETWORK_DIR/.account"
+set +a
+: "${ETHERSCAN_API_KEY:?Set ETHERSCAN_API_KEY in .account; source verification has not run.}"
 
 CONTRACT_ADDRESS_FIELDS="ACTION_TARGET_ADDRESS LP_EXECUTOR_ADDRESS GROUP_ACTION_EXECUTOR_ADDRESS GROUP_SERVICE_EXECUTOR_ADDRESS"
 GROUP_ACTION_LIBRARY_SPECS=(

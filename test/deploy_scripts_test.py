@@ -479,10 +479,11 @@ def main():
                 "MOCK_PROJECT_ROOT": str(root), **env}
         checks = 0
 
-        def write_account(password_line=""):
+        def write_account(password_line="", api_key="test-key"):
             # 正确用法：keystore 名称 + 账户地址 + 可选密码。
             network.joinpath(".account").write_text(
-                "KEYSTORE_ACCOUNT=test-keystore\nACCOUNT_ADDRESS=0x" + "f5" * 20 + "\n" + password_line)
+                "KEYSTORE_ACCOUNT=test-keystore\nACCOUNT_ADDRESS=0x" + "f5" * 20 + "\n"
+                + "ETHERSCAN_API_KEY=" + api_key + "\n" + password_line)
 
         def run(script, success=True, args=(), cwd=None, **extra):
             nonlocal checks
@@ -772,8 +773,7 @@ def main():
             assert f"Failed to encode {label} constructor arguments" in result.stdout, result.stdout
             assert not any(call[0] == "forge" for call in log)
         # 缺 ETHERSCAN_API_KEY：验证步失败且不提交任何验证请求。
-        with network.joinpath("network.params").open("a") as config:
-            config.write("ETHERSCAN_API_KEY=\n")
+        write_account(api_key="")
         _, log = run("31_verify.sh", False, ("test",))
         assert not any(call[0] == "forge" for call in log)
         # 本地链跳过开源验证。
@@ -784,6 +784,7 @@ def main():
         # 跳过必须显式声明：把 31337 从列表里去掉后，同一条链默认验证而不是静默跳过。
         network.parent.joinpath("verifier.params").write_text(
             "ETHERSCAN_VERIFIER_URL=https://api.etherscan.io/v2/api\nVERIFY_SKIP_CHAIN_IDS=\n")
+        write_account()
         result, log = run("31_verify.sh", args=("test",))
         assert "Skip" not in result.stdout, result.stdout
         assert [call for call in log if call[:2] == ["forge", "verify-contract"]], log

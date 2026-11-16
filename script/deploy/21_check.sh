@@ -37,6 +37,11 @@ params_unset_all "$NETWORK_DIR/network.params" "$NETWORK_DIR/addresses.core.para
     "$NETWORK_DIR/addresses.action.params"
 
 params_load "$NETWORK_DIR/network.params"
+if [ -f "$NETWORK_DIR/.account" ]; then
+    set -a
+    source "$NETWORK_DIR/.account"
+    set +a
+fi
 params_load "$NETWORK_DIR/addresses.core.params"
 params_load "$NETWORK_DIR/addresses.action.params"
 

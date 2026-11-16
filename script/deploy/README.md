@@ -16,7 +16,7 @@ script/
 └── network/
     ├── verifier.params            # 开源验证端点与跳过链（所有网络共用一份）
     └── anvil31337_dev/            # 本地 anvil · dev
-        ├── .account               # 账户信息（敏感，已 gitignore）
+        ├── .account               # 账户与私密配置（已 gitignore）
         ├── network.params         # 网络参数
         ├── addresses.core.params  # core 已部署地址（跨库依赖，从 core 复制）
         └── addresses.action.params # 本协议已部署地址（含 4 个链接库），部署成功后自动写入
@@ -48,6 +48,7 @@ cd core && ./script/deploy/one_click_deploy.sh anvil31337_dev
 KEYSTORE_ACCOUNT=anvil_account
 ACCOUNT_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 KEYSTORE_PASSWORD=anvil
+ETHERSCAN_API_KEY=  # 实际开源验证时必填，本地跳过无需填写
 ```
 
 本地链与公共网络统一走 keystore 签名，不提供 `--unlocked` 回退。`KEYSTORE_PASSWORD` 非空时部署全程无交互；留空或未配时由 macOS `osascript` 弹窗读取。`one_click_deploy.sh` 入口把密码**只解析一次**（先重置、再读 `.account`、最后才交互）并导出给全部部署步骤，多模块仓库不会重复弹窗；单独运行某个部署步骤时，该步骤按 环境变量 → `.account` → 交互 自行解析。**入口不接受通过环境变量传密码**：`KEYSTORE_PASSWORD=xxx ./script/deploy/one_click_deploy.sh <net>` 里的值会被入口重置掉（有意为之，避免上次运行的残留密码被静默复用），非交互场景请把密码写进 `.account` 的 `KEYSTORE_PASSWORD`。非 macOS 环境没有 `osascript`，必须填写该项，脚本会在缺失时明确报错。
@@ -67,8 +68,8 @@ KEYSTORE_PASSWORD=anvil
 | 步骤 | 自行载入的输入 |
 | --- | --- |
 | `11_deploy.sh` | `network.params`、`addresses.core.params`、`.account`；读取本次广播生成的 `broadcast/DeployAction.s.sol/<chain-id>/run-latest.json`；写入 `addresses.action.params` |
-| `21_check.sh` | `network.params`、`addresses.core.params`、`addresses.action.params`；通过 `forge inspect` 读取本地构建产物，按 `immutableReferences` 回填链上 immutable 槽后做逐字节比对 |
-| `31_verify.sh` | `network.params`、`verifier.params`、`addresses.core.params`、`addresses.action.params`（后两者用于回填 ActionTarget 与 Executor 构造参数） |
+| `21_check.sh` | `network.params`、`addresses.core.params`、`addresses.action.params`；存在时读取 `.account` 以支持私有 RPC；通过 `forge inspect` 读取本地构建产物，按 `immutableReferences` 回填链上 immutable 槽后做逐字节比对 |
+| `31_verify.sh` | `.account`、`network.params`、`verifier.params`、`addresses.core.params`、`addresses.action.params`（后两者用于回填 ActionTarget 与 Executor 构造参数） |
 
 入口 `one_click_deploy.sh` 只做编排：备份地址 → 依次跑三步 → 校验失败回滚。新增合约/模块时新建 `one_click_deploy_<x>.sh` 与自己的步骤脚本、参数文件，对现有文件零改动——各模块的部署输入互不要求存在，不会因别的模块参数变动而失败。
 
@@ -87,7 +88,7 @@ cd action
 
 1. `11_deploy.sh` —— 自载入部署输入并调用 forge 部署初始化 4 个合约，原子写入地址；Foundry 自动以 CREATE2 部署的 4 个链接库地址从本次 broadcast 产物提取、核对后一并写入
 2. `21_check.sh` —— 自载入校验文件，校验部署与初始化结果
-3. `31_verify.sh` —— 自载入地址文件，对 4 个合约与 4 个链接库做合约开源验证；默认执行（需 `network.params` 的 `ETHERSCAN_API_KEY`），只有 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 列出的链才跳过
+3. `31_verify.sh` —— 自载入地址文件，对 4 个合约与 4 个链接库做合约开源验证；默认执行（需 `.account` 的 `ETHERSCAN_API_KEY`），只有 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 列出的链才跳过
 
 链 ID、core 依赖地址、初始化绑定任一不一致，部署入口返回失败，并回滚到上一次已保存的地址（校验失败不覆盖旧地址）。网络名必填，缺参直接报错。广播前校验全部在 `DeployAction.s.sol` 内完成。
 
@@ -113,11 +114,11 @@ cd action
 部署完成后，在 BSCScan 上验证合约：
 
 ```bash
-# 把 Etherscan API Key 填进 script/network/<network>/network.params 的 ETHERSCAN_API_KEY
+# 把 Etherscan API Key 填进 script/network/<network>/.account 的 ETHERSCAN_API_KEY
 ./script/deploy/31_verify.sh anvil31337_dev
 ```
 
-四个链接库没有构造函数参数，直接提交验证；`ActionTarget` 的构造函数只收 `Mint`，验证时用 `addresses.core.params` 的 `MINT_ADDRESS` 回填 `--constructor-args`。`LpExecutor` / `GroupActionExecutor` 的构造函数收 ActionTarget，`GroupServiceExecutor` 收 GroupActionExecutor；验证时由 `31_verify.sh` 用 `cast abi-encode` 回填 `--constructor-args`（另依赖 `addresses.action.params` 的 `ACTION_TARGET_ADDRESS`、`GROUP_ACTION_EXECUTOR_ADDRESS`），编码失败在任何验证请求之前中止。`GroupActionExecutor` 与 `GroupServiceExecutor` 的运行时字节码内嵌链接库地址，验证时按 `addresses.action.params` 里的库地址传 `--libraries`；不传会让 standard-json 的 `settings.libraries` 为空，链上字节码无法匹配。链接库本身也逐一提交验证。使用 Etherscan V2 API Key；缺少 Key 或任何一份合约/库验证失败均返回非零；链列在 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 时跳过并返回 0（`ETHERSCAN_VERIFIER_URL` 决定端点，`56`/`97` 不允许进跳过名单）。`ETHERSCAN_API_KEY` 是 `network.params` 的一个键，只从文件取值——步骤脚本载入该文件时文件值（包括空值）覆盖调用方的同名环境变量，所以 `ETHERSCAN_API_KEY=xxx ./31_verify.sh` 不生效。
+四个链接库没有构造函数参数，直接提交验证；`ActionTarget` 的构造函数只收 `Mint`，验证时用 `addresses.core.params` 的 `MINT_ADDRESS` 回填 `--constructor-args`。`LpExecutor` / `GroupActionExecutor` 的构造函数收 ActionTarget，`GroupServiceExecutor` 收 GroupActionExecutor；验证时由 `31_verify.sh` 用 `cast abi-encode` 回填 `--constructor-args`（另依赖 `addresses.action.params` 的 `ACTION_TARGET_ADDRESS`、`GROUP_ACTION_EXECUTOR_ADDRESS`），编码失败在任何验证请求之前中止。`GroupActionExecutor` 与 `GroupServiceExecutor` 的运行时字节码内嵌链接库地址，验证时按 `addresses.action.params` 里的库地址传 `--libraries`；不传会让 standard-json 的 `settings.libraries` 为空，链上字节码无法匹配。链接库本身也逐一提交验证。使用 Etherscan V2 API Key；缺少 Key 或任何一份合约/库验证失败均返回非零；链列在 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 时跳过并返回 0（`ETHERSCAN_VERIFIER_URL` 决定端点，`56`/`97` 不允许进跳过名单）。`ETHERSCAN_API_KEY` 是 `.account` 的一个键，只从文件取值——步骤脚本载入该文件时文件值（包括空值）覆盖调用方的同名环境变量，所以 `ETHERSCAN_API_KEY=xxx ./31_verify.sh` 不生效。
 
 ## 部署输出
 
@@ -169,3 +170,5 @@ forge test
 ```
 
 按依赖顺序先跑 `dex`、`core` 的一键部署，再跑本仓入口脚本，确认校验步骤全部通过、工作区无残留改动。
+
+公开参数和地址会随仓库发布到 GitHub Pages。`network.params` 的 `RPC_URL` 只填公开节点；验证 API Key、密码和带凭据的私有 RPC 统一写入已忽略的 `.account`，其中 `RPC_URL` 可覆盖公开节点。部署步骤必需 `.account`；只读校验在它存在时读取；验证步骤仅在实际提交验证时要求其中的 `ETHERSCAN_API_KEY`，不接受环境变量补位。

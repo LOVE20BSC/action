@@ -73,7 +73,6 @@ APPLESCRIPT
 fi
 
 echo "=== Deploying Action Contracts to $network ==="
-echo "  RPC_URL: $RPC_URL"
 echo "  CHAIN_ID: $CHAIN_ID"
 
 LIBRARY_NAMES="GroupActionJoin GroupActionManager GroupActionVerify GroupRecipients"
