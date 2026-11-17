@@ -59,7 +59,7 @@ ETHERSCAN_API_KEY=  # 实际开源验证时必填，本地跳过无需填写
 
 `ActionTarget` 只接收 Mint 地址；`LpExecutor` 和 `GroupActionExecutor` 只接收 ActionTarget；`GroupServiceExecutor` 只接收 GroupActionExecutor。其余协议地址从这些绑定推导。
 
-群行动每轮只有最终最高票验证者，不配置候补开放时段。部署入口为 `DeployAction.run()`，不再需要 `action.params` 或 `GROUP_ACTION_SPLITS`。参与代币、质押数量、治理比例、惩罚比例等行动业务参数，在提案创建回调传入，规则见 [设计白皮书](../../docs/DESIGN_WHITEPAPER.md)。
+链群行动每轮只有最终最高票验证者，不配置候补开放时段。部署入口为 `DeployAction.run()`，不再需要 `action.params` 或 `GROUP_ACTION_SPLITS`。参与代币、质押数量、治理占比、最高扣罚比例等行动业务参数，在提案创建回调传入，规则见 [设计白皮书](../../docs/DESIGN_WHITEPAPER.md)。
 
 ## 设计约定：自包含步骤
 
