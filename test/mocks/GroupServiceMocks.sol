@@ -2,10 +2,10 @@
 pragma solidity =0.8.37;
 
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
+import {Uint256Set} from "@libs/Uint256Set.sol";
 
 import {IPhase} from "@core/interfaces/IPhase.sol";
 
-import {VerifierApplication} from "../../src/interfaces/IGroupActionVerify.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
@@ -118,19 +118,6 @@ contract MockGroupServiceLaunch {
     }
 }
 
-/// @notice Mint mock: only the round-preparation flag the service executor reads.
-contract MockGroupServiceMint {
-    mapping(address => mapping(uint256 => bool)) internal _prepared;
-
-    function setRewardPrepared(address tokenAddress, uint256 round, bool prepared) external {
-        _prepared[tokenAddress][round] = prepared;
-    }
-
-    function isRewardPrepared(address tokenAddress, uint256 round) external view returns (bool) {
-        return _prepared[tokenAddress][round];
-    }
-}
-
 /// @notice ActionTarget mock. Replicates the behaviors GroupService leans on: the
 ///         join round is `currentPhase - 1` with a `JoinNotOpen` window
 ///         (`currentRound > createdRound`), round snapshots keep history —
@@ -155,10 +142,6 @@ contract MockGroupServiceActionTarget {
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) internal _joinedByRound;
     // key => recorded rounds (ascending), key = keccak256(token, actionId, memberId)
     mapping(bytes32 => uint256[]) internal _recordedRounds;
-
-    // tokenAddress => round => voted action ids / executors
-    mapping(address => mapping(uint256 => uint256[])) internal _votedActionIds;
-    mapping(address => mapping(uint256 => address[])) internal _votedExecutors;
 
     // tokenAddress => actionId => round => reward amount / minted flag
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _actionReward;
@@ -191,17 +174,6 @@ contract MockGroupServiceActionTarget {
 
     function setCreatedRound(address tokenAddress, uint256 actionId, uint256 createdRound) external {
         _createdRound[tokenAddress][actionId] = createdRound;
-    }
-
-    function setVotedActionIds(
-        address tokenAddress,
-        uint256 round,
-        uint256[] calldata actionIds,
-        address[] calldata executors
-    ) external {
-        require(actionIds.length == executors.length, "parallel arrays");
-        _votedActionIds[tokenAddress][round] = actionIds;
-        _votedExecutors[tokenAddress][round] = executors;
     }
 
     function setActionReward(address tokenAddress, uint256 actionId, uint256 round, uint256 amount, bool minted)
@@ -263,40 +235,11 @@ contract MockGroupServiceActionTarget {
     }
 
     function votedActionIdsByExecutors(
-        address tokenAddress,
-        uint256 round,
-        address[] calldata executors
-    ) external view returns (uint256[] memory actionIds, address[] memory actionExecutors) {
-        uint256[] storage ids = _votedActionIds[tokenAddress][round];
-        address[] storage exes = _votedExecutors[tokenAddress][round];
-
-        uint256 count = 0;
-        for (uint256 i = 0; i < ids.length; i++) {
-            if (exes[i] != address(0) && _containsExecutor(executors, exes[i])) {
-                count++;
-            }
-        }
-
-        actionIds = new uint256[](count);
-        actionExecutors = new address[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < ids.length; i++) {
-            if (exes[i] != address(0) && _containsExecutor(executors, exes[i])) {
-                actionIds[index] = ids[i];
-                actionExecutors[index] = exes[i];
-                index++;
-            }
-        }
-    }
-
-    function _containsExecutor(
-        address[] calldata executors,
-        address executor
-    ) private pure returns (bool) {
-        for (uint256 i = 0; i < executors.length; i++) {
-            if (executors[i] == executor) return true;
-        }
-        return false;
+        address,
+        uint256,
+        address[] calldata
+    ) external pure returns (uint256[] memory, address[] memory) {
+        revert("unexpected round action scan");
     }
 
     function _joinRound() internal view returns (uint256) {
@@ -334,25 +277,28 @@ contract MockGroupServiceActionTarget {
 /// @notice GroupActionExecutor mock: programmable per-round group ledger — the
 ///         served community data GroupService aggregates.
 contract MockGroupServiceGroupActionExecutor {
+    using Uint256Set for Uint256Set.Storage;
+
+    struct VerifiedAction {
+        uint256 reward;
+        uint256 totalScore;
+        uint256 verifierId;
+        uint256[] groupIds;
+        mapping(uint256 => uint256) scoreByGroupId;
+    }
+
     address public ACTION_TARGET_ADDRESS;
 
     // tokenAddress => memberId => the member owns an active group
     mapping(address => mapping(uint256 => bool)) internal _activeGroups;
-    // tokenAddress => actionId => memberId => applicationId (0 = no application)
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _applicationId;
     // first round in which the application stands
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _applicationSinceRound;
-    // tokenAddress => actionId => round => group ids
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) internal _groupIds;
-    bool internal _rewardReadsBlocked;
+    mapping(address => mapping(uint256 => uint256)) internal _applicationSinceRound;
+    mapping(address => mapping(uint256 => mapping(uint256 => VerifiedAction))) internal _verifiedAction;
+    mapping(address => mapping(uint256 => uint256)) internal _roundReward;
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _verifierWeight;
+    mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))) internal _joinedActions;
+    mapping(address => mapping(uint256 => Uint256Set.Storage)) internal _generatedActions;
     bool internal _groupSliceReadsBlocked;
-    // tokenAddress => actionId => round => groupId => group score
-    mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) internal _groupReward;
-    // tokenAddress => actionId => round => the action's own reward; zero means "equal to the group
-    // scores it is split by", which keeps the default ledger self-consistent
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _actionReward;
-    // tokenAddress => actionId => round => elected verifier memberId
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _verifierId;
     // tokenAddress => total staked
     mapping(address => mapping(uint256 => uint256)) internal _totalStaked;
     // tokenAddress => memberId => total staked
@@ -377,48 +323,67 @@ contract MockGroupServiceGroupActionExecutor {
         return _joinTokenAddress[tokenAddress][actionId];
     }
 
-    /// @dev Test device: `sinceRound = 0` marks an application that stands in every round.
     function setVerifierApplication(
         address tokenAddress,
-        uint256 actionId,
-        uint256 memberId,
-        uint256 applicationId,
+        uint256 verifierId,
         uint256 sinceRound
     ) external {
-        _applicationId[tokenAddress][actionId][memberId] = applicationId;
-        _applicationSinceRound[tokenAddress][actionId][memberId] = sinceRound;
+        _applicationSinceRound[tokenAddress][verifierId] = sinceRound;
     }
 
-    function setGroupIds(address tokenAddress, uint256 actionId, uint256 round, uint256[] calldata newGroupIds)
-        external
-    {
-        _groupIds[tokenAddress][actionId][round] = newGroupIds;
-    }
-
-    function setGroupReward(address tokenAddress, uint256 actionId, uint256 round, uint256 groupId, uint256 reward)
-        external
-    {
-        _groupReward[tokenAddress][actionId][round][groupId] = reward;
+    function setGroupLedger(
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256[] calldata groupIds,
+        uint256[] calldata scores,
+        uint256 verifierId
+    ) external {
+        VerifiedAction storage action = _verifiedAction[tokenAddress][actionId][round];
+        for (uint256 i = 0; i < action.groupIds.length; i++) {
+            uint256 groupId = action.groupIds[i];
+            delete action.scoreByGroupId[groupId];
+            _joinedActions[tokenAddress][round][groupId].remove(actionId);
+        }
+        action.groupIds = groupIds;
+        uint256 totalScore;
+        for (uint256 i = 0; i < groupIds.length; i++) {
+            uint256 groupId = groupIds[i];
+            _joinedActions[tokenAddress][round][groupId].add(actionId);
+            action.scoreByGroupId[groupId] = scores[i];
+            totalScore += scores[i];
+        }
+        action.totalScore = totalScore;
+        _setActionReward(action, tokenAddress, actionId, round, totalScore, verifierId);
     }
 
     function setActionReward(address tokenAddress, uint256 actionId, uint256 round, uint256 reward) external {
-        _actionReward[tokenAddress][actionId][round] = reward;
+        VerifiedAction storage action = _verifiedAction[tokenAddress][actionId][round];
+        _setActionReward(action, tokenAddress, actionId, round, reward, action.verifierId);
     }
 
-    /// @dev Test device: makes every live reward read revert, so a caller that is supposed to answer
-    ///      from its own cache is proven not to walk the ledger again.
-    function setRewardReadsBlocked(bool blocked) external {
-        _rewardReadsBlocked = blocked;
+    function _setActionReward(
+        VerifiedAction storage action,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 reward,
+        uint256 verifierId
+    ) private {
+        _roundReward[tokenAddress][round] = _roundReward[tokenAddress][round] - action.reward + reward;
+        _verifierWeight[tokenAddress][round][action.verifierId] -= action.reward;
+        _verifierWeight[tokenAddress][round][verifierId] += reward;
+        action.reward = reward;
+        action.verifierId = verifierId;
+        if (reward != 0) {
+            _generatedActions[tokenAddress][round].add(actionId);
+        } else {
+            _generatedActions[tokenAddress][round].remove(actionId);
+        }
     }
 
-    /// @dev Test device: blocks only the per-group slice read, so a divisor that walks groups reverts
-    ///      while the action-level read keeps working.
     function setGroupSliceReadsBlocked(bool blocked) external {
         _groupSliceReadsBlocked = blocked;
-    }
-
-    function setVerifierId(address tokenAddress, uint256 actionId, uint256 round, uint256 verifierId) external {
-        _verifierId[tokenAddress][actionId][round] = verifierId;
     }
 
     function setTotalStaked(address tokenAddress, uint256 round, uint256 amount) external {
@@ -433,93 +398,47 @@ contract MockGroupServiceGroupActionExecutor {
         return _activeGroups[tokenAddress][memberId];
     }
 
-    function verifierApplication(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId)
-        external
-        view
-        returns (VerifierApplication memory application)
+    function hasVerifierApplicationByRound(address tokenAddress, uint256 round, uint256 verifierId)
+        external view returns (bool)
     {
-        uint256 applicationId = _applicationId[tokenAddress][actionId][memberId];
-        if (round < _applicationSinceRound[tokenAddress][actionId][memberId]) {
-            applicationId = 0;
-        }
-        application = VerifierApplication({
-            applicationId: applicationId, verifierId: applicationId == 0 ? 0 : memberId, description: "",
-            stoppedRound: 0, withdrawnRound: 0, pendingRound: 0, punishmentAmount: 0, failedRounds: new uint256[](0)
-        });
-    }
-
-    function groupIds(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round,
-        uint256 offset,
-        uint256 limit,
-        bool reverse
-    ) external view returns (uint256[] memory page, uint256 total) {
-        uint256[] storage ids = _groupIds[tokenAddress][actionId][round];
-        total = ids.length;
-        if (offset >= total) {
-            return (new uint256[](0), total);
-        }
-        uint256 remaining = total - offset;
-        uint256 size = limit < remaining ? limit : remaining;
-        page = new uint256[](size);
-        for (uint256 i = 0; i < size; i++) {
-            uint256 index = reverse ? total - 1 - offset - i : offset + i;
-            page[i] = ids[index];
-        }
+        uint256 sinceRound = _applicationSinceRound[tokenAddress][verifierId];
+        return sinceRound != 0 && round >= sinceRound;
     }
 
     function generatedActionRewardByGroupId(address tokenAddress, uint256 actionId, uint256 round, uint256 groupId)
-        external
+        public
         view
         returns (uint256)
     {
-        require(!_rewardReadsBlocked && !_groupSliceReadsBlocked, "live group read");
-        return _sliceReward(tokenAddress, actionId, round, groupId, _liveActionReward(tokenAddress, actionId, round));
+        require(!_groupSliceReadsBlocked, "unexpected group slice read");
+        VerifiedAction storage action = _verifiedAction[tokenAddress][actionId][round];
+        uint256 score = action.scoreByGroupId[groupId];
+        return score == 0 ? 0 : Math.mulDiv(action.reward, score, action.totalScore);
     }
 
-    function generatedActionReward(
+    function totalGeneratedActionRewardByGroupId(address tokenAddress, uint256 round, uint256 groupId)
+        external
+        view
+        returns (uint256 weight)
+    {
+        if (_joinedActions[tokenAddress][round][groupId].count() == 0) return 0;
+        (uint256[] memory actionIds,) = _generatedActions[tokenAddress][round].values(0, type(uint256).max, false);
+        for (uint256 i = 0; i < actionIds.length; ++i) {
+            weight += generatedActionRewardByGroupId(tokenAddress, actionIds[i], round, groupId);
+        }
+    }
+
+    function totalGeneratedActionReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round
     ) external view returns (uint256) {
-        require(!_rewardReadsBlocked, "live reward read");
-        return _liveActionReward(tokenAddress, actionId, round);
+        return _roundReward[tokenAddress][round];
     }
 
-    function _liveActionReward(address tokenAddress, uint256 actionId, uint256 round) private view returns (uint256) {
-        uint256 pinned = _actionReward[tokenAddress][actionId][round];
-        if (pinned != 0) {
-            return pinned;
-        }
-        return _scoreTotal(tokenAddress, actionId, round);
-    }
-
-    function _scoreTotal(address tokenAddress, uint256 actionId, uint256 round) private view returns (uint256 total) {
-        uint256[] storage ids = _groupIds[tokenAddress][actionId][round];
-        for (uint256 i = 0; i < ids.length; i++) {
-            total += _groupReward[tokenAddress][actionId][round][ids[i]];
-        }
-    }
-
-    function _sliceReward(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round,
-        uint256 groupId,
-        uint256 actionReward
-    ) private view returns (uint256) {
-        uint256 totalScore = _scoreTotal(tokenAddress, actionId, round);
-        uint256 score = _groupReward[tokenAddress][actionId][round][groupId];
-        if (totalScore == 0 || score == 0) {
-            return 0;
-        }
-        return Math.mulDiv(actionReward, score, totalScore);
-    }
-
-    function verifier(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256, uint256, uint256) {
-        return (_verifierId[tokenAddress][actionId][round], 0, 0);
+    function verifierRewardWeight(address tokenAddress, uint256 round, uint256 verifierId)
+        external view returns (uint256)
+    {
+        return _verifierWeight[tokenAddress][round][verifierId];
     }
 
     function totalActivationStakeByRound(address tokenAddress, uint256 round) external view returns (uint256) {

@@ -32,9 +32,6 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => uint256)) publicVerifierRatioByActionId;
         // serviceTokenAddress => serviceActionId => creation vote round
         mapping(address => mapping(uint256 => uint256)) createdRoundByActionId;
-        // actionTokenAddress => round => cached divisor (0 = not cached)
-        mapping(address => mapping(uint256 => uint256)) totalGroupActionRewardByRound;
-
         // serviceTokenAddress => serviceActionId => round => memberId => whether the member reward is settled
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) memberMinted;
         // serviceTokenAddress => serviceActionId => round => memberId => settled verifier reward
@@ -56,27 +53,6 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) actionIdsWithRecipients;
     }
 
-    function cachedDenominator(
-        Layout storage self,
-        address actionTokenAddress,
-        uint256 round
-    ) internal view returns (uint256) {
-        return self.totalGroupActionRewardByRound[actionTokenAddress][round];
-    }
-
-    function cacheDenominator(
-        Layout storage self,
-        address actionTokenAddress,
-        uint256 round,
-        uint256 value
-    ) internal {
-        self.totalGroupActionRewardByRound[actionTokenAddress][round] = value;
-    }
-
-    // Load-bearing: the divisor cached by the executor may only be paired with weights from the same
-    // final ledger. The cache is written only when the action token's round is prepared and the mint
-    // window is open (verification closed); caching earlier pairs a frozen divisor with live weights
-    // and pays a member twice without reverting.
     function groupReward(
         address groupActionExecutorAddress,
         address actionTokenAddress,

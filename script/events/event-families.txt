@@ -6,6 +6,7 @@ JoinStateRegistered action.participation
 JoinStateCleared action.participation
 MemberRewardMinted action.participation
 GroupActionCreated action.config
+GroupRewardPreparationAdvanced action.reward-preparation
 ServiceActionCreated action.config
 LpActionCreated action.config
 GroupActivated action.group

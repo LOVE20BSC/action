@@ -306,7 +306,6 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testPreMintDistributionProjectionMatchesSettlement() external {
         _prepareRecipientsScenario();
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(60e18), VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(40e18), VERIFIER_ID);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
@@ -337,13 +336,10 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testZeroRewardActionSkipsRecipientDistribution() external {
         _prepareRecipientsScenario();
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(60e18), VERIFIER_ID);
         // The group is listed in action B but earned nothing there, and has
         // recipients configured there anyway.
-        groupAction.setGroupIds(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, _ids(GROUP_ID));
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_ID, 0);
-        groupAction.setVerifierId(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, VERIFIER_ID);
+        _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(0), VERIFIER_ID);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
         _setRecipients(GROUP_ID, GROUP_ACTION_ID_B, _ids(MEMBER2_ID), _ratios(PRECISION / 2));
         _atPhase(MINT_PHASE);
@@ -370,7 +366,6 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testSettlementDistributesOwnerSlicePerSourceAction() external {
         _prepareRecipientsScenario();
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(60e18), VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(40e18), VERIFIER_ID);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
@@ -431,7 +426,6 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _createServiceActionOn(address(token), address(token), SERVICE_ACTION_ID, 0, PRECISION / 2);
         _createServiceActionOn(address(token), address(token), SERVICE_ACTION_ID_B, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
         _joinServiceOn(SERVICE_ACTION_ID_B, GROUP_ID);
@@ -486,7 +480,6 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
     function testDistributionFollowsTheCurrentRecipientOwner() external {
         _prepareRecipientsScenario();
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION));
         _atPhase(MINT_PHASE);
@@ -618,7 +611,6 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);

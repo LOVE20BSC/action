@@ -8,7 +8,6 @@ import {
     MockGroupServiceStake,
     MockGroupServiceLaunch,
     MockGroupServiceActionTarget,
-    MockGroupServiceMint,
     MockGroupServiceGroupActionExecutor,
     MockGroupServiceToken
 } from "./mocks/GroupServiceMocks.sol";
@@ -76,7 +75,6 @@ abstract contract GroupServiceTestBase {
     MockGroupServiceStake internal stake;
     MockGroupServiceLaunch internal launch;
     MockGroupServiceActionTarget internal actionTarget;
-    MockGroupServiceMint internal mint;
     MockGroupServiceGroupActionExecutor internal groupAction;
     MockGroupServiceToken internal token;
     MockGroupServiceToken internal childToken;
@@ -88,7 +86,6 @@ abstract contract GroupServiceTestBase {
         stake = new MockGroupServiceStake();
         launch = new MockGroupServiceLaunch();
         actionTarget = new MockGroupServiceActionTarget();
-        mint = new MockGroupServiceMint();
         groupAction = new MockGroupServiceGroupActionExecutor();
         groupAction.setActionTargetAddress(address(actionTarget));
         token = new MockGroupServiceToken();
@@ -105,7 +102,6 @@ abstract contract GroupServiceTestBase {
         stake.setPhaseAddress(address(phase));
         stake.setLaunchAddress(address(launch));
         actionTarget.setPhaseAddress(address(phase));
-        actionTarget.setMintAddress(address(mint));
         actionTarget.setVoteAddress(address(new MockStakeLocator(address(stake))));
 
         launch.setParentToken(address(childToken), address(token));
@@ -244,25 +240,13 @@ abstract contract GroupServiceTestBase {
     }
 
     function _qualifyVerifier(uint256 memberId) internal {
-        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, memberId, 1, 0);
-    }
-
-    function _setVotedGroupActions(uint256[] memory actionIds) internal {
-        address[] memory executors = new address[](actionIds.length);
-        for (uint256 i = 0; i < actionIds.length; i++) {
-            executors[i] = address(groupAction);
-        }
-        actionTarget.setVotedActionIds(address(token), SERVICE_ROUND, actionIds, executors);
+        groupAction.setVerifierApplication(address(token), memberId, CREATION_PHASE);
     }
 
     function _setGroupLedger(uint256 actionId, uint256[] memory groupIds, uint256[] memory rewards, uint256 verifierId)
         internal
     {
-        groupAction.setGroupIds(address(token), actionId, SERVICE_ROUND, groupIds);
-        for (uint256 i = 0; i < groupIds.length; i++) {
-            groupAction.setGroupReward(address(token), actionId, SERVICE_ROUND, groupIds[i], rewards[i]);
-        }
-        groupAction.setVerifierId(address(token), actionId, SERVICE_ROUND, verifierId);
+        groupAction.setGroupLedger(address(token), actionId, SERVICE_ROUND, groupIds, rewards, verifierId);
     }
 
     /// @dev Funds the executor with the service reward the way ActionTarget's
@@ -321,9 +305,6 @@ abstract contract GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        // The community action set exists before the joins: the verifier
-        // qualification reads it inside the join.
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);

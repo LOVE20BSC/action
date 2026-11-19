@@ -105,7 +105,6 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(groupReward), VERIFIER_ID);
@@ -154,7 +153,6 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, govMultiplier, ratio);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyGroupOwner(GROUP_OWNER_B_ID);
         _qualifyVerifier(VERIFIER_ID);

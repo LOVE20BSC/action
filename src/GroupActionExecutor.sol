@@ -78,15 +78,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 groupId
     ) external view returns (uint256) {
-        if (!_isRoundRewardable(tokenAddress, actionId, round)) {
-            return 0;
-        }
-        uint256 groupFinalScore = _layout.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
-        if (groupFinalScore == 0) {
-            return 0;
-        }
-        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
-        return Math.mulDiv(proposalReward, groupFinalScore, _layout.totalFinalScore[tokenAddress][actionId][round]);
+        return _layout.generatedActionRewardByGroupId(tokenAddress, actionId, round, groupId);
     }
 
     function generatedActionReward(
@@ -94,11 +86,61 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 actionId,
         uint256 round
     ) external view returns (uint256) {
-        if (!_isRoundRewardable(tokenAddress, actionId, round)) {
-            return 0;
-        }
-        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
-        return proposalReward;
+        return _layout.generatedActionReward[tokenAddress][actionId][round];
+    }
+
+    function totalGeneratedActionReward(
+        address tokenAddress,
+        uint256 round
+    ) external view returns (uint256) {
+        return _layout.totalGeneratedActionReward[tokenAddress][round];
+    }
+
+    function totalGeneratedActionRewardByGroupId(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) external view returns (uint256) {
+        return GroupActionVerify.totalGeneratedActionRewardByGroupId(_layout, tokenAddress, round, groupId);
+    }
+
+    function groupRewardPreparation(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) external view returns (uint256 processedActionCount, uint256 totalActionCount) {
+        return GroupActionVerify.groupRewardPreparation(_layout, tokenAddress, round, groupId);
+    }
+
+    function prepareGeneratedActionRewardByGroupId(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 limit
+    ) external returns (uint256 processedActionCount, uint256 totalActionCount) {
+        if (round == 0) revert RoundNotStarted(1, 0);
+        // Load-bearing: The source action list and its group shares must be final before caching a prefix.
+        uint256 mintRound = _mintRound();
+        if (round > mintRound) revert RoundAfterMintWindow(round, mintRound);
+        return GroupActionVerify.prepareGeneratedActionRewardByGroupId(_layout, tokenAddress, round, groupId, limit);
+    }
+
+    function verifierRewardWeight(
+        address tokenAddress,
+        uint256 round,
+        uint256 verifierId
+    ) external view returns (uint256) {
+        return _layout.verifierRewardWeight[tokenAddress][round][verifierId];
+    }
+
+    function generatedActionIdsByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return GroupActionVerify.generatedActionIdsByRound(_layout, tokenAddress, round, offset, limit, reverse);
     }
 
     function onProposalCreated(address tokenAddress, uint256 actionId, bytes[] calldata targetData)
@@ -193,6 +235,18 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
         _checkJoinRound(round);
         return GroupActionJoin.groupIdsByRound(_layout, tokenAddress, actionId, round, offset, limit, reverse);
+    }
+
+    function joinedActionIdsByGroupId(
+        address tokenAddress,
+        uint256 groupId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        _checkJoinRound(round);
+        return GroupActionJoin.joinedActionIdsByGroupId(_layout, tokenAddress, groupId, round, offset, limit, reverse);
     }
 
     function memberIdsByGroupId(
@@ -431,6 +485,14 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 verifierId
     ) external view returns (VerifierApplication memory application) {
         return GroupActionVerify.verifierApplication(_layout, _protocol(), tokenAddress, actionId, round, verifierId);
+    }
+
+    function hasVerifierApplicationByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 verifierId
+    ) external view returns (bool) {
+        return GroupActionVerify.hasVerifierApplicationByRound(_layout, tokenAddress, round, verifierId);
     }
 
     function verifierApplications(
@@ -702,15 +764,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
         // forge-lint: disable-next-line(boolean-cst)
         return (Math.mulDiv(proposalReward, memberFinalScore, totalFinal), 0, false);
-    }
-
-    function _isRoundRewardable(
-        address tokenAddress,
-        uint256 actionId,
-        uint256 round
-    ) private view returns (bool) {
-        return _layout.totalFinalScore[tokenAddress][actionId][round] != 0
-            && GroupActionVerify.isRoundVerified(_layout, tokenAddress, actionId, round);
     }
 
     function _memberFinalScore(

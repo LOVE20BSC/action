@@ -3,7 +3,8 @@ pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
-import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
+import {IGroupActionExecutorErrors, IGroupActionExecutorEvents} from "./interfaces/IGroupActionExecutor.sol";
+import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {
     VerifierApplication,
     IGroupActionVerifyEvents,
@@ -216,6 +217,8 @@ library GroupActionVerify {
         self.applicationVerifierId[tokenAddress][actionId][applicationId] = verifierId;
         self.activeApplicationIds[tokenAddress][actionId].add(round, applicationId);
         self.applicationIdHistory[tokenAddress][actionId][verifierId].record(round, applicationId);
+        self.applicationActionIdsByVerifierId[tokenAddress][verifierId].add(round, actionId);
+        self.withdrawnApplicationActionIds[tokenAddress][verifierId][round].remove(actionId);
         self.applicationDescription[tokenAddress][actionId][applicationId].record(round, description);
         uint256 requiredStake = self.requiredVerifierStakeByActionId[tokenAddress][actionId];
         self.verifierStakeByVerifierId[tokenAddress][actionId][verifierId] = requiredStake;
@@ -288,6 +291,8 @@ library GroupActionVerify {
         }
         self.applicationWithdrawnRound[tokenAddress][actionId][applicationId] = round;
         self.activeApplicationIds[tokenAddress][actionId].remove(round, applicationId);
+        self.applicationActionIdsByVerifierId[tokenAddress][verifierId].remove(round, actionId);
+        self.withdrawnApplicationActionIds[tokenAddress][verifierId][round].add(actionId);
         if (self.voteAmountByApplicationId[tokenAddress][actionId][round][applicationId] != 0) {
             self.withdrawnVotedApplicationIds[tokenAddress][actionId][round].push(applicationId);
         }
@@ -322,6 +327,111 @@ library GroupActionVerify {
             round: round,
             applicationId: applicationId
         });
+    }
+
+    function hasVerifierApplicationByRound(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 verifierId
+    ) external view returns (bool) {
+        return self.applicationActionIdsByVerifierId[tokenAddress][verifierId].countByRound(round) != 0
+            || self.withdrawnApplicationActionIds[tokenAddress][verifierId][round].count() != 0;
+    }
+
+    function generatedActionIdsByRound(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return Pagination.paginate(self.generatedActionIdsByRound[tokenAddress][round], offset, limit, reverse);
+    }
+
+    function groupRewardPreparation(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) external view returns (uint256 processedActionCount, uint256 totalActionCount) {
+        return (
+            self.groupRewardProgress[tokenAddress][round][groupId].processedActionCount,
+            _groupGeneratedActionCount(self, tokenAddress, round, groupId)
+        );
+    }
+
+    function totalGeneratedActionRewardByGroupId(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) external view returns (uint256) {
+        uint256 totalActionCount = _groupGeneratedActionCount(self, tokenAddress, round, groupId);
+        if (totalActionCount == 0) return 0;
+
+        GroupActionStorage.GroupRewardPreparationState storage progress =
+            self.groupRewardProgress[tokenAddress][round][groupId];
+        return progress.weight + _sumGroupRewards(
+            self, tokenAddress, round, groupId, progress.processedActionCount, totalActionCount
+        );
+    }
+
+    function prepareGeneratedActionRewardByGroupId(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 limit
+    ) external returns (uint256 processedActionCount, uint256 totalActionCount) {
+        totalActionCount = _groupGeneratedActionCount(self, tokenAddress, round, groupId);
+        GroupActionStorage.GroupRewardPreparationState storage progress =
+            self.groupRewardProgress[tokenAddress][round][groupId];
+        uint256 start = progress.processedActionCount;
+        uint256 pageSize = Math.min(limit, totalActionCount - start);
+        if (pageSize == 0) return (start, totalActionCount);
+
+        processedActionCount = start + pageSize;
+        uint256 weightAdded = _sumGroupRewards(self, tokenAddress, round, groupId, start, processedActionCount);
+        uint256 totalWeight = progress.weight + weightAdded;
+        progress.weight = totalWeight;
+        progress.processedActionCount = processedActionCount;
+
+        emit IGroupActionExecutorEvents.GroupRewardPreparationAdvanced({
+            tokenAddress: tokenAddress,
+            groupId: groupId,
+            round: round,
+            startIndex: start,
+            processedActionCount: processedActionCount,
+            totalActionCount: totalActionCount,
+            weightAdded: weightAdded,
+            totalWeight: totalWeight
+        });
+    }
+
+    function _groupGeneratedActionCount(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) private view returns (uint256) {
+        if (self.joinedActionIdsByGroupId[tokenAddress][groupId].countByRound(round) == 0) return 0;
+        return self.generatedActionIdsByRound[tokenAddress][round].length;
+    }
+
+    function _sumGroupRewards(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 start,
+        uint256 end
+    ) private view returns (uint256 weight) {
+        uint256[] storage actionIds = self.generatedActionIdsByRound[tokenAddress][round];
+        for (uint256 i = start; i < end; ++i) {
+            weight += self.generatedActionRewardByGroupId(tokenAddress, actionIds[i], round, groupId);
+        }
     }
 
     function verifierStake(
@@ -826,6 +936,10 @@ library GroupActionVerify {
             );
         }
 
+        if (groupVerified && self.roundVerified[submission.tokenAddress][submission.actionId][round]) {
+            _recordGeneratedActionReward(self, protocol.actionTargetAddress, submission, round);
+        }
+
         emit IGroupActionVerifyEvents.OriginScoresSubmitted({
             tokenAddress: submission.tokenAddress,
             actionId: submission.actionId,
@@ -839,6 +953,26 @@ library GroupActionVerify {
             groupVerified: groupVerified,
             scores: originScores
         });
+    }
+
+    function _recordGeneratedActionReward(
+        GroupActionStorage.Layout storage self,
+        address actionTargetAddress,
+        OriginSubmission memory submission,
+        uint256 round
+    ) private {
+        address tokenAddress = submission.tokenAddress;
+        uint256 actionId = submission.actionId;
+        if (self.totalFinalScore[tokenAddress][actionId][round] == 0) return;
+
+        // Load-bearing: Vote totals must be frozen and the proposal pool reserved before this reward is recorded.
+        (uint256 reward, ) = IActionTarget(actionTargetAddress).actionReward(tokenAddress, actionId, round);
+        if (reward == 0) return;
+
+        self.generatedActionReward[tokenAddress][actionId][round] = reward;
+        self.totalGeneratedActionReward[tokenAddress][round] += reward;
+        self.verifierRewardWeight[tokenAddress][round][submission.verifierId] += reward;
+        self.generatedActionIdsByRound[tokenAddress][round].push(actionId);
     }
 
     function _emitVerifierApplicationSubmitted(

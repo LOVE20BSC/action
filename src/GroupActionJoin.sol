@@ -309,6 +309,18 @@ library GroupActionJoin {
         return self.groupIdsByRound[tokenAddress][actionId].valuesByRound(round, offset, limit, reverse);
     }
 
+    function joinedActionIdsByGroupId(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 groupId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return self.joinedActionIdsByGroupId[tokenAddress][groupId].valuesByRound(round, offset, limit, reverse);
+    }
+
     function memberIdsByGroupId(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
@@ -707,7 +719,9 @@ library GroupActionJoin {
         self.joinedRoundHistoryByMemberId[tokenAddress][actionId][memberId].record(round, round);
         self.groupHistoryByMemberId[tokenAddress][actionId][memberId].record(round, groupId);
         self.memberIdsByGroupId[tokenAddress][actionId][groupId].add(round, memberId);
-        self.groupIdsByRound[tokenAddress][actionId].add(round, groupId);
+        if (self.groupIdsByRound[tokenAddress][actionId].add(round, groupId)) {
+            self.joinedActionIdsByGroupId[tokenAddress][groupId].add(round, actionId);
+        }
 
         uint256 membershipCount = ++self.membershipCountByGroupIdByMemberId[groupId][memberId];
         if (membershipCount == 1) {
@@ -814,6 +828,7 @@ library GroupActionJoin {
         self.memberIdsByGroupId[tokenAddress][actionId][groupId].remove(round, memberId);
         if (self.memberIdsByGroupId[tokenAddress][actionId][groupId].count() == 0) {
             self.groupIdsByRound[tokenAddress][actionId].remove(round, groupId);
+            self.joinedActionIdsByGroupId[tokenAddress][groupId].remove(round, actionId);
         }
 
         uint256 membershipCount = --self.membershipCountByGroupIdByMemberId[groupId][memberId];

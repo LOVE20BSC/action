@@ -3,6 +3,9 @@ pragma solidity =0.8.37;
 
 import {ActionTarget} from "../../src/ActionTarget.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
+import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
+import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
+import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
 import {MockExecutor} from "../mocks/ActionTargetMocks.sol";
 import {MockUniswapV2Factory, MockUniswapV2Router} from "../mocks/UniswapV2Mocks.sol";
@@ -18,20 +21,10 @@ import {LOVE20Token} from "@core/LOVE20Token.sol";
 import {LaunchInitParams} from "@core/interfaces/ILaunch.sol";
 import {TargetMode} from "@core/interfaces/ISubmit.sol";
 import {IMintErrors} from "@core/interfaces/IMint.sol";
+import {Vm} from "@forge-std/Vm.sol";
 
-interface ActionTargetIntegrationVm {
-    function prank(address sender) external;
-    function startPrank(address sender) external;
-    function stopPrank() external;
-    function roll(uint256 blockNumber) external;
-    function expectRevert(bytes calldata data) external;
-    function getNonce(address account) external view returns (uint64);
-    function computeCreateAddress(address deployer, uint256 nonce) external view returns (address);
-}
-
-contract ActionTargetRealIntegrationTest {
-    ActionTargetIntegrationVm internal constant vm =
-        ActionTargetIntegrationVm(address(uint160(uint256(keccak256("hevm cheat code")))));
+abstract contract ActionTargetIntegrationFixture {
+    Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     uint256 internal constant PHASE_ORIGIN = 100;
     uint256 internal constant BLOCKS_PER_PHASE = 1000;
@@ -40,6 +33,7 @@ contract ActionTargetRealIntegrationTest {
     uint256 internal constant BOOST_AMOUNT = 100;
     uint256 internal constant MEMBER1_VOTES = 100;
     uint256 internal constant MEMBER2_VOTES = 60;
+    uint256 internal constant BELOW_THRESHOLD_VOTES = 5;
     uint256 internal constant PROMISED_WAITING_PHASES = 1;
     uint256 internal constant TOKEN_TRANSFER_AMOUNT = 10000;
 
@@ -62,7 +56,7 @@ contract ActionTargetRealIntegrationTest {
     address internal member1 = address(0x1001);
     address internal member2 = address(0x1002);
 
-    function setUp() public {
+    function _setUpProtocol(uint256 submitMinRatio, uint256 proposalMinVoteRatio) internal {
         phase = new Phase(PHASE_ORIGIN, BLOCKS_PER_PHASE, 3600, 10, 50);
         factory = new MockUniswapV2Factory();
         router = new MockUniswapV2Router();
@@ -109,9 +103,11 @@ contract ActionTargetRealIntegrationTest {
             2,
             5
         );
-        submit = new Submit(address(phase), address(stake), address(memberNFT), 5e16);
+        submit = new Submit(address(phase), address(stake), address(memberNFT), submitMinRatio);
         vote = new Vote(address(phase), address(stake), address(submit), address(memberNFT));
-        mint = new Mint(address(phase), address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17);
+        mint = new Mint(
+            address(phase), address(vote), address(submit), address(launch), address(memberNFT), proposalMinVoteRatio, 1e17, 1e17
+        );
 
         actionTarget = new ActionTarget(address(mint));
         executor = new MockExecutor(address(actionTarget));
@@ -153,16 +149,23 @@ contract ActionTargetRealIntegrationTest {
     }
 
     function _createActionProposal(uint256 memberId) internal returns (uint256 proposalId) {
-        vm.prank(memberId == 1 ? member1 : member2);
+        return _submitActionProposal(memberId, "Action proposal", _executorTargetData(address(executor)));
+    }
+
+    function _submitActionProposal(uint256 memberId, string memory title, bytes[] memory targetData)
+        internal returns (uint256 proposalId)
+    {
+        address proposer = memberNFT.ownerOf(memberId);
+        vm.prank(proposer);
         proposalId = submit.submitNewProposal(
             address(token),
             memberId,
             ProposalBody({
-                title: "Action proposal",
+                title: title,
                 details: "details",
                 target: address(actionTarget),
                 targetMode: TargetMode.Callback,
-                targetData: _executorTargetData(address(executor))
+                targetData: targetData
             })
         );
     }
@@ -182,32 +185,144 @@ contract ActionTargetRealIntegrationTest {
         vm.prank(memberId == 1 ? member1 : member2);
         vote.vote(address(token), memberId, proposalIds, amounts, targetData);
     }
+}
+
+contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
+    function setUp() public {
+        _setUpProtocol(5e16, 5e16);
+    }
 
     function testRealIntegration_GroupActionCreationForwardsPunishmentRatio() external {
         GroupActionExecutor groupExecutor = new GroupActionExecutor(address(actionTarget));
+        uint256 proposalId = _createGroupActionProposal(groupExecutor, 0);
+        require(actionTarget.executorByActionId(address(token), proposalId) == address(groupExecutor), "group executor bound");
+        require(groupExecutor.requiredVerifierStake(address(token), proposalId) == 40, "stake forwarded");
+        require(groupExecutor.verifierPunishmentRatio(address(token), proposalId) == 9e17, "punishment ratio forwarded through both callbacks");
+    }
+
+    function _createGroupActionProposal(GroupActionExecutor groupExecutor, uint256 activationStake)
+        internal returns (uint256)
+    {
         bytes[] memory targetData = new bytes[](7);
         targetData[0] = abi.encode(address(groupExecutor));
         targetData[1] = abi.encode(address(token));
-        targetData[2] = abi.encode(uint256(0));
+        targetData[2] = abi.encode(activationStake);
         targetData[3] = abi.encode(uint256(1e18));
         targetData[4] = abi.encode(uint256(0));
         targetData[5] = abi.encode(uint256(40));
         targetData[6] = abi.encode(uint256(9e17));
-        vm.prank(member1);
+        return _submitActionProposal(1, "Group action", targetData);
+    }
+
+    function _createServiceActionProposal(GroupServiceExecutor service) internal returns (uint256) {
+        bytes[] memory targetData = new bytes[](4);
+        targetData[0] = abi.encode(address(service));
+        targetData[1] = abi.encode(address(token));
+        targetData[2] = abi.encode(uint256(0));
+        targetData[3] = abi.encode(uint256(5e17));
+        return _submitActionProposal(2, "Group service", targetData);
+    }
+
+    function _createBelowThresholdProposal() internal returns (uint256) {
+        vm.startPrank(member1);
+        (uint256 proposerId,) = memberNFT.mint("Carol");
+        stake.stakeLiquidity(address(token), 100, 100, PROMISED_WAITING_PHASES, proposerId, type(uint256).max);
         uint256 proposalId = submit.submitNewProposal(
             address(token),
-            1,
+            proposerId,
             ProposalBody({
-                title: "Group action",
-                details: "details",
-                target: address(actionTarget),
-                targetMode: TargetMode.Callback,
-                targetData: targetData
+                title: "Below-threshold proposal",
+                details: "",
+                target: member1,
+                targetMode: TargetMode.NoCallback,
+                targetData: new bytes[](0)
             })
         );
-        require(actionTarget.executorByActionId(address(token), proposalId) == address(groupExecutor), "group executor bound");
-        require(groupExecutor.requiredVerifierStake(address(token), proposalId) == 40, "stake forwarded");
-        require(groupExecutor.verifierPunishmentRatio(address(token), proposalId) == 9e17, "punishment ratio forwarded through both callbacks");
+        vm.stopPrank();
+        return proposalId;
+    }
+
+    function testRealIntegration_OwnerClaimsHistoricalRewardAfterDeactivation() external {
+        GroupActionExecutor group = new GroupActionExecutor(address(actionTarget));
+        GroupServiceExecutor service = new GroupServiceExecutor(address(group));
+        uint256 sourceActionId = _createGroupActionProposal(group, 100);
+        uint256 serviceActionId = _createServiceActionProposal(service);
+        uint256 belowThresholdProposalId = _createBelowThresholdProposal();
+        uint256 round = phase.currentPhase();
+
+        vm.startPrank(member2);
+        token.approve(address(group), type(uint256).max);
+        group.submitVerifierApplication(address(token), sourceActionId, 2, "verifier");
+        vm.stopPrank();
+        bytes[] memory verifierVote = new bytes[](2);
+        verifierVote[0] = abi.encode(address(group));
+        verifierVote[1] = abi.encode(uint256(2));
+        _voteOne(1, sourceActionId, MEMBER1_VOTES, verifierVote);
+        _voteOne(2, serviceActionId, MEMBER2_VOTES, new bytes[](0));
+        _voteOne(1, belowThresholdProposalId, BELOW_THRESHOLD_VOTES, new bytes[](0));
+
+        vm.roll(block.number + BLOCKS_PER_PHASE);
+        vm.startPrank(member1);
+        token.approve(address(group), 100);
+        group.activateGroup(address(token), sourceActionId, 1, GroupConfig({
+            description: "Alice's group", maxCapacity: 0, minJoinAmount: 1, maxJoinAmount: 0, maxAccounts: 0
+        }));
+        service.join(address(token), serviceActionId, 1);
+        vm.stopPrank();
+        vm.startPrank(member2);
+        group.join(address(token), sourceActionId, 1, 2, 100, 0, new string[](0));
+        service.join(address(token), serviceActionId, 2);
+        vm.stopPrank();
+
+        vm.roll(block.number + BLOCKS_PER_PHASE);
+        vm.prank(member1);
+        group.deactivateGroup(address(token), sourceActionId, 1);
+        require(!group.hasActiveGroups(address(token), 1), "activation list is empty");
+        require(service.totalGroupActionReward(address(token), round) == 0, "no verified action yet");
+        uint256[] memory scores = new uint256[](1);
+        scores[0] = 100;
+        vm.prank(member2);
+        group.submitOriginScores(address(token), sourceActionId, 2, 1, 0, scores);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, round, round - 1)
+        );
+        group.prepareGeneratedActionRewardByGroupId(address(token), round, 1, 1);
+
+        uint256 pool = mint.proposalReward(address(token), round);
+        uint256 totalVotes = MEMBER1_VOTES + MEMBER2_VOTES + BELOW_THRESHOLD_VOTES;
+        uint256 sourceReward = pool * MEMBER1_VOTES / totalVotes;
+        require(!mint.isRewardPrepared(address(token), round), "verification can use the first-vote reserve");
+        require(sourceReward > 0 && service.totalGroupActionReward(address(token), round) == sourceReward, "round total");
+        require(group.verifierRewardWeight(address(token), round, 2) == sourceReward, "elected verifier weight");
+        {
+            (uint256 unqualifiedReward,) = mint.proposalRewardByProposalId(address(token), round, belowThresholdProposalId);
+            require(unqualifiedReward == 0, "below-threshold proposal cannot mint");
+            (uint256[] memory actionIds, uint256 totalCount) =
+                group.joinedActionIdsByGroupId(address(token), 1, round, 0, 10, false);
+            require(totalCount == 1 && actionIds[0] == sourceActionId, "historical participation remains");
+        }
+
+        vm.roll(block.number + BLOCKS_PER_PHASE);
+        (uint256 serviceReward,) = actionTarget.actionReward(address(token), serviceActionId, round);
+        require(serviceReward == pool * MEMBER2_VOTES / totalVotes, "service uses total round votes");
+        _assertServiceClaims(service, serviceActionId, round, serviceReward);
+        require(service.totalGroupActionReward(address(token), round) == sourceReward, "round total stays fixed");
+    }
+
+    function _assertServiceClaims(GroupServiceExecutor service, uint256 serviceActionId, uint256 round, uint256 serviceReward)
+        internal
+    {
+        (uint256 preview,, bool claimed) = service.memberReward(address(token), serviceActionId, round, 1);
+        require(!claimed && preview == serviceReward / 2 && preview > 0, "owner preview after deactivation");
+        uint256 balanceBefore = token.balanceOf(member1);
+        vm.prank(member1);
+        (uint256 paid, uint256 burned) = service.mintMemberReward(address(token), serviceActionId, round, 1);
+        require(paid == preview && burned == 0 && token.balanceOf(member1) - balanceBefore == paid, "owner paid");
+
+        vm.prank(member2);
+        (paid, burned) = service.mintMemberReward(address(token), serviceActionId, round, 2);
+        require(paid == serviceReward / 2 && burned == 0, "verifier paid from recorded weight");
     }
 
     function testRealIntegration_ActionLifecycle() external {

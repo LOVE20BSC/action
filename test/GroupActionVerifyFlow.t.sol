@@ -77,6 +77,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _prepareRound();
         vm.prank(VERIFIER);
         executor.stopVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(executor.hasVerifierApplicationByRound(address(token), 3, VERIFIER_ID), "stopping preserves eligibility");
         vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.ApplicationStopped.selector, 1));
         _castVotesForAt(VERIFIER_ID, 1, 3);
         vm.prank(VERIFIER);
@@ -90,9 +91,12 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(executor.isRoundVerified(address(token), ACTION_ID, 2), "zero scores still fulfill the duty");
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
+        require(executor.hasVerifierApplicationByRound(address(token), 4, VERIFIER_ID), "withdrawal round still counts");
+        require(!executor.hasVerifierApplicationByRound(address(token), 5, VERIFIER_ID), "withdrawal ends eligibility");
         vm.prank(VERIFIER);
         uint256 nextId = executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "new application");
         require(nextId == 2, "earlier stop adds no extra wait after a later refund");
+        require(executor.hasVerifierApplicationByRound(address(token), 5, VERIFIER_ID), "replacement carries forward");
         require(_application(2).applicationId == 1 && _application(2).stoppedRound == 3, "history keeps old application");
     }
 
@@ -335,6 +339,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         uint256[] memory secondBatch = new uint256[](1);
         secondBatch[0] = 90;
+        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, secondBatch);
         require(executor.isRoundVerified(address(token), ACTION_ID, 2), "round verified");
@@ -346,6 +351,17 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
             abi.encodeWithSelector(IGroupActionVerifyErrors.GroupVerificationAlreadyComplete.selector, GROUP_ID, uint256(2))
         );
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 2, again);
+
+        (uint256[] memory actionIds, uint256 actionCount) =
+            executor.generatedActionIdsByRound(address(token), 2, 0, 1, false);
+        require(actionCount == 1 && actionIds[0] == ACTION_ID, "one source action after scoring retry");
+        require(
+            executor.totalGeneratedActionReward(address(token), 2) == PROPOSAL_REWARD, "round reward counted once"
+        );
+        require(
+            executor.verifierRewardWeight(address(token), 2, VERIFIER_ID) == PROPOSAL_REWARD,
+            "verifier reward counted once"
+        );
     }
 
     function testSchemaAndVerificationInfoFlow() external {

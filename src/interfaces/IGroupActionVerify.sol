@@ -233,6 +233,12 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 verifierId
     ) external view returns (VerifierApplication memory application);
 
+    function hasVerifierApplicationByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 verifierId
+    ) external view returns (bool);
+
     function verifierApplications(
         address tokenAddress,
         uint256 actionId,

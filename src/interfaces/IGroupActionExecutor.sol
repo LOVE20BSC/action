@@ -20,6 +20,16 @@ interface IGroupActionExecutorEvents {
         string[] verificationKeys,
         string[] verificationDescriptions
     );
+    event GroupRewardPreparationAdvanced(
+        address indexed tokenAddress,
+        uint256 indexed groupId,
+        uint256 indexed round,
+        uint256 startIndex,
+        uint256 processedActionCount,
+        uint256 totalActionCount,
+        uint256 weightAdded,
+        uint256 totalWeight
+    );
 }
 
 interface IGroupActionExecutorErrors {
@@ -79,10 +89,48 @@ interface IGroupActionExecutor is
         uint256 round,
         uint256 groupId
     ) external view returns (uint256);
-    
+
     function generatedActionReward(
         address tokenAddress,
         uint256 actionId,
         uint256 round
     ) external view returns (uint256);
+
+    function totalGeneratedActionReward(
+        address tokenAddress,
+        uint256 round
+    ) external view returns (uint256);
+
+    function totalGeneratedActionRewardByGroupId(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) external view returns (uint256);
+
+    function groupRewardPreparation(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId
+    ) external view returns (uint256 processedActionCount, uint256 totalActionCount);
+
+    function prepareGeneratedActionRewardByGroupId(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 limit
+    ) external returns (uint256 processedActionCount, uint256 totalActionCount);
+
+    function verifierRewardWeight(
+        address tokenAddress,
+        uint256 round,
+        uint256 verifierId
+    ) external view returns (uint256);
+
+    function generatedActionIdsByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
 }

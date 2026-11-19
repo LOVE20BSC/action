@@ -211,7 +211,6 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 1e18, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);

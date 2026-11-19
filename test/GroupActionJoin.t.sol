@@ -143,6 +143,26 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(memberIds[0] == MEMBER1_ID && memberIds[1] == MEMBER2_ID, "member set order");
     }
 
+    function testGroupActionSnapshotTracksFirstJoinAndLastExit() external {
+        _openJoinPhase();
+        _fundJoinTokenFor(MEMBER1, 100e18);
+        _fundJoinTokenFor(MEMBER2, 80e18);
+        _join(MEMBER1_ID, 100e18, 0);
+        _join(MEMBER2_ID, 80e18, 0);
+
+        _exit(MEMBER1_ID);
+        (uint256[] memory actionIds, uint256 total) =
+            executor.joinedActionIdsByGroupId(address(token), GROUP_ID, 2, 0, 1, false);
+        require(total == 1 && actionIds[0] == ACTION_ID, "another member keeps the action indexed");
+
+        _atPhase(4);
+        _exit(MEMBER2_ID);
+        (, total) = executor.joinedActionIdsByGroupId(address(token), GROUP_ID, 3, 0, 1, false);
+        require(total == 0, "last exit removes the action for the current join round");
+        (actionIds, total) = executor.joinedActionIdsByGroupId(address(token), GROUP_ID, 2, 0, 1, true);
+        require(total == 1 && actionIds[0] == ACTION_ID, "last exit preserves the prior round");
+    }
+
     function testProviderQuotaRemoveTakesBackTheWholeGrant() external {
         _openJoinPhase();
         _fundJoinTokenFor(PROVIDER, 200e18);

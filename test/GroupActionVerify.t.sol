@@ -33,6 +33,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
     uint256 internal constant MEMBER_AMOUNT_A = 10e18;
     uint256 internal constant MEMBER_AMOUNT_B = 20e18;
     uint256 internal constant MEMBER_AMOUNT_C = 30e18;
+    uint256 internal constant ACTION_REWARD = 120e18;
 
     GroupActionStorage.Layout internal _layout;
     GroupActionStorage.Protocol internal _protocol;
@@ -44,6 +45,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         phase.setCurrentPhase(3);
         memberNFT = new MockGroupActionMemberNFT();
 
+        _protocol.actionTargetAddress = address(this);
         _protocol.memberNFTAddress = address(memberNFT);
         _protocol.phaseAddress = address(phase);
         _layout.electedApplicationId[TOKEN][ACTION_ID][ROUND] = VERIFIER_ID;
@@ -55,6 +57,10 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         _seedMember(4, GROUP_B, 40e18);
         _layout.groupIdsByRound[TOKEN][ACTION_ID].add(ROUND, GROUP_A);
         _layout.groupIdsByRound[TOKEN][ACTION_ID].add(ROUND, GROUP_B);
+    }
+
+    function actionReward(address, uint256, uint256) external pure returns (uint256, bool) {
+        return (ACTION_REWARD, false);
     }
 
     function test_RevertIfOriginScoreAboveMax() external {
@@ -225,6 +231,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
             scores: _scores(100, 90, 80)
         });
         _submit(GROUP_A, 0, _scores(100, 90, 80));
+        require(_layout.totalGeneratedActionReward[TOKEN][ROUND] == 0, "one group does not complete the action");
 
         vm.expectEmit(true, true, true, true, address(this));
         emit OriginScoresSubmitted({
@@ -241,6 +248,10 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
             scores: _scores(50)
         });
         _submit(GROUP_B, 0, _scores(50));
+        require(_layout.totalGeneratedActionReward[TOKEN][ROUND] == ACTION_REWARD, "whole action adds its reward once");
+        require(_layout.verifierRewardWeight[TOKEN][ROUND][VERIFIER_ID] == ACTION_REWARD, "elected verifier gets weight");
+        require(_layout.generatedActionIdsByRound[TOKEN][ROUND].length == 1, "one recorded action");
+        require(_layout.generatedActionIdsByRound[TOKEN][ROUND][0] == ACTION_ID, "recorded action id");
     }
 
     function test_SameRoundChurnKeepsFinalOrderVerifiable() external {

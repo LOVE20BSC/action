@@ -7,6 +7,7 @@ import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 library GroupActionStorage {
     using AddressSet for AddressSet.Storage;
@@ -35,6 +36,11 @@ library GroupActionStorage {
         address memberNFTAddress;
         address phaseAddress;
         address voteAddress;
+    }
+
+    struct GroupRewardPreparationState {
+        uint256 processedActionCount;
+        uint256 weight;
     }
 
     struct Layout {
@@ -182,6 +188,39 @@ library GroupActionStorage {
             voteAmountByApplicationIdByVoterId;
         // tokenAddress => actionId => fixed verifier punishment ratio (1e18 precision)
         mapping(address => mapping(uint256 => uint256)) verifierPunishmentRatioByActionId;
+
+        // tokenAddress => groupId => actions with members in the group, by join round
+        mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) joinedActionIdsByGroupId;
+        // tokenAddress => verifierId => actions with an application that has not been withdrawn
+        mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) applicationActionIdsByVerifierId;
+        // tokenAddress => verifierId => round => applications withdrawn and not replaced in that round
+        mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))) withdrawnApplicationActionIds;
+        // tokenAddress => round => sum of rewards from fully verified actions
+        mapping(address => mapping(uint256 => uint256)) totalGeneratedActionReward;
+        // tokenAddress => round => verifierId => rewards from the actions verified by that verifier
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierRewardWeight;
+        // tokenAddress => round => fully verified actions with positive rewards, in completion order
+        mapping(address => mapping(uint256 => uint256[])) generatedActionIdsByRound;
+        // tokenAddress => actionId => round => proposal reward recorded at verification completion
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) generatedActionReward;
+        // tokenAddress => round => groupId => accumulated shares for a prefix of the generated actions
+        mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardPreparationState))) groupRewardProgress;
+    }
+
+    function generatedActionRewardByGroupId(
+        Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 round,
+        uint256 groupId
+    ) internal view returns (uint256) {
+        uint256 groupFinalScore = self.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
+        if (groupFinalScore == 0) return 0;
+
+        uint256 proposalReward = self.generatedActionReward[tokenAddress][actionId][round];
+        if (proposalReward == 0) return 0;
+
+        return Math.mulDiv(proposalReward, groupFinalScore, self.totalFinalScore[tokenAddress][actionId][round]);
     }
 
     function memberAmountAt(

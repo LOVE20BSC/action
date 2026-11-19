@@ -10,8 +10,6 @@ import {MemberOwner} from "./MemberOwner.sol";
 import {IGroupServiceExecutor} from "./interfaces/IGroupServiceExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
-import {IMint} from "@core/interfaces/IMint.sol";
-import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
 import {ILaunch} from "@core/interfaces/ILaunch.sol";
 import {ILOVE20Token} from "@core/interfaces/ILOVE20Token.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
@@ -21,7 +19,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
-    using GroupServiceStorage for GroupServiceStorage.Layout;
     using SafeERC20 for IERC20;
 
     uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
@@ -55,12 +52,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         GroupServiceStorage.SettlementCause cause;
     }
 
-    struct RoundActions {
-        address actionTokenAddress;
-        uint256 round;
-        uint256[] actionIds;
-    }
-
     modifier onlyGroupOwner(uint256 groupId) {
         address owner = MemberOwner.ownerOrZero(MEMBER_NFT_ADDRESS, groupId);
         if (owner == address(0)) {
@@ -88,10 +79,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     // Load-bearing: the service rounds are the served GroupAction rounds shifted by the same phase
     // base (vote = phase, join = phase - 1, verify = phase - 2, mint = phase - 3). The service runs
-    // no verification of its own: it reads `generatedActionReward` /
-    // `generatedActionRewardByGroupId` for the round the GroupAction verified at phase - 2 and
-    // settles it at phase - 3. If either side shifts, the service reads a round the GroupAction has
-    // not verified yet and the divisor silently reads 0.
+    // no verification of its own: it settles the finished GroupAction totals and group slices
+    // at phase - 3, after the source verification window has closed.
     function currentVerifyRound() public view returns (uint256) {
         return GroupActionVerify.currentVerifyRound(PHASE_ADDRESS);
     }
@@ -224,11 +213,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         address sourceTokenAddress,
         uint256 round
     ) public view returns (uint256) {
-        uint256 cached = _layout.cachedDenominator(sourceTokenAddress, round);
-        if (cached != 0) {
-            return cached;
-        }
-        return _totalGroupActionReward(_roundActions(sourceTokenAddress, round));
+        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalGeneratedActionReward(sourceTokenAddress, round);
     }
 
     function serviceRewardByMemberId(
@@ -504,15 +489,16 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             return settlement;
         }
 
-        RoundActions memory scope = _roundActions(settlement.actionTokenAddress, round);
-
-        settlement.denominator = _denominator(scope);
+        settlement.denominator = totalGroupActionReward(settlement.actionTokenAddress, round);
         if (settlement.denominator == 0) {
             settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
             return settlement;
         }
 
-        (settlement.verifierWeight, settlement.ownerWeight) = _memberWeights(scope, memberId);
+        settlement.verifierWeight = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).verifierRewardWeight(
+            settlement.actionTokenAddress, round, memberId
+        );
+        settlement.ownerWeight = _ownerWeight(settlement.actionTokenAddress, round, memberId);
         if (settlement.verifierWeight == 0 && settlement.ownerWeight == 0) {
             settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
             return settlement;
@@ -595,7 +581,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             ownerReward = _layout.ownerDistributedByMemberId[serviceTokenAddress][serviceActionId][round][memberId]
                 + _layout.ownerRemainingByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
             if (ownerReward != 0) {
-                (, ownerWeight) = _memberWeights(_roundActions(sourceTokenAddress, round), memberId);
+                ownerWeight = _ownerWeight(sourceTokenAddress, round, memberId);
             }
             return (sourceTokenAddress, ownerReward, ownerWeight);
         }
@@ -610,78 +596,18 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 memberId
     ) internal view returns (bool) {
         IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS);
-        if (groupActionExecutor.hasActiveGroups(sourceTokenAddress, memberId)) {
-            return true;
-        }
-
-        uint256[] memory actionIds = _votedGroupActions(sourceTokenAddress, round);
-        for (uint256 i = 0; i < actionIds.length; i++) {
-            VerifierApplication memory application =
-                groupActionExecutor.verifierApplication(sourceTokenAddress, actionIds[i], round, memberId);
-            if (application.applicationId != 0) {
-                return true;
-            }
-        }
-        return false;
+        return groupActionExecutor.hasActiveGroups(sourceTokenAddress, memberId)
+            || groupActionExecutor.hasVerifierApplicationByRound(sourceTokenAddress, round, memberId);
     }
 
-    function _memberWeights(
-        RoundActions memory scope,
-        uint256 memberId
-    ) internal view returns (uint256 verifierWeight, uint256 ownerWeight) {
-        for (uint256 i = 0; i < scope.actionIds.length; i++) {
-            uint256 actionId = scope.actionIds[i];
-            ownerWeight += GroupServiceStorage.groupReward(
-                GROUP_ACTION_EXECUTOR_ADDRESS, scope.actionTokenAddress, actionId, scope.round, memberId
-            );
-            if (_verifierId(scope.actionTokenAddress, actionId, scope.round) == memberId) {
-                verifierWeight += IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionReward(
-                    scope.actionTokenAddress, actionId, scope.round
-                );
-            }
-        }
-    }
-
-    function _denominator(RoundActions memory scope) internal view returns (uint256) {
-        uint256 cached = _layout.cachedDenominator(scope.actionTokenAddress, scope.round);
-        return cached != 0 ? cached : _totalGroupActionReward(scope);
-    }
-
-    function _totalGroupActionReward(RoundActions memory scope) internal view returns (uint256 total) {
-        for (uint256 i = 0; i < scope.actionIds.length; i++) {
-            total += IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).generatedActionReward(
-                scope.actionTokenAddress, scope.actionIds[i], scope.round
-            );
-        }
-    }
-
-    function _roundActions(
+    function _ownerWeight(
         address sourceTokenAddress,
-        uint256 round
-    ) internal view returns (RoundActions memory scope) {
-        scope.actionTokenAddress = sourceTokenAddress;
-        scope.round = round;
-        scope.actionIds = _votedGroupActions(sourceTokenAddress, round);
-    }
-
-    function _votedGroupActions(
-        address sourceTokenAddress,
-        uint256 round
-    ) internal view returns (uint256[] memory actionIds) {
-        address[] memory executors = new address[](1);
-        executors[0] = GROUP_ACTION_EXECUTOR_ADDRESS;
-        (actionIds, ) = IActionTarget(ACTION_TARGET_ADDRESS).votedActionIdsByExecutors(
-            sourceTokenAddress, round, executors
-        );
-    }
-
-    function _verifierId(
-        address sourceTokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 groupId
     ) internal view returns (uint256) {
-        (uint256 verifierId,,) = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).verifier(sourceTokenAddress, actionId, round);
-        return verifierId;
+        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalGeneratedActionRewardByGroupId(
+            sourceTokenAddress, round, groupId
+        );
     }
 
     function _isSettleableRound(
@@ -731,15 +657,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             _applyFormulas(settlement, memberId);
             mintAmount = settlement.verifierReward + settlement.ownerReward;
             burnAmount = settlement.ownerBurned;
-        }
-
-        // Load-bearing: the cache key is the action token's round, not the service token's; a parent
-        // service leaves the child's round open, and caching there pairs a frozen divisor with live weights.
-        if (
-            _layout.cachedDenominator(settlement.actionTokenAddress, round) == 0
-                && IMint(MINT_ADDRESS).isRewardPrepared(settlement.actionTokenAddress, round)
-        ) {
-            _layout.cacheDenominator(settlement.actionTokenAddress, round, settlement.denominator);
         }
 
         _layout.memberMinted[tokenAddress][actionId][round][memberId] = true;

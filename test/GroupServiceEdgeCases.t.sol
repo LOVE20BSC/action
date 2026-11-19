@@ -27,7 +27,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION - 1);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyVerifier(VERIFIER_ID);
         _joinService(GROUP_ID);
@@ -50,7 +49,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
         _atPhase(VERIFY_PHASE);
@@ -102,7 +100,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
@@ -148,14 +145,13 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         // community read must key on the action token, not the service token.
         _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, PRECISION, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActionsOn(address(childToken), _ids(GROUP_ACTION_ID));
         groupAction.setHasActiveGroups(address(childToken), GROUP_ID, true);
-        groupAction.setVerifierApplication(address(childToken), GROUP_ACTION_ID, VERIFIER_ID, 1, 0);
+        groupAction.setVerifierApplication(address(childToken), VERIFIER_ID, CREATION_PHASE);
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
-        groupAction.setGroupIds(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID));
-        groupAction.setGroupReward(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, GROUP_ID, GROUP_REWARD);
-        groupAction.setVerifierId(address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+        groupAction.setGroupLedger(
+            address(childToken), GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID
+        );
         _armServiceReward(SERVICE_REWARD);
         _atPhase(VERIFY_PHASE);
 
@@ -189,7 +185,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
@@ -249,11 +244,10 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         require(strayMint == 0 && !strayMinted, "uncreated action base projection is zero");
     }
 
-    function testUnlockedActionCountsTowardTheDivisorOnly() external {
+    function testActionVerifiedByAnotherMemberCountsTowardTheDivisor() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B));
         _qualifyGroupOwner(GROUP_ID);
         _qualifyGroupOwner(GROUP_OWNER_B_ID);
         _qualifyVerifier(VERIFIER_ID);
@@ -261,19 +255,13 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _joinService(GROUP_OWNER_B_ID);
         _joinService(VERIFIER_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(60e18), VERIFIER_ID);
-        // Action B locked no verifier: its reward feeds the divisor, but no
-        // member earns a verifier weight from it. Its zero-reward group earns
-        // no owner weight either.
-        groupAction.setGroupIds(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, _ids(GROUP_ID, GROUP_OWNER_B_ID));
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_ID, 40e18);
-        groupAction.setGroupReward(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, GROUP_OWNER_B_ID, 0);
-        groupAction.setVerifierId(address(token), GROUP_ACTION_ID_B, SERVICE_ROUND, 0);
+        _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(40e18, 0), MEMBER2_ID);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
         require(
             executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18,
-            "unlocked action still counts toward the divisor"
+            "both verified actions count toward the divisor"
         );
 
         (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
@@ -304,7 +292,6 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _joinService(GROUP_ID);
         vm.prank(GROUP_OWNER);
         executor.join(address(token), SERVICE_ACTION_ID + 1, GROUP_ID);
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
         actionTarget.setActionReward(address(token), SERVICE_ACTION_ID + 1, SERVICE_ROUND, SERVICE_REWARD, false);
@@ -373,11 +360,4 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         require(mintAmount == projectedMint && burnAmount == projectedBurn, "projection matched the payout exactly");
     }
 
-    function _setVotedGroupActionsOn(address actionTokenAddress, uint256[] memory actionIds) internal {
-        address[] memory executors = new address[](actionIds.length);
-        for (uint256 i = 0; i < actionIds.length; i++) {
-            executors[i] = address(groupAction);
-        }
-        actionTarget.setVotedActionIds(actionTokenAddress, SERVICE_ROUND, actionIds, executors);
-    }
 }

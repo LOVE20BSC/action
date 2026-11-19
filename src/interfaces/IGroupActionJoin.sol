@@ -191,6 +191,15 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
             uint256 totalCount
         );
 
+    function joinedActionIdsByGroupId(
+        address tokenAddress,
+        uint256 groupId,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
+
     function memberIdsByGroupId(
         address tokenAddress,
         uint256 actionId,

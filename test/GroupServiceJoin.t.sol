@@ -27,13 +27,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         require(executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "join token");
     }
 
-    function testJoinVerifierBranchViaVerifierApplication() external {
+    function testJoinVerifierWithAnApplicationOnAnUnvotedAction() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-        // The member owns no group; qualification comes from an open verifier
-        // application inside the service round's community action set.
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
+        // Application eligibility is independent of action votes.
         _qualifyVerifier(VERIFIER_ID);
 
         _joinService(VERIFIER_ID);
@@ -44,13 +42,8 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
 
-        address[] memory executors = new address[](1);
-        executors[0] = address(groupAction);
-        actionTarget.setVotedActionIds(address(token), JOIN_PHASE, _ids(GROUP_ACTION_ID), executors);
-        actionTarget.setVotedActionIds(address(token), JOIN_PHASE + 1, _ids(GROUP_ACTION_ID), executors);
-
         // The application starts standing at round JOIN_PHASE + 1, i.e. the round joined at phase JOIN_PHASE + 2.
-        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID, VERIFIER_ID, 1, JOIN_PHASE + 1);
+        groupAction.setVerifierApplication(address(token), VERIFIER_ID, JOIN_PHASE + 1);
 
         // Phase JOIN_PHASE + 1 joins round JOIN_PHASE, one round before the application exists.
         _atPhase(JOIN_PHASE + 1);
@@ -84,9 +77,8 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         );
         executor.join(address(token), SERVICE_ACTION_ID, GROUP_ID);
 
-        // An application in a different action, outside the community set, does not count.
-        _setVotedGroupActions(_ids(GROUP_ACTION_ID));
-        groupAction.setVerifierApplication(address(token), GROUP_ACTION_ID_B, VERIFIER_ID, 1, 0);
+        // An application in a different source community does not count.
+        groupAction.setVerifierApplication(address(childToken), VERIFIER_ID, CREATION_PHASE);
         vm.prank(VERIFIER);
         vm.expectRevert(
             abi.encodeWithSelector(

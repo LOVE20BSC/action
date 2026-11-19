@@ -25,6 +25,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _prepareRound();
 
         _atPhase(4);
+        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
         _submitScores(_scores(100, 60));
 
         require(executor.isRoundVerified(address(token), ACTION_ID, 2), "round verified");
@@ -43,7 +44,6 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
 
         _atPhase(5);
         _fundExecutor(PROPOSAL_REWARD);
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
 
         uint256 expected1 = Math.mulDiv(PROPOSAL_REWARD, memberFinal1, totalFinal);
