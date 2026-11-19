@@ -11,6 +11,7 @@ import {MockUniswapV2Factory, MockUniswapV2Pair, MockUniswapV2Router} from "../m
 import {Phase} from "@core/Phase.sol";
 import {MemberNFT} from "@core/MemberNFT.sol";
 import {Mint} from "@core/Mint.sol";
+import {ProposalRewardStatus} from "@core/interfaces/IMint.sol";
 import {Vote} from "@core/Vote.sol";
 import {Submit, ProposalBody} from "@core/Submit.sol";
 import {Stake} from "@core/Stake.sol";
@@ -116,7 +117,7 @@ contract LpExecutorRealIntegrationTest {
             5
         );
         submit = new Submit(address(phase), address(stake), address(memberNFT), 5e16);
-        vote = new Vote(address(phase), address(stake), address(submit), address(memberNFT));
+        vote = new Vote(address(phase), address(stake), address(submit), address(memberNFT), predictedMint);
         mint = new Mint(address(phase), address(vote), address(submit), address(launch), address(memberNFT), 5e16, 1e17, 1e17);
 
         actionTarget = new ActionTarget(address(mint));
@@ -252,7 +253,7 @@ contract LpExecutorRealIntegrationTest {
 
     function _assertSettlement(uint256 proposalId, uint256 round) internal {
         require(lpExecutor.currentMintRound() == round, "mint round reached");
-        (uint256 expectedReward,) = mint.proposalRewardByProposalId(address(token), round, proposalId);
+        (uint256 expectedReward,) = mint.proposalRewardSettlement(address(token), round, proposalId);
         require(expectedReward > 0, "reward available");
         (uint256 expectedMint, uint256 expectedBurn) = _expectedSplit(expectedReward);
 
@@ -310,8 +311,9 @@ contract LpExecutorRealIntegrationTest {
 
         // Nobody joined the round, so its reserved share has no distribution path and stays
         // unsettled for good: the reservation is never released and no member can be paid.
-        (uint256 expectedShare, bool minted) = mint.proposalRewardByProposalId(address(token), round, proposalId);
-        require(expectedShare > 0 && !minted, "share reserved but unminted");
+        (uint256 expectedShare, ProposalRewardStatus status) =
+            mint.proposalRewardSettlement(address(token), round, proposalId);
+        require(expectedShare > 0 && status == ProposalRewardStatus.Unsettled, "share remains reserved");
 
         vm.prank(member1);
         vm.expectRevert(
@@ -321,8 +323,8 @@ contract LpExecutorRealIntegrationTest {
         );
         lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
 
-        (expectedShare, minted) = mint.proposalRewardByProposalId(address(token), round, proposalId);
-        require(!minted, "still unallocatable after the attempt");
+        (, status) = mint.proposalRewardSettlement(address(token), round, proposalId);
+        require(status == ProposalRewardStatus.Unsettled, "failed attempt leaves the share unsettled");
     }
 
 

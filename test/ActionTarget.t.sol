@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionTargetErrors} from "../src/interfaces/IActionTarget.sol";
-import {IMintErrors} from "@core/interfaces/IMint.sol";
+import {IMintErrors, ProposalRewardStatus} from "@core/interfaces/IMint.sol";
 import {MockExecutor, MockMint} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
@@ -762,7 +762,7 @@ contract ActionTargetTest is ActionTargetTestBase {
     function testMintActionRewardPropagatesMintRevert() external {
         _createAction(11);
         uint256 round = 5;
-        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, ProposalRewardStatus.Unsettled);
         vote.setProposalVoted(address(token), round, 11, true);
         mint.setRevertOnMint(true);
         vm.prank(address(executor));
@@ -778,7 +778,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         (uint256 unset, bool unsetMinted) = actionTarget.actionReward(address(token), 11, round);
         require(unset == 0 && unsetMinted == false, "no reward set");
 
-        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, false);
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, ProposalRewardStatus.Unsettled);
         (uint256 expected, bool mintedBefore) = actionTarget.actionReward(address(token), 11, round);
         require(expected == MINT_AMOUNT && mintedBefore == false, "expected amount before mint");
 
@@ -787,6 +787,21 @@ contract ActionTargetTest is ActionTargetTestBase {
         actionTarget.mintActionReward(address(token), 11, round);
         (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), 11, round);
         require(recorded == MINT_AMOUNT && minted, "recorded amount after mint");
+    }
+
+    function testActionRewardExcludesTheBurnedShare() external {
+        _createAction(11);
+        uint256 round = 5;
+        vote.setProposalVoted(address(token), round, 11, true);
+        mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, ProposalRewardStatus.Burned);
+
+        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        require(amount == 0 && !minted, "burned shares cannot be distributed");
+        vm.prank(address(executor));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyBurned.selector, address(token), round, 11)
+        );
+        actionTarget.mintActionReward(address(token), 11, round);
     }
 
     function testRewardQueriesDefaultForUnboundRounds() external view {

@@ -104,7 +104,7 @@ abstract contract ActionTargetIntegrationFixture {
             5
         );
         submit = new Submit(address(phase), address(stake), address(memberNFT), submitMinRatio);
-        vote = new Vote(address(phase), address(stake), address(submit), address(memberNFT));
+        vote = new Vote(address(phase), address(stake), address(submit), address(memberNFT), predictedMint);
         mint = new Mint(
             address(phase), address(vote), address(submit), address(launch), address(memberNFT), proposalMinVoteRatio, 1e17, 1e17
         );
@@ -292,11 +292,13 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         uint256 pool = mint.proposalReward(address(token), round);
         uint256 totalVotes = MEMBER1_VOTES + MEMBER2_VOTES + BELOW_THRESHOLD_VOTES;
         uint256 sourceReward = pool * MEMBER1_VOTES / totalVotes;
-        require(!mint.isRewardPrepared(address(token), round), "verification can use the first-vote reserve");
         require(sourceReward > 0 && service.totalGroupActionReward(address(token), round) == sourceReward, "round total");
-        require(group.verifierRewardWeight(address(token), round, 2) == sourceReward, "elected verifier weight");
+        require(
+            group.totalGeneratedActionRewardByVerifierId(address(token), round, 2) == sourceReward,
+            "elected verifier's action total"
+        );
         {
-            (uint256 unqualifiedReward,) = mint.proposalRewardByProposalId(address(token), round, belowThresholdProposalId);
+            (uint256 unqualifiedReward,) = mint.proposalRewardSettlement(address(token), round, belowThresholdProposalId);
             require(unqualifiedReward == 0, "below-threshold proposal cannot mint");
             (uint256[] memory actionIds, uint256 totalCount) =
                 group.joinedActionIdsByGroupId(address(token), 1, round, 0, 10, false);
@@ -412,7 +414,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     }
 
     function _assertMint(uint256 round, uint256 proposalId) internal {
-        (uint256 expectedAmount,) = mint.proposalRewardByProposalId(address(token), round, proposalId);
+        (uint256 expectedAmount,) = mint.proposalRewardSettlement(address(token), round, proposalId);
         require(expectedAmount > 0, "reward available");
         (uint256 quotedAmount, bool mintedBefore) = actionTarget.actionReward(address(token), proposalId, round);
         require(quotedAmount == expectedAmount && mintedBefore == false, "expected amount before mint");

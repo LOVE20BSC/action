@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {Pagination} from "@libs/Pagination.sol";
-import {IMintErrors} from "@core/interfaces/IMint.sol";
+import {IMintErrors, ProposalRewardStatus} from "@core/interfaces/IMint.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract MockPhase {
@@ -78,8 +78,8 @@ contract MockMint {
 
     // tokenAddress => round => proposalId => amount
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _proposalRewardAmount;
-    // tokenAddress => round => proposalId => minted
-    mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _proposalMinted;
+    // tokenAddress => round => proposalId => settlement status
+    mapping(address => mapping(uint256 => mapping(uint256 => ProposalRewardStatus))) internal _proposalRewardStatus;
 
     function setVoteAddress(address voteAddress_) external {
         voteAddress = voteAddress_;
@@ -111,18 +111,21 @@ contract MockMint {
         uint256 round,
         uint256 proposalId,
         uint256 amount,
-        bool minted
+        ProposalRewardStatus status
     ) external {
         _proposalRewardAmount[tokenAddress][round][proposalId] = amount;
-        _proposalMinted[tokenAddress][round][proposalId] = minted;
+        _proposalRewardStatus[tokenAddress][round][proposalId] = status;
     }
 
-    function proposalRewardByProposalId(address tokenAddress, uint256 round, uint256 proposalId)
+    function proposalRewardSettlement(address tokenAddress, uint256 round, uint256 proposalId)
         external
         view
-        returns (uint256 amount, bool minted)
+        returns (uint256 amount, ProposalRewardStatus status)
     {
-        return (_proposalRewardAmount[tokenAddress][round][proposalId], _proposalMinted[tokenAddress][round][proposalId]);
+        return (
+            _proposalRewardAmount[tokenAddress][round][proposalId],
+            _proposalRewardStatus[tokenAddress][round][proposalId]
+        );
     }
 
     function mintProposalReward(
@@ -133,8 +136,12 @@ contract MockMint {
     ) external returns (uint256 amount) {
         if (revertOnMint) revert MintProposalRewardReverted();
         // Mirror Mint: it owns the per-round dedup ledger, and the minted amount stays queryable.
-        if (_proposalMinted[tokenAddress][round][proposalId]) {
+        ProposalRewardStatus status = _proposalRewardStatus[tokenAddress][round][proposalId];
+        if (status == ProposalRewardStatus.Minted) {
             revert IMintErrors.ProposalRewardAlreadyMinted(tokenAddress, round, proposalId);
+        }
+        if (status == ProposalRewardStatus.Burned) {
+            revert IMintErrors.ProposalRewardAlreadyBurned(tokenAddress, round, proposalId);
         }
         mintCalls++;
         lastMintCaller = msg.sender;
@@ -143,7 +150,7 @@ contract MockMint {
         lastMintProposalId = proposalId;
         lastMintRecipient = recipient;
         _proposalRewardAmount[tokenAddress][round][proposalId] = mintAmount;
-        _proposalMinted[tokenAddress][round][proposalId] = true;
+        _proposalRewardStatus[tokenAddress][round][proposalId] = ProposalRewardStatus.Minted;
         return mintAmount;
     }
 

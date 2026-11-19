@@ -353,13 +353,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 2, again);
 
         (uint256[] memory actionIds, uint256 actionCount) =
-            executor.generatedActionIdsByRound(address(token), 2, 0, 1, false);
+            executor.actionIdsWithGeneratedActionReward(address(token), 2, 0, 1, false);
         require(actionCount == 1 && actionIds[0] == ACTION_ID, "one source action after scoring retry");
         require(
             executor.totalGeneratedActionReward(address(token), 2) == PROPOSAL_REWARD, "round reward counted once"
         );
         require(
-            executor.verifierRewardWeight(address(token), 2, VERIFIER_ID) == PROPOSAL_REWARD,
+            executor.totalGeneratedActionRewardByVerifierId(address(token), 2, VERIFIER_ID) == PROPOSAL_REWARD,
             "verifier reward counted once"
         );
     }

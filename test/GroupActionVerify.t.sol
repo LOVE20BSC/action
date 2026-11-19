@@ -249,9 +249,12 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         });
         _submit(GROUP_B, 0, _scores(50));
         require(_layout.totalGeneratedActionReward[TOKEN][ROUND] == ACTION_REWARD, "whole action adds its reward once");
-        require(_layout.verifierRewardWeight[TOKEN][ROUND][VERIFIER_ID] == ACTION_REWARD, "elected verifier gets weight");
-        require(_layout.generatedActionIdsByRound[TOKEN][ROUND].length == 1, "one recorded action");
-        require(_layout.generatedActionIdsByRound[TOKEN][ROUND][0] == ACTION_ID, "recorded action id");
+        require(
+            _layout.totalGeneratedActionRewardByVerifierId[TOKEN][ROUND][VERIFIER_ID] == ACTION_REWARD,
+            "elected verifier's action total"
+        );
+        require(_layout.actionIdsWithGeneratedActionReward[TOKEN][ROUND].length == 1, "one recorded action");
+        require(_layout.actionIdsWithGeneratedActionReward[TOKEN][ROUND][0] == ACTION_ID, "recorded action id");
     }
 
     function test_SameRoundChurnKeepsFinalOrderVerifiable() external {

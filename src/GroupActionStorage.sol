@@ -198,9 +198,9 @@ library GroupActionStorage {
         // tokenAddress => round => sum of rewards from fully verified actions
         mapping(address => mapping(uint256 => uint256)) totalGeneratedActionReward;
         // tokenAddress => round => verifierId => rewards from the actions verified by that verifier
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) verifierRewardWeight;
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) totalGeneratedActionRewardByVerifierId;
         // tokenAddress => round => fully verified actions with positive rewards, in completion order
-        mapping(address => mapping(uint256 => uint256[])) generatedActionIdsByRound;
+        mapping(address => mapping(uint256 => uint256[])) actionIdsWithGeneratedActionReward;
         // tokenAddress => actionId => round => proposal reward recorded at verification completion
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) generatedActionReward;
         // tokenAddress => round => groupId => accumulated shares for a prefix of the generated actions

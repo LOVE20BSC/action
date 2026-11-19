@@ -7,7 +7,7 @@ import {Pagination} from "@libs/Pagination.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
 import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
-import {IMint} from "@core/interfaces/IMint.sol";
+import {IMint, ProposalRewardStatus} from "@core/interfaces/IMint.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IVote} from "@core/interfaces/IVote.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
@@ -278,9 +278,13 @@ contract ActionTarget is IActionTarget {
         uint256 actionId,
         uint256 round
     ) external view returns (uint256 amount, bool minted) {
-        bool isBound = _executorByActionId[tokenAddress][actionId] != address(0);
-        if (isBound) {
-            (amount, minted) = IMint(MINT_ADDRESS).proposalRewardByProposalId(tokenAddress, round, actionId);
+        if (_executorByActionId[tokenAddress][actionId] == address(0)) return (amount, minted);
+
+        (uint256 reward, ProposalRewardStatus status) =
+            IMint(MINT_ADDRESS).proposalRewardSettlement(tokenAddress, round, actionId);
+        if (status != ProposalRewardStatus.Burned) {
+            amount = reward;
+            minted = status == ProposalRewardStatus.Minted;
         }
     }
 

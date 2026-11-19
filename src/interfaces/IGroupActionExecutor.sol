@@ -120,13 +120,13 @@ interface IGroupActionExecutor is
         uint256 limit
     ) external returns (uint256 processedActionCount, uint256 totalActionCount);
 
-    function verifierRewardWeight(
+    function totalGeneratedActionRewardByVerifierId(
         address tokenAddress,
         uint256 round,
         uint256 verifierId
     ) external view returns (uint256);
 
-    function generatedActionIdsByRound(
+    function actionIdsWithGeneratedActionReward(
         address tokenAddress,
         uint256 round,
         uint256 offset,

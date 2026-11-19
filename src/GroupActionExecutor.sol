@@ -125,22 +125,22 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionVerify.prepareGeneratedActionRewardByGroupId(_layout, tokenAddress, round, groupId, limit);
     }
 
-    function verifierRewardWeight(
+    function totalGeneratedActionRewardByVerifierId(
         address tokenAddress,
         uint256 round,
         uint256 verifierId
     ) external view returns (uint256) {
-        return _layout.verifierRewardWeight[tokenAddress][round][verifierId];
+        return _layout.totalGeneratedActionRewardByVerifierId[tokenAddress][round][verifierId];
     }
 
-    function generatedActionIdsByRound(
+    function actionIdsWithGeneratedActionReward(
         address tokenAddress,
         uint256 round,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return GroupActionVerify.generatedActionIdsByRound(_layout, tokenAddress, round, offset, limit, reverse);
+        return GroupActionVerify.actionIdsWithGeneratedActionReward(_layout, tokenAddress, round, offset, limit, reverse);
     }
 
     function onProposalCreated(address tokenAddress, uint256 actionId, bytes[] calldata targetData)

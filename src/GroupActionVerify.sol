@@ -339,7 +339,7 @@ library GroupActionVerify {
             || self.withdrawnApplicationActionIds[tokenAddress][verifierId][round].count() != 0;
     }
 
-    function generatedActionIdsByRound(
+    function actionIdsWithGeneratedActionReward(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 round,
@@ -347,7 +347,7 @@ library GroupActionVerify {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return Pagination.paginate(self.generatedActionIdsByRound[tokenAddress][round], offset, limit, reverse);
+        return Pagination.paginate(self.actionIdsWithGeneratedActionReward[tokenAddress][round], offset, limit, reverse);
     }
 
     function groupRewardPreparation(
@@ -417,7 +417,7 @@ library GroupActionVerify {
         uint256 groupId
     ) private view returns (uint256) {
         if (self.joinedActionIdsByGroupId[tokenAddress][groupId].countByRound(round) == 0) return 0;
-        return self.generatedActionIdsByRound[tokenAddress][round].length;
+        return self.actionIdsWithGeneratedActionReward[tokenAddress][round].length;
     }
 
     function _sumGroupRewards(
@@ -428,7 +428,7 @@ library GroupActionVerify {
         uint256 start,
         uint256 end
     ) private view returns (uint256 weight) {
-        uint256[] storage actionIds = self.generatedActionIdsByRound[tokenAddress][round];
+        uint256[] storage actionIds = self.actionIdsWithGeneratedActionReward[tokenAddress][round];
         for (uint256 i = start; i < end; ++i) {
             weight += self.generatedActionRewardByGroupId(tokenAddress, actionIds[i], round, groupId);
         }
@@ -971,8 +971,8 @@ library GroupActionVerify {
 
         self.generatedActionReward[tokenAddress][actionId][round] = reward;
         self.totalGeneratedActionReward[tokenAddress][round] += reward;
-        self.verifierRewardWeight[tokenAddress][round][submission.verifierId] += reward;
-        self.generatedActionIdsByRound[tokenAddress][round].push(actionId);
+        self.totalGeneratedActionRewardByVerifierId[tokenAddress][round][submission.verifierId] += reward;
+        self.actionIdsWithGeneratedActionReward[tokenAddress][round].push(actionId);
     }
 
     function _emitVerifierApplicationSubmitted(

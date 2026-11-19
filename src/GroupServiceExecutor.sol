@@ -495,9 +495,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             return settlement;
         }
 
-        settlement.verifierWeight = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).verifierRewardWeight(
-            settlement.actionTokenAddress, round, memberId
-        );
+        settlement.verifierWeight = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS)
+            .totalGeneratedActionRewardByVerifierId(settlement.actionTokenAddress, round, memberId);
         settlement.ownerWeight = _ownerWeight(settlement.actionTokenAddress, round, memberId);
         if (settlement.verifierWeight == 0 && settlement.ownerWeight == 0) {
             settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;

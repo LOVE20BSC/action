@@ -435,7 +435,7 @@ contract MockGroupServiceGroupActionExecutor {
         return _roundReward[tokenAddress][round];
     }
 
-    function verifierRewardWeight(address tokenAddress, uint256 round, uint256 verifierId)
+    function totalGeneratedActionRewardByVerifierId(address tokenAddress, uint256 round, uint256 verifierId)
         external view returns (uint256)
     {
         return _verifierWeight[tokenAddress][round][verifierId];
