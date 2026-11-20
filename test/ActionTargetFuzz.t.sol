@@ -170,7 +170,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         votedIds[1] = idB % 5;
         votedIds[2] = idC % 5;
         vm.assume(votedIds[0] != votedIds[1] && votedIds[0] != votedIds[2] && votedIds[1] != votedIds[2]);
-        vote.setVotedProposalIds(address(token), 3, votedIds);
+        vote.setVotedProposalIdsByTarget(address(token), 3, address(actionTarget), votedIds);
 
         (uint256[] memory page,, uint256 total) = actionTarget.votedActionIds(address(token), 3, 0, 10, false);
         uint256 expectedTotal;
@@ -204,7 +204,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         votedIds[1] = idB % 5;
         votedIds[2] = idC % 5;
         vm.assume(votedIds[0] != votedIds[1] && votedIds[0] != votedIds[2] && votedIds[1] != votedIds[2]);
-        vote.setVotedProposalIds(address(token), 3, votedIds);
+        vote.setVotedProposalIdsByTarget(address(token), 3, address(actionTarget), votedIds);
 
         uint256 selectedCount = (includeFirst ? 1 : 0) + (includeSecond ? 1 : 0);
         address[] memory selected = new address[](selectedCount);

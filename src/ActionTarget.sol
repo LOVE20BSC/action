@@ -460,9 +460,10 @@ contract ActionTarget is IActionTarget {
             uint256 count
         )
     {
-        (uint256[] memory votedIds, ) = IVote(VOTE_ADDRESS).votedProposalIds(
+        (uint256[] memory votedIds, ) = IVote(VOTE_ADDRESS).votedProposalIdsByTarget(
             tokenAddress,
             round,
+            address(this),
             0,
             type(uint256).max,
             false

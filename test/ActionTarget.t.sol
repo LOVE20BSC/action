@@ -593,7 +593,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         votedIds[0] = 41;
         votedIds[1] = 999;
         votedIds[2] = 42;
-        vote.setVotedProposalIds(address(token), round, votedIds);
+        vote.setVotedProposalIdsByTarget(address(token), round, address(actionTarget), votedIds);
 
         (uint256[] memory actionIds, address[] memory executors, uint256 total) =
             actionTarget.votedActionIds(address(token), round, 0, 10, false);
@@ -608,7 +608,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(total == 0 && actionIds.length == 0, "empty round");
     }
 
-    function testVotedActionIdsReadsFullRoundListBeforeFiltering() external {
+    function testVotedActionIdsFiltersBeforeCallerPagination() external {
         _createAction(2);
         _createAction(4);
         uint256 round = 3;
@@ -617,7 +617,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         votedIds[1] = 2;
         votedIds[2] = 3;
         votedIds[3] = 4;
-        vote.setVotedProposalIds(address(token), round, votedIds);
+        vote.setVotedProposalIdsByTarget(address(token), round, address(actionTarget), votedIds);
 
         (uint256[] memory actionIds,, uint256 total) = actionTarget.votedActionIds(address(token), round, 0, 2, false);
         require(total == 2 && actionIds.length == 2, "filtered total");
@@ -642,7 +642,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         votedIds[4] = 54;
         votedIds[5] = 55;
         votedIds[6] = 56;
-        vote.setVotedProposalIds(address(token), round, votedIds);
+        vote.setVotedProposalIdsByTarget(address(token), round, address(actionTarget), votedIds);
 
         address[] memory twoExecutors = new address[](2);
         twoExecutors[0] = address(executor);

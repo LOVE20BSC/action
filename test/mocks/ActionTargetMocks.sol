@@ -22,8 +22,8 @@ contract MockVote {
 
     // tokenAddress => round => proposalId => voted
     mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _proposalVoted;
-    // tokenAddress => round => voted proposal ids
-    mapping(address => mapping(uint256 => uint256[])) internal _votedProposalIds;
+    // tokenAddress => round => target => voted proposal ids
+    mapping(address => mapping(uint256 => mapping(address => uint256[]))) internal _votedProposalIdsByTarget;
     // round => ended
     mapping(uint256 => bool) internal _roundEnded;
 
@@ -35,10 +35,15 @@ contract MockVote {
         _proposalVoted[tokenAddress][round][proposalId] = voted;
     }
 
-    function setVotedProposalIds(address tokenAddress, uint256 round, uint256[] calldata proposalIds) external {
-        delete _votedProposalIds[tokenAddress][round];
+    function setVotedProposalIdsByTarget(
+        address tokenAddress,
+        uint256 round,
+        address target,
+        uint256[] calldata proposalIds
+    ) external {
+        delete _votedProposalIdsByTarget[tokenAddress][round][target];
         for (uint256 i = 0; i < proposalIds.length; i++) {
-            _votedProposalIds[tokenAddress][round].push(proposalIds[i]);
+            _votedProposalIdsByTarget[tokenAddress][round][target].push(proposalIds[i]);
             _proposalVoted[tokenAddress][round][proposalIds[i]] = true;
         }
     }
@@ -51,12 +56,19 @@ contract MockVote {
         return _roundEnded[round];
     }
 
-    function votedProposalIds(address tokenAddress, uint256 round, uint256 offset, uint256 limit, bool reverse)
+    function votedProposalIdsByTarget(
+        address tokenAddress,
+        uint256 round,
+        address target,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    )
         external
         view
-        returns (uint256[] memory proposalIds, uint256 total)
+        returns (uint256[] memory proposalIds, uint256 totalCount)
     {
-        return _votedProposalIds[tokenAddress][round].paginate(offset, limit, reverse);
+        return _votedProposalIdsByTarget[tokenAddress][round][target].paginate(offset, limit, reverse);
     }
 }
 

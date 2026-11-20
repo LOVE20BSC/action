@@ -132,7 +132,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
     }
 
     function testVotedActionIdsExcludesAllUnbound() external {
-        vote.setVotedProposalIds(address(token), 3, _singleId(77));
+        vote.setVotedProposalIdsByTarget(address(token), 3, address(actionTarget), _singleId(77));
         (uint256[] memory page,, uint256 total) = actionTarget.votedActionIds(address(token), 3, 0, 10, false);
         require(total == 0 && page.length == 0, "unbound round empty");
 
