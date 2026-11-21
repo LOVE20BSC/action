@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
-import {IGroupActionExecutorErrors} from "../src/interfaces/IGroupActionExecutor.sol";
+import {GroupActionCreationParams, IGroupActionExecutorErrors} from "../src/interfaces/IGroupActionExecutor.sol";
 import {IGroupActionVerifyErrors} from "../src/interfaces/IGroupActionVerify.sol";
 import {VerifierApplication} from "../src/interfaces/IGroupActionVerify.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
@@ -225,16 +225,15 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     function testFuzzPenaltyRoundsOnceEvenWhenItBecomesZero(uint96 stakeSeed, uint64 ratioSeed) external {
         uint256 collateral = uint256(stakeSeed);
         uint256 ratio = uint256(ratioSeed) % (PRECISION - 1) + 1;
-        bytes[] memory data = _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, collateral);
-        data[6] = abi.encode(ratio);
-        _createActionWith(ACTION_2, data);
+        GroupActionCreationParams memory params = _groupCreationParams();
+        params.verifierStakeAmount = collateral;
+        params.verifierPunishmentRatio = ratio;
+        _createActionWith(ACTION_2, abi.encode(params));
         vote.setVotesNumByProposalId(address(token), 2, ACTION_2, 1000e18);
         _fundTokenFor(VERIFIER, collateral);
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_2, VERIFIER_ID, "rounding");
-        bytes[] memory voteData = new bytes[](2);
-        voteData[0] = abi.encode(address(executor));
-        voteData[1] = abi.encode(VERIFIER_ID);
+        bytes memory voteData = abi.encode(VERIFIER_ID);
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 2, ACTION_2, MEMBER1_ID, 1, voteData);
         _atPhase(3);
@@ -421,14 +420,12 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     }
 
     function testCallbackGuards() external {
-        bytes[] memory votedData = new bytes[](2);
-        votedData[0] = abi.encode(address(executor));
-        votedData[1] = abi.encode(VERIFIER_ID);
+        bytes memory votedData = abi.encode(VERIFIER_ID);
 
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
-        executor.onProposalSubmitted(address(token), ACTION_ID, 0, votedData);
+        executor.onProposalSubmitted(address(token), 2, ACTION_ID, 0, votedData);
 
         vm.prank(address(actionTarget));
         vm.expectRevert(
@@ -440,23 +437,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         // An application stands for its creation round and every round after it, so a vote for a later
         // round is accepted; a vote for a round before it existed is not reachable in practice, and the
         // missing-verifier guard above already covers the only real rejection.
-        bytes[] memory zeroVerifier = new bytes[](2);
-        zeroVerifier[0] = votedData[0];
-        zeroVerifier[1] = abi.encode(uint256(0));
+        bytes memory zeroVerifier = abi.encode(uint256(0));
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionVerifyErrors.NoActiveApplication.selector, uint256(0)));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, zeroVerifier);
 
-        bytes[] memory three = new bytes[](3);
-        three[0] = votedData[0];
-        three[1] = votedData[1];
-        three[2] = votedData[1];
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TooManyTargetDataItems.selector, 3, 2));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, three);
-
-        vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, new bytes[](0));
+        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, "");
 
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 0, votedData);
@@ -470,39 +457,24 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(verifierId == VERIFIER_ID, "positive vote elects the verifier");
     }
 
-    function testVerifierIdItemLengthZeroReverts() external {
-        bytes[] memory votedData = new bytes[](2);
-        votedData[0] = abi.encode(address(executor));
-        votedData[1] = new bytes(0);
+    function testVerifierVoteDataLength31Reverts() external {
+        bytes memory votedData = new bytes(31);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVoteDataLength.selector, 31, 32));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
     }
 
-    function testVerifierIdItemLength31Reverts() external {
-        bytes[] memory votedData = new bytes[](2);
-        votedData[0] = abi.encode(address(executor));
-        votedData[1] = new bytes(31);
+    function testVerifierVoteDataLength33Reverts() external {
+        bytes memory votedData = new bytes(33);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 31));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVoteDataLength.selector, 33, 32));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
     }
 
-    function testVerifierIdItemLength33Reverts() external {
-        bytes[] memory votedData = new bytes[](2);
-        votedData[0] = abi.encode(address(executor));
-        votedData[1] = new bytes(33);
+    function testVerifierVoteDataLength64Reverts() external {
+        bytes memory votedData = new bytes(64);
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 33));
-        executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
-    }
-
-    function testVerifierIdItemLength64Reverts() external {
-        bytes[] memory votedData = new bytes[](2);
-        votedData[0] = abi.encode(address(executor));
-        votedData[1] = new bytes(64);
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 1, 64));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVoteDataLength.selector, 64, 32));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 1, votedData);
     }
 

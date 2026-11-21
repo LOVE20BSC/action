@@ -93,47 +93,35 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         );
     }
 
-    function testOnProposalCreatedRejectsInvalidTargetData() external {
+    function testOnProposalCreatedRejectsInvalidCreationData() external {
         _expectCreateRevert(
             address(token),
-            _serviceTargetData(address(token), 0, 0),
-            3,
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.InsufficientTargetDataItems.selector, 3, 4)
+            new bytes(95),
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 95, 96)
         );
         _expectCreateRevert(
             address(token),
-            _serviceTargetData(address(token), 0, 0),
-            5,
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.TooManyTargetDataItems.selector, 5, 4)
-        );
-        _expectCreateRevert(
-            address(token),
-            _shortItemTargetData(),
-            4,
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidTargetDataShape.selector, 2, 31)
+            new bytes(97),
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 97, 96)
         );
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(0), 0, PRECISION),
-            4,
             abi.encodeWithSelector(IGroupServiceExecutorErrors.ZeroActionTokenAddress.selector)
         );
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(token), 0, PRECISION + 1),
-            4,
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, PRECISION + 1)
         );
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(token), 0, PRECISION),
-            4,
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, PRECISION)
         );
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(token), 0, 0),
-            4,
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, 0)
         );
     }
@@ -143,7 +131,6 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(grandChildToken), 0, PRECISION - 1),
-            4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
                 address(grandChildToken),
@@ -155,7 +142,6 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         _expectCreateRevert(
             address(grandChildToken),
             _serviceTargetData(address(token), 0, PRECISION - 1),
-            4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
                 address(token),
@@ -168,7 +154,6 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         _expectCreateRevert(
             address(token),
             _serviceTargetData(address(stranger), 0, PRECISION - 1),
-            4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
                 address(stranger),
@@ -179,7 +164,6 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         _expectCreateRevert(
             address(childToken),
             _serviceTargetData(address(stranger), 0, PRECISION - 1),
-            4,
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ActionTokenParentMismatch.selector,
                 address(stranger),
@@ -199,72 +183,35 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
     function testOnProposalSubmittedChecksCallerOnly() external {
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(0xBEEF)));
-        executor.onProposalSubmitted(address(token), SERVICE_ACTION_ID, GROUP_ID, new bytes[](0));
+        executor.onProposalSubmitted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, "");
 
         vm.prank(address(actionTarget));
-        executor.onProposalSubmitted(address(token), SERVICE_ACTION_ID, GROUP_ID, new bytes[](0));
+        executor.onProposalSubmitted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, "");
     }
 
-    function testOnProposalVotedChecksCallerAndTargetData() external {
-        bytes[] memory tooMany = new bytes[](2);
-        tooMany[0] = abi.encode(address(executor));
-
+    function testOnProposalVotedChecksCallerAndData() external {
+        bytes memory voteData = abi.encode(uint256(1));
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(0xBEEF)));
-        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, tooMany);
+        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, voteData);
 
         vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.TooManyTargetDataItems.selector, 2, 1));
-        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, tooMany);
-
-        bytes[] memory single = new bytes[](1);
-        single[0] = abi.encode(address(executor));
-        vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, single);
+        vm.expectRevert(abi.encodeWithSelector(IGroupServiceExecutorErrors.UnexpectedVoteData.selector));
+        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, voteData);
 
         vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, new bytes[](0));
+        executor.onProposalVoted(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, 1, "");
     }
 
     function _expectCreateRevert(
         address serviceTokenAddress,
-        bytes[] memory targetData,
-        uint256 length,
+        bytes memory creationData,
         bytes memory expectedRevert
     ) internal {
-        bytes[] memory data = _clone(targetData);
-        if (data.length < length) {
-            bytes[] memory grown = new bytes[](length);
-            for (uint256 i = 0; i < data.length; i++) {
-                grown[i] = data[i];
-            }
-            data = grown;
-        } else if (data.length > length) {
-            bytes[] memory shrunk = new bytes[](length);
-            for (uint256 i = 0; i < length; i++) {
-                shrunk[i] = data[i];
-            }
-            data = shrunk;
-        }
         _atPhase(CREATION_PHASE);
         vm.prank(address(actionTarget));
         vm.expectRevert(expectedRevert);
-        executor.onProposalCreated(serviceTokenAddress, SERVICE_ACTION_ID, data);
-    }
-
-    function _shortItemTargetData() internal view returns (bytes[] memory targetData) {
-        targetData = new bytes[](4);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(address(token));
-        targetData[2] = new bytes(31);
-        targetData[3] = abi.encode(PRECISION);
-    }
-
-    function _clone(bytes[] memory data) internal pure returns (bytes[] memory copy) {
-        copy = new bytes[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            copy[i] = data[i];
-        }
+        executor.onProposalCreated(serviceTokenAddress, SERVICE_ACTION_ID, creationData);
     }
 
     function _expectCurrentVoteRoundRevert() internal {

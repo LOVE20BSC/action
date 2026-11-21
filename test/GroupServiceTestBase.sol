@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupServiceExecutor} from "../src/GroupServiceExecutor.sol";
+import {GroupServiceCreationParams} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {
     MockGroupServicePhase,
     MockGroupServiceMemberNFT,
@@ -185,14 +186,10 @@ abstract contract GroupServiceTestBase {
 
     function _serviceTargetData(address actionTokenAddress, uint256 govRatioMultiplier, uint256 publicVerifierRatio)
         internal
-        view
-        returns (bytes[] memory targetData)
+        pure
+        returns (bytes memory)
     {
-        targetData = new bytes[](4);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(actionTokenAddress);
-        targetData[2] = abi.encode(govRatioMultiplier);
-        targetData[3] = abi.encode(publicVerifierRatio);
+        return abi.encode(GroupServiceCreationParams(actionTokenAddress, govRatioMultiplier, publicVerifierRatio));
     }
 
     /// @dev Creates the service proposal through the ActionTarget callback. The

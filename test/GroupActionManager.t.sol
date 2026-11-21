@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
-import {IGroupActionExecutorErrors} from "../src/interfaces/IGroupActionExecutor.sol";
+import {GroupActionCreationParams, IGroupActionExecutorErrors} from "../src/interfaces/IGroupActionExecutor.sol";
 import {IGroupActionManagerErrors} from "../src/interfaces/IGroupActionManager.sol";
 import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
@@ -309,7 +309,7 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
     }
 
     function testJoinTokenWithoutTotalSupplyIsRejected() external {
-        bytes[] memory wrongToken = _targetDataWith(address(0xdead), 0, 0, 0, 0);
+        bytes memory wrongToken = _targetDataWith(address(0xdead), 0, 0, 0, 0);
         vm.prank(address(actionTarget));
         vm.expectRevert(
             abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidJoinTokenAddress.selector, address(0xdead))
@@ -322,89 +322,49 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
     }
 
     function testVerifierPunishmentRatioConfiguration() external {
-        bytes[] memory data = _targetData();
-        data[6] = abi.encode(9e17);
-        _createActionWith(ACTION_2, data);
+        GroupActionCreationParams memory params = _groupCreationParams();
+        _createActionWith(ACTION_2, abi.encode(params));
         require(executor.verifierPunishmentRatio(address(token), ACTION_2) == 9e17, "configured punishment ratio");
         require(executor.verifierPunishmentRatio(address(token), ACTION_ID) == 9e17, "other action ratio unchanged");
 
-        data[6] = abi.encode(uint256(0));
+        params.verifierPunishmentRatio = 0;
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio.selector, 0));
-        executor.onProposalCreated(address(token), 23, data);
+        executor.onProposalCreated(address(token), 23, abi.encode(params));
 
-        data[6] = abi.encode(PRECISION);
+        params.verifierPunishmentRatio = PRECISION;
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio.selector, PRECISION));
-        executor.onProposalCreated(address(token), 23, data);
+        executor.onProposalCreated(address(token), 23, abi.encode(params));
 
-        data[6] = abi.encode(PRECISION + 1);
+        params.verifierPunishmentRatio = PRECISION + 1;
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio.selector, PRECISION + 1));
-        executor.onProposalCreated(address(token), 24, data);
-
-        data[6] = new bytes(31);
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 6, 31));
-        executor.onProposalCreated(address(token), 24, data);
+        executor.onProposalCreated(address(token), 24, abi.encode(params));
     }
 
     function testOnProposalCreatedReverts() external {
-        bytes[] memory data = _targetData();
-
+        bytes memory creationData = _targetData();
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(this)));
-        executor.onProposalCreated(address(token), ACTION_2, data);
+        executor.onProposalCreated(address(token), ACTION_2, creationData);
 
-        bytes[] memory four = new bytes[](4);
-        for (uint256 i = 0; i < 4; i++) {
-            four[i] = data[i];
-        }
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InsufficientTargetDataItems.selector, 4, 7));
-        executor.onProposalCreated(address(token), ACTION_2, four);
-
-        bytes[] memory six = new bytes[](6);
-        for (uint256 i = 0; i < 6; i++) {
-            six[i] = data[i];
-        }
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InsufficientTargetDataItems.selector, 6, 7));
-        executor.onProposalCreated(address(token), ACTION_2, six);
-
-        bytes[] memory nine = new bytes[](9);
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.TooManyTargetDataItems.selector, 9, 8));
-        executor.onProposalCreated(address(token), ACTION_2, nine);
-
-        bytes[] memory badItem = _clone(data);
-        badItem[2] = new bytes(31);
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 2, 31));
-        executor.onProposalCreated(address(token), ACTION_2, badItem);
-
-        bytes[] memory badVerifierStake = _clone(data);
-        badVerifierStake[5] = new bytes(31);
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidTargetDataShape.selector, 5, 31));
-        executor.onProposalCreated(address(token), ACTION_2, badVerifierStake);
-
-        bytes[] memory zeroToken = _clone(data);
-        zeroToken[1] = abi.encode(address(0));
+        GroupActionCreationParams memory params = _groupCreationParams();
+        params.joinTokenAddress = address(0);
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.ZeroJoinTokenAddress.selector));
-        executor.onProposalCreated(address(token), ACTION_2, zeroToken);
+        executor.onProposalCreated(address(token), ACTION_2, abi.encode(params));
 
-        bytes[] memory badRatio = _clone(data);
-        badRatio[3] = abi.encode(PRECISION + 1);
+        params = _groupCreationParams();
+        params.maxJoinAmountRatio = PRECISION + 1;
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidMaxJoinAmountRatio.selector, PRECISION + 1));
-        executor.onProposalCreated(address(token), ACTION_2, badRatio);
+        executor.onProposalCreated(address(token), ACTION_2, abi.encode(params));
 
-        bytes[] memory badGov = _clone(data);
-        badGov[4] = abi.encode(PRECISION + 1);
+        params = _groupCreationParams();
+        params.activationMinGovRatio = PRECISION + 1;
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidActivationMinGovRatio.selector, PRECISION + 1));
-        executor.onProposalCreated(address(token), ACTION_2, badGov);
+        executor.onProposalCreated(address(token), ACTION_2, abi.encode(params));
 
         string[] memory keys = new string[](1);
         keys[0] = "k";
@@ -448,6 +408,26 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             abi.encodeWithSelector(IGroupActionManagerErrors.VerificationDescriptionTooLong.selector, 0, 1025, 1024)
         );
         executor.onProposalCreated(address(token), ACTION_2, _targetDataWithSchema(oneKey, longDescription));
+    }
+
+    function testOnProposalCreatedRejectsMalformedConfig() external {
+        vm.prank(address(actionTarget));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidGroupActionCreationData.selector, 0)
+        );
+        executor.onProposalCreated(address(token), ACTION_2, "");
+
+        bytes memory truncatedData = _targetData();
+        assembly ("memory-safe") {
+            mstore(truncatedData, sub(mload(truncatedData), 32))
+        }
+        vm.prank(address(actionTarget));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupActionExecutorErrors.InvalidGroupActionCreationData.selector, truncatedData.length)
+        );
+        executor.onProposalCreated(address(token), ACTION_2, truncatedData);
+
+        require(executor.joinTokenAddress(address(token), ACTION_2) == address(0), "config never written");
     }
 
     function testVerificationKeysMustBeNonemptyAndUnique() external {

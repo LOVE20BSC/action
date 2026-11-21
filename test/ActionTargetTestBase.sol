@@ -15,6 +15,7 @@ interface ActionTargetVm {
     function startPrank(address sender) external;
     function stopPrank() external;
     function expectRevert(bytes calldata data) external;
+    function expectRevert() external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
     function assume(bool condition) external;
@@ -71,19 +72,8 @@ abstract contract ActionTargetTestBase {
         memberNFT.setOwner(3, MEMBER3);
     }
 
-    function _targetData(address executorAddress) internal pure returns (bytes[] memory targetData) {
-        targetData = new bytes[](1);
-        targetData[0] = abi.encode(executorAddress);
-    }
-
-    function _targetDataWithBusiness(address executorAddress, uint256 businessValue)
-        internal
-        pure
-        returns (bytes[] memory targetData)
-    {
-        targetData = new bytes[](2);
-        targetData[0] = abi.encode(executorAddress);
-        targetData[1] = abi.encode(businessValue);
+    function _targetData(address executorAddress) internal pure returns (bytes memory) {
+        return abi.encode(executorAddress, bytes(""));
     }
 
     function _createAction(uint256 actionId) internal {

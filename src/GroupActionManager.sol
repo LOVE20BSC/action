@@ -8,7 +8,11 @@ import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
-import {IGroupActionExecutorErrors, IGroupActionExecutorEvents} from "./interfaces/IGroupActionExecutor.sol";
+import {
+    GroupActionCreationParams,
+    IGroupActionExecutorErrors,
+    IGroupActionExecutorEvents
+} from "./interfaces/IGroupActionExecutor.sol";
 import {GroupConfig, IGroupActionManagerEvents, IGroupActionManagerErrors} from "./interfaces/IGroupActionManager.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
@@ -25,19 +29,6 @@ library GroupActionManager {
     using RoundHistoryString for RoundHistoryString.History;
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
-
-    uint256 private constant ABI_WORD_BYTES = 32;
-
-    uint256 private constant SLOT_PAYLOAD_START = 1;
-    uint256 private constant SLOT_JOIN_TOKEN = 1;
-    uint256 private constant SLOT_ACTIVATION_STAKE_AMOUNT = 2;
-    uint256 private constant SLOT_MAX_JOIN_AMOUNT_RATIO = 3;
-    uint256 private constant SLOT_ACTIVATION_MIN_GOV_RATIO = 4;
-    uint256 private constant SLOT_VERIFIER_STAKE_AMOUNT = 5;
-    uint256 private constant SLOT_VERIFIER_PUNISHMENT_RATIO = 6;
-    uint256 private constant SLOT_VERIFICATION_INFO = 7;
-    uint256 private constant TARGET_DATA_MIN_LENGTH = 7;
-    uint256 private constant TARGET_DATA_MAX_LENGTH = 8;
 
     modifier onlyGroupOwner(
         GroupActionStorage.Layout storage self,
@@ -62,107 +53,50 @@ library GroupActionManager {
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
+    function checkCreationEncoding(bytes calldata creationData) external pure {
+        abi.decode(creationData, (GroupActionCreationParams));
+    }
+
     function onProposalCreated(
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
         uint256 actionId,
-        bytes[] calldata targetData
+        bytes calldata creationData
     ) external {
-        if (targetData.length < TARGET_DATA_MIN_LENGTH) {
-            revert IGroupActionExecutorErrors.InsufficientTargetDataItems(targetData.length, TARGET_DATA_MIN_LENGTH);
-        }
-        if (targetData.length > TARGET_DATA_MAX_LENGTH) {
-            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, TARGET_DATA_MAX_LENGTH);
-        }
-        for (uint256 i = SLOT_PAYLOAD_START; i < TARGET_DATA_MIN_LENGTH; i++) {
-            if (targetData[i].length != ABI_WORD_BYTES) {
-                // forge-lint: disable-next-line(require-revert-in-loop)
-                revert IGroupActionExecutorErrors.InvalidTargetDataShape(i, targetData[i].length);
-            }
-        }
-
-        address joinTokenAddress =
-            abi.decode(targetData[SLOT_JOIN_TOKEN], (address));
-        uint256 activationStakeAmount =
-            abi.decode(targetData[SLOT_ACTIVATION_STAKE_AMOUNT], (uint256));
-        uint256 maxJoinAmountRatio =
-            abi.decode(targetData[SLOT_MAX_JOIN_AMOUNT_RATIO], (uint256));
-        uint256 activationMinGovRatio =
-            abi.decode(targetData[SLOT_ACTIVATION_MIN_GOV_RATIO], (uint256));
-        uint256 verifierStakeAmount =
-            abi.decode(targetData[SLOT_VERIFIER_STAKE_AMOUNT], (uint256));
-        uint256 verifierPunishmentRatio =
-            abi.decode(targetData[SLOT_VERIFIER_PUNISHMENT_RATIO], (uint256));
-        if (joinTokenAddress == address(0)) {
+        GroupActionCreationParams memory data = abi.decode(creationData, (GroupActionCreationParams));
+        if (data.joinTokenAddress == address(0)) {
             revert IGroupActionExecutorErrors.ZeroJoinTokenAddress();
         }
-        if (joinTokenAddress.code.length == 0) {
-            revert IGroupActionExecutorErrors.InvalidJoinTokenAddress(joinTokenAddress);
+        if (data.joinTokenAddress.code.length == 0) {
+            revert IGroupActionExecutorErrors.InvalidJoinTokenAddress(data.joinTokenAddress);
         }
-        try IERC20(joinTokenAddress).totalSupply() {
+        try IERC20(data.joinTokenAddress).totalSupply() {
         } catch {
-            revert IGroupActionExecutorErrors.InvalidJoinTokenAddress(joinTokenAddress);
+            revert IGroupActionExecutorErrors.InvalidJoinTokenAddress(data.joinTokenAddress);
         }
-        if (maxJoinAmountRatio > GroupActionStorage.PRECISION) {
-            revert IGroupActionExecutorErrors.InvalidMaxJoinAmountRatio(maxJoinAmountRatio);
+        if (data.maxJoinAmountRatio > GroupActionStorage.PRECISION) {
+            revert IGroupActionExecutorErrors.InvalidMaxJoinAmountRatio(data.maxJoinAmountRatio);
         }
-        if (activationMinGovRatio > GroupActionStorage.PRECISION) {
-            revert IGroupActionExecutorErrors.InvalidActivationMinGovRatio(activationMinGovRatio);
+        if (data.activationMinGovRatio > GroupActionStorage.PRECISION) {
+            revert IGroupActionExecutorErrors.InvalidActivationMinGovRatio(data.activationMinGovRatio);
         }
-        if (verifierPunishmentRatio == 0 || verifierPunishmentRatio >= GroupActionStorage.PRECISION) {
-            revert IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio(verifierPunishmentRatio);
+        if (data.verifierPunishmentRatio == 0 || data.verifierPunishmentRatio >= GroupActionStorage.PRECISION) {
+            revert IGroupActionExecutorErrors.InvalidVerifierPunishmentRatio(data.verifierPunishmentRatio);
         }
 
-        self.joinTokenAddressByActionId[tokenAddress][actionId] = joinTokenAddress;
+        _checkVerificationInfo(data.verificationKeys, data.verificationDescriptions);
+        self.verificationKeysByActionId[tokenAddress][actionId] = data.verificationKeys;
+        self.verificationDescriptionsByActionId[tokenAddress][actionId] = data.verificationDescriptions;
+
+        self.joinTokenAddressByActionId[tokenAddress][actionId] = data.joinTokenAddress;
         // Load-bearing: written only here. Refunds read this value instead of a per-group ledger, so a
         // later write while groups are active would over-refund out of the other groups' stake.
-        self.requiredActivationStakeByActionId[tokenAddress][actionId] = activationStakeAmount;
-        self.maxJoinAmountRatioByActionId[tokenAddress][actionId] = maxJoinAmountRatio;
-        self.activationMinGovRatioByActionId[tokenAddress][actionId] = activationMinGovRatio;
-        self.requiredVerifierStakeByActionId[tokenAddress][actionId] = verifierStakeAmount;
-        self.verifierPunishmentRatioByActionId[tokenAddress][actionId] = verifierPunishmentRatio;
-
-        if (targetData.length == TARGET_DATA_MAX_LENGTH) {
-            (string[] memory keys, string[] memory descriptions) =
-                abi.decode(targetData[SLOT_VERIFICATION_INFO], (string[], string[]));
-            if (keys.length != descriptions.length) {
-                revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, descriptions.length);
-            }
-            if (keys.length > GroupActionStorage.MAX_VERIFICATION_ENTRIES) {
-                revert IGroupActionManagerErrors.TooManyVerificationEntries(
-                    keys.length, GroupActionStorage.MAX_VERIFICATION_ENTRIES
-                );
-            }
-            for (uint256 i = 0; i < keys.length; i++) {
-                uint256 keyLength = bytes(keys[i]).length;
-                if (keyLength == 0) {
-                    // forge-lint: disable-next-item(require-revert-in-loop)
-                    revert IGroupActionManagerErrors.VerificationKeyEmpty(i);
-                }
-                if (keyLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
-                    // forge-lint: disable-next-item(require-revert-in-loop)
-                    revert IGroupActionManagerErrors.VerificationKeyTooLong(
-                        i, keyLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
-                    );
-                }
-                uint256 descriptionLength = bytes(descriptions[i]).length;
-                if (descriptionLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
-                    // forge-lint: disable-next-item(require-revert-in-loop)
-                    revert IGroupActionManagerErrors.VerificationDescriptionTooLong(
-                        i, descriptionLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
-                    );
-                }
-                for (uint256 j = 0; j < i; j++) {
-                    if (keccak256(bytes(keys[i])) == keccak256(bytes(keys[j]))) {
-                        // forge-lint: disable-next-item(require-revert-in-loop)
-                        revert IGroupActionManagerErrors.DuplicateVerificationKey(i, j);
-                    }
-                }
-            }
-            self.verificationKeysByActionId[tokenAddress][actionId] = keys;
-            self.verificationDescriptionsByActionId[tokenAddress][actionId] = descriptions;
-        }
+        self.requiredActivationStakeByActionId[tokenAddress][actionId] = data.activationStakeAmount;
+        self.maxJoinAmountRatioByActionId[tokenAddress][actionId] = data.maxJoinAmountRatio;
+        self.activationMinGovRatioByActionId[tokenAddress][actionId] = data.activationMinGovRatio;
+        self.requiredVerifierStakeByActionId[tokenAddress][actionId] = data.verifierStakeAmount;
+        self.verifierPunishmentRatioByActionId[tokenAddress][actionId] = data.verifierPunishmentRatio;
 
         self.createdRoundByActionId[tokenAddress][actionId] = IPhase(protocol.phaseAddress).currentPhase();
 
@@ -408,6 +342,46 @@ library GroupActionManager {
         uint256 memberId
     ) external view returns (bool) {
         return self.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
+    }
+
+    function _checkVerificationInfo(
+        string[] memory keys,
+        string[] memory descriptions
+    ) private pure {
+        if (keys.length != descriptions.length) {
+            revert IGroupActionExecutorErrors.VerificationInfoLengthMismatch(keys.length, descriptions.length);
+        }
+        if (keys.length > GroupActionStorage.MAX_VERIFICATION_ENTRIES) {
+            revert IGroupActionManagerErrors.TooManyVerificationEntries(
+                keys.length, GroupActionStorage.MAX_VERIFICATION_ENTRIES
+            );
+        }
+        for (uint256 i = 0; i < keys.length; i++) {
+            uint256 keyLength = bytes(keys[i]).length;
+            if (keyLength == 0) {
+                // forge-lint: disable-next-item(require-revert-in-loop)
+                revert IGroupActionManagerErrors.VerificationKeyEmpty(i);
+            }
+            if (keyLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
+                // forge-lint: disable-next-item(require-revert-in-loop)
+                revert IGroupActionManagerErrors.VerificationKeyTooLong(
+                    i, keyLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
+                );
+            }
+            uint256 descriptionLength = bytes(descriptions[i]).length;
+            if (descriptionLength > GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES) {
+                // forge-lint: disable-next-item(require-revert-in-loop)
+                revert IGroupActionManagerErrors.VerificationDescriptionTooLong(
+                    i, descriptionLength, GroupActionStorage.MAX_VERIFICATION_TEXT_BYTES
+                );
+            }
+            for (uint256 j = 0; j < i; j++) {
+                if (keccak256(bytes(keys[i])) == keccak256(bytes(keys[j]))) {
+                    // forge-lint: disable-next-item(require-revert-in-loop)
+                    revert IGroupActionManagerErrors.DuplicateVerificationKey(i, j);
+                }
+            }
+        }
     }
 
     function _maxJoinAmount(

@@ -4,6 +4,8 @@ pragma solidity =0.8.37;
 import {ActionTargetIntegrationFixture} from "../integration/ActionTargetRealIntegration.t.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
+import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
+import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
 import {DistributorMode} from "@core/interfaces/ILaunch.sol";
 import {LOVE20Token} from "@core/LOVE20Token.sol";
@@ -39,7 +41,7 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         launch.addLaunchCount(address(token), MEMBER_ID, 1);
         vm.prank(member1);
         sourceToken = LOVE20Token(
-            launch.launchToken("GASC", address(token), MEMBER_ID, member1, DistributorMode.NoCallback, new bytes[](0))
+            launch.launchToken("GASC", address(token), MEMBER_ID, member1, DistributorMode.NoCallback, "")
         );
         vm.prank(distributor);
         token.transfer(member1, 10_000);
@@ -137,20 +139,20 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         private
         returns (uint256[] memory actionIds)
     {
-        bytes[] memory creationData = new bytes[](7);
-        creationData[0] = abi.encode(address(group));
-        creationData[1] = abi.encode(address(sourceToken));
-        creationData[2] = abi.encode(uint256(0));
-        creationData[3] = abi.encode(uint256(1e18));
-        creationData[4] = abi.encode(uint256(0));
-        creationData[5] = abi.encode(uint256(0));
-        creationData[6] = abi.encode(uint256(9e17));
+        bytes memory creationData = abi.encode(address(group), abi.encode(GroupActionCreationParams({
+            joinTokenAddress: address(sourceToken),
+            activationStakeAmount: 0,
+            maxJoinAmountRatio: 1e18,
+            activationMinGovRatio: 0,
+            verifierStakeAmount: 0,
+            verifierPunishmentRatio: 9e17,
+            verificationKeys: new string[](0),
+            verificationDescriptions: new string[](0)
+        })));
 
-        bytes[][] memory voteData = new bytes[][](1);
+        bytes[] memory voteData = new bytes[](1);
         if (electVerifier) {
-            voteData[0] = new bytes[](2);
-            voteData[0][0] = abi.encode(address(group));
-            voteData[0][1] = abi.encode(MEMBER_ID);
+            voteData[0] = abi.encode(MEMBER_ID);
         }
 
         uint256[] memory proposalIds = new uint256[](1);
@@ -167,8 +169,9 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
                     details: "",
                     target: address(actionTarget),
                     targetMode: TargetMode.Callback,
-                    targetData: creationData
-                })
+                    creationData: creationData
+                }),
+                ""
             );
             if (electVerifier) group.submitVerifierApplication(address(sourceToken), actionId, MEMBER_ID, "");
             actionIds[i] = actionId;
@@ -191,15 +194,11 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
 
     function _createServiceActions(uint256 count) private returns (uint256[] memory serviceActionIds) {
         serviceActionIds = new uint256[](count);
-        bytes[] memory serviceData = new bytes[](4);
-        serviceData[0] = abi.encode(address(service));
-        serviceData[1] = abi.encode(address(sourceToken));
-        serviceData[2] = abi.encode(uint256(0));
-        serviceData[3] = abi.encode(uint256(5e17));
+        bytes memory serviceData = abi.encode(address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17)));
         for (uint256 i; i < count; ++i) {
             uint256 proposerId = i + 1;
             uint256 serviceActionId = _submitActionProposal(proposerId, "Group service", serviceData);
-            _voteOne(proposerId, serviceActionId, 1, new bytes[](0));
+            _voteOne(proposerId, serviceActionId, 1, "");
             serviceActionIds[i] = serviceActionId;
         }
     }

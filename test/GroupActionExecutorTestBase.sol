@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionExecutor} from "../src/GroupActionExecutor.sol";
+import {GroupActionCreationParams} from "../src/interfaces/IGroupActionExecutor.sol";
 import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
 import {
     MockGroupActionExecutorActionTarget,
@@ -119,8 +120,21 @@ abstract contract GroupActionExecutorTestBase {
         vm.roll(currentPhase * PHASE_BLOCKS);
     }
 
-    function _targetData() internal view returns (bytes[] memory targetData) {
-        return _targetDataWith(address(joinToken), ACTIVATION_STAKE, PRECISION, 0, VERIFIER_STAKE);
+    function _targetData() internal view returns (bytes memory) {
+        return abi.encode(_groupCreationParams());
+    }
+
+    function _groupCreationParams() internal view returns (GroupActionCreationParams memory) {
+        return GroupActionCreationParams({
+            joinTokenAddress: address(joinToken),
+            activationStakeAmount: ACTIVATION_STAKE,
+            maxJoinAmountRatio: PRECISION,
+            activationMinGovRatio: 0,
+            verifierStakeAmount: VERIFIER_STAKE,
+            verifierPunishmentRatio: 9e17,
+            verificationKeys: new string[](0),
+            verificationDescriptions: new string[](0)
+        });
     }
 
     function _targetDataWith(
@@ -129,15 +143,17 @@ abstract contract GroupActionExecutorTestBase {
         uint256 ratio,
         uint256 minGovRatio,
         uint256 verifierStake
-    ) internal view returns (bytes[] memory targetData) {
-        targetData = new bytes[](7);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(joinTokenAddress);
-        targetData[2] = abi.encode(stakeAmount);
-        targetData[3] = abi.encode(ratio);
-        targetData[4] = abi.encode(minGovRatio);
-        targetData[5] = abi.encode(verifierStake);
-        targetData[6] = abi.encode(uint256(9e17));
+    ) internal pure returns (bytes memory) {
+        return abi.encode(GroupActionCreationParams({
+            joinTokenAddress: joinTokenAddress,
+            activationStakeAmount: stakeAmount,
+            maxJoinAmountRatio: ratio,
+            activationMinGovRatio: minGovRatio,
+            verifierStakeAmount: verifierStake,
+            verifierPunishmentRatio: 9e17,
+            verificationKeys: new string[](0),
+            verificationDescriptions: new string[](0)
+        }));
     }
 
     function _createAction(uint256 actionId) internal {
@@ -148,29 +164,20 @@ abstract contract GroupActionExecutorTestBase {
     function _targetDataWithSchema(
         string[] memory keys,
         string[] memory descriptions
-    ) internal view returns (bytes[] memory targetData) {
-        bytes[] memory base = _targetData();
-        targetData = new bytes[](8);
-        for (uint256 i = 0; i < 7; i++) {
-            targetData[i] = base[i];
-        }
-        targetData[7] = abi.encode(keys, descriptions);
+    ) internal view returns (bytes memory) {
+        GroupActionCreationParams memory params = _groupCreationParams();
+        params.verificationKeys = keys;
+        params.verificationDescriptions = descriptions;
+        return abi.encode(params);
     }
 
-    function _createActionWith(uint256 actionId, bytes[] memory targetData) internal {
+    function _createActionWith(uint256 actionId, bytes memory targetData) internal {
         _createActionOn(address(token), actionId, targetData);
     }
 
-    function _createActionOn(address tokenAddress, uint256 actionId, bytes[] memory targetData) internal {
+    function _createActionOn(address tokenAddress, uint256 actionId, bytes memory targetData) internal {
         vm.prank(address(actionTarget));
         executor.onProposalCreated(tokenAddress, actionId, targetData);
-    }
-
-    function _clone(bytes[] memory data) internal pure returns (bytes[] memory copy) {
-        copy = new bytes[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            copy[i] = data[i];
-        }
     }
 
     function _submitApplication() internal {
@@ -195,11 +202,8 @@ abstract contract GroupActionExecutorTestBase {
     }
 
     function _castVotesFromAt(uint256 voterId, uint256 verifierId, uint256 votes, uint256 round) internal {
-        bytes[] memory targetData = new bytes[](2);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(verifierId);
         vm.prank(address(actionTarget));
-        executor.onProposalVoted(address(token), round, ACTION_ID, voterId, votes, targetData);
+        executor.onProposalVoted(address(token), round, ACTION_ID, voterId, votes, abi.encode(verifierId));
     }
 
     function _activateGroup() internal {

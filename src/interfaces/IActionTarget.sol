@@ -57,24 +57,13 @@ interface IActionTargetErrors {
         address tokenAddress,
         uint256 actionId
     );
-    error InsufficientTargetDataItems(
-        uint256 count,
-        uint256 minCount
-    );
-    error InvalidTargetDataShape(
-        uint256 index,
-        uint256 length
-    );
+    error InvalidActionTargetCreationData(uint256 length);
     error ExecutorNotContract(address executor);
     error ExecutorTargetMismatch(
         address expected,
         address actual
     );
     error ExecutorHandshakeFailed(address executor);
-    error TargetDataExecutorMismatch(
-        address expected,
-        address actual
-    );
     error AlreadyCreated(
         address tokenAddress,
         uint256 actionId

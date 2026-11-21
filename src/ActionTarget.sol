@@ -17,9 +17,8 @@ contract ActionTarget is IActionTarget {
     using Uint256Set for Uint256Set.Storage;
 
     uint256 private constant ABI_WORD_BYTES = 32;
-
-    uint256 private constant SLOT_EXECUTOR = 0;
-    uint256 private constant TARGET_DATA_LENGTH = 1;
+    uint256 private constant EXECUTOR_DATA_OFFSET = 2 * ABI_WORD_BYTES;
+    uint256 private constant CREATION_DATA_HEADER_BYTES = EXECUTOR_DATA_OFFSET + ABI_WORD_BYTES;
 
     address public MEMBER_NFT_ADDRESS;
     address public SUBMIT_ADDRESS;
@@ -441,13 +440,6 @@ contract ActionTarget is IActionTarget {
         if (round > joinRound) revert RoundNotStarted(round, joinRound);
     }
 
-    function _executorFromSlot(bytes calldata item) internal pure returns (address) {
-        if (item.length != ABI_WORD_BYTES) {
-            revert InvalidTargetDataShape(SLOT_EXECUTOR, item.length);
-        }
-        return abi.decode(item, (address));
-    }
-
     function _boundActions(
         address tokenAddress,
         uint256 round
@@ -488,12 +480,9 @@ contract ActionTarget is IActionTarget {
     function onProposalCreated(
         address tokenAddress,
         uint256 proposalId,
-        bytes[] calldata targetData
+        bytes calldata creationData
     ) external onlySubmit {
-        if (targetData.length < TARGET_DATA_LENGTH) {
-            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
-        }
-        address executor = _executorFromSlot(targetData[SLOT_EXECUTOR]);
+        (address executor, bytes calldata executorData) = _decodeCreationPayload(creationData);
         if (executor.code.length == 0) {
             revert ExecutorNotContract(executor);
         }
@@ -526,33 +515,23 @@ contract ActionTarget is IActionTarget {
         IActionExecutor(executor).onProposalCreated(
             tokenAddress,
             proposalId,
-            targetData
+            executorData
         );
     }
 
     function onProposalSubmitted(
         address tokenAddress,
+        uint256 round,
         uint256 proposalId,
         uint256 submitterId,
-        bytes[] calldata targetData
+        bytes calldata submitData
     ) external onlySubmit {
-        address bound = _executorByActionId[tokenAddress][proposalId];
-        if (bound == address(0)) {
-            revert UnboundProposal(tokenAddress, proposalId);
-        }
-        if (targetData.length < TARGET_DATA_LENGTH) {
-            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
-        }
-        address targetDataExecutor = _executorFromSlot(targetData[SLOT_EXECUTOR]);
-        if (targetDataExecutor != bound) {
-            revert TargetDataExecutorMismatch(bound, targetDataExecutor);
-        }
-
-        IActionExecutor(bound).onProposalSubmitted(
+        _boundExecutor(tokenAddress, proposalId).onProposalSubmitted(
             tokenAddress,
+            round,
             proposalId,
             submitterId,
-            targetData
+            submitData
         );
     }
 
@@ -562,26 +541,50 @@ contract ActionTarget is IActionTarget {
         uint256 proposalId,
         uint256 voterId,
         uint256 voteAmount,
-        bytes[] calldata targetData
+        bytes calldata voteData
     ) external onlyVote {
-        address bound = _executorByActionId[tokenAddress][proposalId];
-        if (bound == address(0)) {
-            revert UnboundProposal(tokenAddress, proposalId);
-        }
-        if (targetData.length != 0) {
-            address targetDataExecutor = _executorFromSlot(targetData[SLOT_EXECUTOR]);
-            if (targetDataExecutor != bound) {
-                revert TargetDataExecutorMismatch(bound, targetDataExecutor);
-            }
-        }
-
-        IActionExecutor(bound).onProposalVoted(
+        _boundExecutor(tokenAddress, proposalId).onProposalVoted(
             tokenAddress,
             round,
             proposalId,
             voterId,
             voteAmount,
-            targetData
+            voteData
         );
+    }
+
+    function _decodeCreationPayload(bytes calldata creationData)
+        private
+        pure
+        returns (address executor, bytes calldata executorData)
+    {
+        if (creationData.length < CREATION_DATA_HEADER_BYTES) {
+            revert InvalidActionTargetCreationData(creationData.length);
+        }
+
+        (uint256 executorWord, uint256 dataOffset, uint256 dataLength) =
+            abi.decode(creationData[:CREATION_DATA_HEADER_BYTES], (uint256, uint256, uint256));
+        uint256 availableDataBytes = creationData.length - CREATION_DATA_HEADER_BYTES;
+        if (
+            executorWord > type(uint160).max || dataOffset != EXECUTOR_DATA_OFFSET || dataLength > availableDataBytes
+                || availableDataBytes % ABI_WORD_BYTES != 0 || availableDataBytes - dataLength >= ABI_WORD_BYTES
+        ) {
+            revert InvalidActionTargetCreationData(creationData.length);
+        }
+        return (
+            abi.decode(creationData[:ABI_WORD_BYTES], (address)),
+            creationData[CREATION_DATA_HEADER_BYTES:CREATION_DATA_HEADER_BYTES + dataLength]
+        );
+    }
+
+    function _boundExecutor(
+        address tokenAddress,
+        uint256 proposalId
+    ) private view returns (IActionExecutor) {
+        address executor = _executorByActionId[tokenAddress][proposalId];
+        if (executor == address(0)) {
+            revert UnboundProposal(tokenAddress, proposalId);
+        }
+        return IActionExecutor(executor);
     }
 }

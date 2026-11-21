@@ -7,6 +7,17 @@ import {IGroupActionVerify} from "./IGroupActionVerify.sol";
 import {IGroupActionManager} from "./IGroupActionManager.sol";
 import {IActionExecutor} from "./IActionExecutor.sol";
 
+struct GroupActionCreationParams {
+    address joinTokenAddress;
+    uint256 activationStakeAmount;
+    uint256 maxJoinAmountRatio;
+    uint256 activationMinGovRatio;
+    uint256 verifierStakeAmount;
+    uint256 verifierPunishmentRatio;
+    string[] verificationKeys;
+    string[] verificationDescriptions;
+}
+
 interface IGroupActionExecutorEvents {
     event GroupActionCreated(
         address indexed tokenAddress,
@@ -38,17 +49,10 @@ interface IGroupActionExecutorErrors {
     error InvalidMaxJoinAmountRatio(uint256 value);
     error InvalidActivationMinGovRatio(uint256 value);
     error InvalidVerifierPunishmentRatio(uint256 value);
-    error InsufficientTargetDataItems(
-        uint256 count,
-        uint256 minCount
-    );
-    error TooManyTargetDataItems(
-        uint256 count,
-        uint256 maxCount
-    );
-    error InvalidTargetDataShape(
-        uint256 index,
-        uint256 length
+    error InvalidGroupActionCreationData(uint256 length);
+    error InvalidVoteDataLength(
+        uint256 length,
+        uint256 expectedLength
     );
     error VerificationInfoLengthMismatch(
         uint256 expected,

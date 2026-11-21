@@ -124,16 +124,10 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         }
     }
 
-    function testFuzzCreateForwardsBusinessItems(uint8 itemCount, bytes32 payload) external {
-        uint256 count = uint256(itemCount) % 4;
-        bytes[] memory targetData = new bytes[](count + 1);
-        targetData[0] = abi.encode(address(executor));
-        for (uint256 i = 0; i < count; i++) {
-            targetData[i + 1] = abi.encode(payload, i);
-        }
+    function testFuzzCreateForwardsExecutorData(bytes calldata executorData) external {
         vm.prank(submitAddress);
-        actionTarget.onProposalCreated(address(token), 11, targetData);
-        require(executor.lastCreatedTargetDataHash() == keccak256(abi.encode(targetData)), "forwarded verbatim");
+        actionTarget.onProposalCreated(address(token), 11, abi.encode(address(executor), executorData));
+        require(executor.lastCreatedTargetDataHash() == keccak256(executorData), "executor data forwarded verbatim");
     }
 
     function testFuzzMintRoundIndependence(uint256 roundA, uint256 roundB) external {

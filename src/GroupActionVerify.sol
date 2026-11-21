@@ -32,10 +32,7 @@ library GroupActionVerify {
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
 
-    uint256 private constant ABI_WORD_BYTES = 32;
-
-    uint256 private constant SLOT_VERIFIER_ID = 1;
-    uint256 private constant VOTE_TARGET_DATA_LENGTH = 2;
+    uint256 private constant VERIFIER_VOTE_DATA_BYTES = 32;
 
     struct Penalty {
         uint256 amount;
@@ -600,18 +597,13 @@ library GroupActionVerify {
         uint256 round,
         uint256 voterId,
         uint256 voteAmount,
-        bytes[] calldata targetData
+        bytes calldata voteData
     ) external {
-        if (targetData.length < VOTE_TARGET_DATA_LENGTH) return;
-        if (targetData.length > VOTE_TARGET_DATA_LENGTH) {
-            revert IGroupActionExecutorErrors.TooManyTargetDataItems(targetData.length, VOTE_TARGET_DATA_LENGTH);
+        if (voteData.length == 0) return;
+        if (voteData.length != VERIFIER_VOTE_DATA_BYTES) {
+            revert IGroupActionExecutorErrors.InvalidVoteDataLength(voteData.length, VERIFIER_VOTE_DATA_BYTES);
         }
-        if (targetData[SLOT_VERIFIER_ID].length != ABI_WORD_BYTES) {
-            revert IGroupActionExecutorErrors.InvalidTargetDataShape(
-                SLOT_VERIFIER_ID, targetData[SLOT_VERIFIER_ID].length
-            );
-        }
-        uint256 verifierId = abi.decode(targetData[SLOT_VERIFIER_ID], (uint256));
+        uint256 verifierId = abi.decode(voteData, (uint256));
         uint256 applicationId = self.currentApplicationId[tokenAddress][actionId][verifierId];
         if (applicationId == 0) revert IGroupActionVerifyErrors.NoActiveApplication(verifierId);
         _checkAcceptingVotes(self, tokenAddress, actionId, applicationId, round);

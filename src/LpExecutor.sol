@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {ILpExecutor} from "./interfaces/ILpExecutor.sol";
+import {ILpExecutor, LpCreationParams} from "./interfaces/ILpExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {LpRoundAxis} from "./LpRoundAxis.sol";
@@ -20,12 +20,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     using SafeERC20 for IERC20;
 
     uint256 internal constant PRECISION = 1e18;
-    uint256 private constant ABI_WORD_BYTES = 32;
 
-    uint256 private constant SLOT_LP_TOKEN = 1;
-    uint256 private constant SLOT_GOV_RATIO_MULTIPLIER = 2;
-    uint256 private constant SLOT_MIN_GOV_RATIO = 3;
-    uint256 private constant TARGET_DATA_LENGTH = 4;
+    uint256 private constant CREATION_DATA_BYTES = 96;
 
     address public immutable PAIR_FACTORY_ADDRESS;
 
@@ -94,62 +90,49 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     // forge-lint: disable-next-item(missing-events-access-control)
     function onProposalCreated(
         address tokenAddress,
-        uint256 actionId,
-        bytes[] calldata targetData
-    ) external onlyActionTarget {
-        if (targetData.length < TARGET_DATA_LENGTH) {
-            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
+        uint256 proposalId,
+        bytes calldata creationData
+    ) external override onlyActionTarget {
+        if (creationData.length != CREATION_DATA_BYTES) {
+            revert InvalidCreationDataLength(creationData.length, CREATION_DATA_BYTES);
         }
-        if (targetData.length > TARGET_DATA_LENGTH) {
-            revert TooManyTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
-        }
-        // forge-lint: disable-next-item(require-revert-in-loop)
-        for (uint256 i = 0; i < TARGET_DATA_LENGTH; i++) {
-            if (targetData[i].length != ABI_WORD_BYTES) {
-                revert InvalidTargetDataShape(i, targetData[i].length);
-            }
-        }
+        LpCreationParams memory params = abi.decode(creationData, (LpCreationParams));
 
-        address lpTokenAddress =
-            abi.decode(targetData[SLOT_LP_TOKEN], (address));
-        uint256 govRatioMultiplierValue =
-            abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
-        uint256 minGovRatioValue =
-            abi.decode(targetData[SLOT_MIN_GOV_RATIO], (uint256));
-
-        if (lpTokenAddress == address(0)) {
+        if (params.joinTokenAddress == address(0)) {
             revert ZeroJoinTokenAddress();
         }
-        if (!_isRegisteredPair(lpTokenAddress, PAIR_FACTORY_ADDRESS)) {
-            revert InvalidJoinTokenFactory(lpTokenAddress, PAIR_FACTORY_ADDRESS);
+        if (!_isRegisteredPair(params.joinTokenAddress, PAIR_FACTORY_ADDRESS)) {
+            revert InvalidJoinTokenFactory(params.joinTokenAddress, PAIR_FACTORY_ADDRESS);
         }
-        if (minGovRatioValue > PRECISION) {
-            revert InvalidMinGovRatio(minGovRatioValue);
+        if (params.minGovRatio > PRECISION) {
+            revert InvalidMinGovRatio(params.minGovRatio);
         }
 
-        _joinTokenAddressByActionId[tokenAddress][actionId] = lpTokenAddress;
-        _govRatioMultiplierByActionId[tokenAddress][actionId] = govRatioMultiplierValue;
-        _minGovRatioByActionId[tokenAddress][actionId] = minGovRatioValue;
+        uint256 actionId = proposalId;
+        _joinTokenAddressByActionId[tokenAddress][actionId] = params.joinTokenAddress;
+        _govRatioMultiplierByActionId[tokenAddress][actionId] = params.govRatioMultiplier;
+        _minGovRatioByActionId[tokenAddress][actionId] = params.minGovRatio;
         _createdRoundByActionId[tokenAddress][actionId] = IPhase(PHASE_ADDRESS).currentPhase();
 
         emit LpActionCreated({
             tokenAddress: tokenAddress,
             actionId: actionId,
-            joinTokenAddress: lpTokenAddress,
-            govRatioMultiplier: govRatioMultiplierValue,
-            minGovRatio: minGovRatioValue
+            joinTokenAddress: params.joinTokenAddress,
+            govRatioMultiplier: params.govRatioMultiplier,
+            minGovRatio: params.minGovRatio
         });
     }
 
-    function onProposalVoted(address, uint256, uint256, uint256, uint256, bytes[] calldata targetData)
-        external
-        virtual
-        override
-        onlyActionTarget
-    {
-        if (targetData.length > 1) {
-            revert TooManyTargetDataItems(targetData.length, 1);
-        }
+    function onProposalVoted(
+        address tokenAddress,
+        uint256 round,
+        uint256 proposalId,
+        uint256 voterId,
+        uint256 voteAmount,
+        bytes calldata voteData
+    ) external virtual override onlyActionTarget {
+        (tokenAddress, round, proposalId, voterId, voteAmount);
+        if (voteData.length != 0) revert UnexpectedVoteData();
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)

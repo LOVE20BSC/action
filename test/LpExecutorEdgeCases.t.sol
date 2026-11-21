@@ -130,7 +130,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         MockERC20 secondToken = new MockERC20();
         MockUniswapV2Pair secondJoinToken =
             MockUniswapV2Pair(factory.createPair(address(secondToken), address(lpBaseToken)));
-        bytes[] memory targetData =
+        bytes memory targetData =
             _targetDataWithConfig(GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO, address(secondJoinToken));
         vm.prank(address(actionTarget));
         lpExecutor.onProposalCreated(address(secondToken), ACTION_ID, targetData);
@@ -196,7 +196,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
     }
 
     function testJoinSecondActionRequiresOwnMinRatio() external {
-        bytes[] memory targetData = _targetDataWithConfig(GOV_RATIO_MULTIPLIER, PRECISION, address(joinToken));
+        bytes memory targetData = _targetDataWithConfig(GOV_RATIO_MULTIPLIER, PRECISION, address(joinToken));
         vm.prank(address(actionTarget));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
 

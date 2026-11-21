@@ -4,6 +4,12 @@ pragma solidity =0.8.37;
 import {IActionExecutor} from "./IActionExecutor.sol";
 import {IGroupRecipients} from "./IGroupRecipients.sol";
 
+struct GroupServiceCreationParams {
+    address actionTokenAddress;
+    uint256 govRatioMultiplier;
+    uint256 publicVerifierRatio;
+}
+
 interface IGroupServiceExecutorEvents {
     event ServiceActionCreated(
         address indexed tokenAddress,
@@ -61,18 +67,11 @@ interface IGroupServiceExecutorErrors {
         address serviceTokenAddress,
         address actualParentTokenAddress
     );
-    error InsufficientTargetDataItems(
-        uint256 count,
-        uint256 minCount
+    error InvalidCreationDataLength(
+        uint256 length,
+        uint256 expectedLength
     );
-    error TooManyTargetDataItems(
-        uint256 count,
-        uint256 maxCount
-    );
-    error InvalidTargetDataShape(
-        uint256 index,
-        uint256 length
-    );
+    error UnexpectedVoteData();
     error NotJoined(
         address tokenAddress,
         uint256 actionId,

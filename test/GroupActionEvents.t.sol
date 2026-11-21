@@ -56,7 +56,7 @@ contract GroupActionEventsTest is
     function testGroupActionCreatedCarriesTheVerificationSchema() external {
         string[] memory keys = _strings("twitter", "github");
         string[] memory descriptions = _strings("Twitter handle", "GitHub handle");
-        bytes[] memory data = _targetDataWithSchema(keys, descriptions);
+        bytes memory data = _targetDataWithSchema(keys, descriptions);
 
         vm.prank(address(actionTarget));
         vm.expectEmit(true, true, true, true, address(executor));
@@ -148,7 +148,7 @@ contract GroupActionEventsTest is
     function testGroupActionJoinedCarriesVerificationValues() external {
         string[] memory keys = _strings("twitter", "github");
         string[] memory descriptions = _strings("Twitter handle", "GitHub handle");
-        bytes[] memory data = _targetDataWithSchema(keys, descriptions);
+        bytes memory data = _targetDataWithSchema(keys, descriptions);
         vm.prank(address(actionTarget));
         executor.onProposalCreated(address(token), ACTION_ID, data);
         _openJoinPhase();
@@ -754,7 +754,7 @@ contract GroupActionEventsTest is
             keys[i] = _letter(i);
             descriptions[i] = "d";
         }
-        bytes[] memory data = _targetDataWithSchema(keys, descriptions);
+        bytes memory data = _targetDataWithSchema(keys, descriptions);
 
         vm.prank(address(actionTarget));
         vm.expectEmit(true, true, true, true, address(executor));

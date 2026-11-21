@@ -7,20 +7,21 @@ import {MockExecutor, MockToken} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
 contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
-    function testCreateRejectsMalformedItemLengths() external {
-        uint256[] memory lengths = new uint256[](4);
-        lengths[0] = 0;
-        lengths[1] = 31;
-        lengths[2] = 33;
-        lengths[3] = 64;
-        for (uint256 i = 0; i < lengths.length; i++) {
-            bytes[] memory targetData = new bytes[](1);
-            targetData[0] = new bytes(lengths[i]);
+    function testCreateRejectsInvalidEnvelope() external {
+        bytes[] memory invalidData = new bytes[](6);
+        invalidData[0] = "";
+        invalidData[1] = new bytes(95);
+        invalidData[2] = abi.encode(address(executor), uint256(96), uint256(0), uint256(0));
+        invalidData[3] = abi.encode(address(executor), uint256(64), uint256(1));
+        invalidData[4] = abi.encode(address(executor), uint256(64), uint256(0), uint256(0));
+        invalidData[5] = abi.encode(type(uint256).max, bytes(""));
+
+        for (uint256 i = 0; i < invalidData.length; i++) {
             vm.prank(submitAddress);
             vm.expectRevert(
-                abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, lengths[i])
+                abi.encodeWithSelector(IActionTargetErrors.InvalidActionTargetCreationData.selector, invalidData[i].length)
             );
-            actionTarget.onProposalCreated(address(token), 11, targetData);
+            actionTarget.onProposalCreated(address(token), 11, invalidData[i]);
         }
         require(actionTarget.executorByActionId(address(token), 11) == address(0), "never bound");
     }
@@ -154,15 +155,11 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         actionTarget.isJoinedByRound(address(token), 11, 2, 1);
     }
 
-    function testCreateAcceptsMultipleBusinessItems() external {
-        bytes[] memory targetData = new bytes[](4);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(uint256(1));
-        targetData[2] = hex"deadbeef";
-        targetData[3] = abi.encode(address(OUTSIDER), uint256(9));
+    function testCreateAcceptsPackedBusinessData() external {
+        bytes memory executorData = abi.encode(uint256(1), hex"deadbeef", OUTSIDER, uint256(9));
         vm.prank(submitAddress);
-        actionTarget.onProposalCreated(address(token), 11, targetData);
-        require(executor.lastCreatedTargetDataHash() == keccak256(abi.encode(targetData)), "all items forwarded");
+        actionTarget.onProposalCreated(address(token), 11, abi.encode(address(executor), executorData));
+        require(executor.lastCreatedTargetDataHash() == keccak256(executorData), "executor data forwarded");
     }
 
     function testUnboundActionWritesRejectedEvenAfterBindingsExist() external {

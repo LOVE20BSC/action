@@ -233,6 +233,7 @@ contract MockExecutor {
     uint256 public votedCalls;
     uint256 public lastCreatedProposalId;
     uint256 public lastSubmittedProposalId;
+    uint256 public lastSubmittedRound;
     uint256 public lastSubmittedSubmitterId;
     uint256 public lastVotedRound;
     uint256 public lastVotedProposalId;
@@ -277,26 +278,28 @@ contract MockExecutor {
     function onProposalCreated(
         address tokenAddress,
         uint256 proposalId,
-        bytes[] calldata targetData
+        bytes calldata creationData
     ) external {
         createdCalls++;
         lastCallbackTokenAddress = tokenAddress;
         lastCreatedProposalId = proposalId;
-        lastCreatedTargetDataHash = keccak256(abi.encode(targetData));
+        lastCreatedTargetDataHash = keccak256(creationData);
         if (revertCreated) revert CreatedCallbackReverted();
     }
 
     function onProposalSubmitted(
         address tokenAddress,
+        uint256 round,
         uint256 proposalId,
         uint256 submitterId,
-        bytes[] calldata targetData
+        bytes calldata submitData
     ) external {
         submittedCalls++;
         lastCallbackTokenAddress = tokenAddress;
         lastSubmittedProposalId = proposalId;
+        lastSubmittedRound = round;
         lastSubmittedSubmitterId = submitterId;
-        lastSubmittedTargetDataHash = keccak256(abi.encode(targetData));
+        lastSubmittedTargetDataHash = keccak256(submitData);
         if (revertSubmitted) revert SubmittedCallbackReverted();
     }
 
@@ -306,7 +309,7 @@ contract MockExecutor {
         uint256 proposalId,
         uint256 voterId,
         uint256 votes,
-        bytes[] calldata targetData
+        bytes calldata voteData
     ) external {
         votedCalls++;
         lastCallbackTokenAddress = tokenAddress;
@@ -314,7 +317,7 @@ contract MockExecutor {
         lastVotedProposalId = proposalId;
         lastVotedVoterId = voterId;
         lastVotedVotes = votes;
-        lastVotedTargetDataHash = keccak256(abi.encode(targetData));
+        lastVotedTargetDataHash = keccak256(voteData);
         if (revertVoted) revert VotedCallbackReverted();
     }
 

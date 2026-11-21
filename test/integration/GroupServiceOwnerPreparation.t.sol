@@ -4,6 +4,8 @@ pragma solidity =0.8.37;
 import {ActionTargetIntegrationFixture} from "./ActionTargetRealIntegration.t.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
+import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
+import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
 import {IGroupActionExecutorEvents} from "../../src/interfaces/IGroupActionExecutor.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
@@ -169,32 +171,32 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     }
 
     function _createActions() private {
-        bytes[] memory groupData = new bytes[](7);
-        groupData[0] = abi.encode(address(group));
-        groupData[1] = abi.encode(address(token));
-        groupData[2] = abi.encode(uint256(0));
-        groupData[3] = abi.encode(uint256(1e18));
-        groupData[4] = abi.encode(uint256(0));
-        groupData[5] = abi.encode(uint256(0));
-        groupData[6] = abi.encode(uint256(9e17));
+        bytes memory groupData = abi.encode(address(group), abi.encode(GroupActionCreationParams({
+            joinTokenAddress: address(token),
+            activationStakeAmount: 0,
+            maxJoinAmountRatio: 1e18,
+            activationMinGovRatio: 0,
+            verifierStakeAmount: 0,
+            verifierPunishmentRatio: 9e17,
+            verificationKeys: new string[](0),
+            verificationDescriptions: new string[](0)
+        })));
         actionA = _submitActionProposal(OWNER_ID, "Source A", groupData);
         actionB = _submitActionProposal(VERIFIER_ID, "Source B", groupData);
         actionC = _submitActionProposal(_newProposer("Carol"), "Source C", groupData);
 
-        bytes[] memory serviceData = new bytes[](4);
-        serviceData[0] = abi.encode(address(service));
-        serviceData[1] = abi.encode(address(token));
-        serviceData[2] = abi.encode(uint256(0));
-        serviceData[3] = abi.encode(uint256(5e17));
+        GroupServiceCreationParams memory params = GroupServiceCreationParams(address(token), 0, 5e17);
+        bytes memory serviceData = abi.encode(address(service), abi.encode(params));
         serviceActionId = _submitActionProposal(_newProposer("David"), "Service A", serviceData);
-        serviceData[3] = abi.encode(uint256(75e16));
+        params.publicVerifierRatio = 75e16;
+        serviceData = abi.encode(address(service), abi.encode(params));
         secondServiceActionId = _submitActionProposal(_newProposer("Eve"), "Service B", serviceData);
 
         _voteForSource(actionA, 19);
         _voteForSource(actionB, 23);
         _voteForSource(actionC, 41);
-        _voteOne(OWNER_ID, serviceActionId, 83, new bytes[](0));
-        _voteOne(OWNER_ID, secondServiceActionId, 31, new bytes[](0));
+        _voteOne(OWNER_ID, serviceActionId, 83, "");
+        _voteOne(OWNER_ID, secondServiceActionId, 31, "");
     }
 
     function _newProposer(string memory name) private returns (uint256 proposerId) {
@@ -211,9 +213,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     function _voteForSource(uint256 actionId, uint256 amount) private {
         vm.prank(member2);
         group.submitVerifierApplication(address(token), actionId, VERIFIER_ID, "");
-        bytes[] memory data = new bytes[](2);
-        data[0] = abi.encode(address(group));
-        data[1] = abi.encode(VERIFIER_ID);
+        bytes memory data = abi.encode(VERIFIER_ID);
         _voteOne(OWNER_ID, actionId, amount, data);
     }
 

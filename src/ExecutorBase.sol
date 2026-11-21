@@ -43,10 +43,13 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
 
     function onProposalSubmitted(
         address tokenAddress,
+        uint256 round,
         uint256 proposalId,
         uint256 submitterId,
-        bytes[] calldata targetData
-    ) external virtual override onlyActionTarget {}
+        bytes calldata submitData
+    ) external virtual override onlyActionTarget {
+        (tokenAddress, round, proposalId, submitterId, submitData);
+    }
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function mintMemberReward(

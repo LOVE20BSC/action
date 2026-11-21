@@ -3,6 +3,12 @@ pragma solidity =0.8.37;
 
 import {IActionExecutor} from "./IActionExecutor.sol";
 
+struct LpCreationParams {
+    address joinTokenAddress;
+    uint256 govRatioMultiplier;
+    uint256 minGovRatio;
+}
+
 interface ILpExecutorErrors {
     error ZeroJoinTokenAddress();
     error InvalidJoinTokenFactory(
@@ -14,18 +20,11 @@ interface ILpExecutorErrors {
         uint256 required,
         uint256 actual
     );
-    error InsufficientTargetDataItems(
-        uint256 count,
-        uint256 minCount
+    error InvalidCreationDataLength(
+        uint256 length,
+        uint256 expectedLength
     );
-    error TooManyTargetDataItems(
-        uint256 count,
-        uint256 maxCount
-    );
-    error InvalidTargetDataShape(
-        uint256 index,
-        uint256 length
-    );
+    error UnexpectedVoteData();
     error ZeroParticipationAmount();
     error WithdrawAmountExceeded(
         uint256 amount,

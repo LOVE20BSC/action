@@ -8,7 +8,7 @@ import {GroupActionManager} from "./GroupActionManager.sol";
 import {GroupActionJoin} from "./GroupActionJoin.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
-import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
+import {IGroupActionExecutor, IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
 import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
@@ -143,23 +143,26 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return GroupActionVerify.actionIdsWithGeneratedActionReward(_layout, tokenAddress, round, offset, limit, reverse);
     }
 
-    function onProposalCreated(address tokenAddress, uint256 actionId, bytes[] calldata targetData)
-        external
-        override
-        onlyActionTarget
-    {
-        GroupActionManager.onProposalCreated(_layout, _protocol(), tokenAddress, actionId, targetData);
+    function onProposalCreated(
+        address tokenAddress,
+        uint256 proposalId,
+        bytes calldata creationData
+    ) external override onlyActionTarget {
+        try GroupActionManager.checkCreationEncoding(creationData) {} catch {
+            revert IGroupActionExecutorErrors.InvalidGroupActionCreationData(creationData.length);
+        }
+        GroupActionManager.onProposalCreated(_layout, _protocol(), tokenAddress, proposalId, creationData);
     }
 
     function onProposalVoted(
         address tokenAddress,
         uint256 round,
-        uint256 actionId,
+        uint256 proposalId,
         uint256 voterId,
         uint256 voteAmount,
-        bytes[] calldata targetData
+        bytes calldata voteData
     ) external override onlyActionTarget {
-        GroupActionVerify.onProposalVoted(_layout, tokenAddress, actionId, round, voterId, voteAmount, targetData);
+        GroupActionVerify.onProposalVoted(_layout, tokenAddress, proposalId, round, voterId, voteAmount, voteData);
     }
 
     function isGroupMember(uint256 groupId, uint256 memberId) external view returns (bool) {

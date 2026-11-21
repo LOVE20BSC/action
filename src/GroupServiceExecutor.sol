@@ -7,7 +7,7 @@ import {GroupServiceRoundAxis} from "./GroupServiceRoundAxis.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {MemberOwner} from "./MemberOwner.sol";
-import {IGroupServiceExecutor} from "./interfaces/IGroupServiceExecutor.sol";
+import {IGroupServiceExecutor, GroupServiceCreationParams} from "./interfaces/IGroupServiceExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
 import {ILaunch} from "@core/interfaces/ILaunch.sol";
@@ -24,12 +24,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     uint256 public constant PRECISION = GroupServiceStorage.PRECISION;
     uint256 public constant MAX_RECIPIENTS_PER_ACTION = GroupServiceStorage.MAX_RECIPIENTS_PER_ACTION;
     uint256 public constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
-    uint256 private constant ABI_WORD_BYTES = 32;
 
-    uint256 private constant SLOT_SOURCE_TOKEN = 1;
-    uint256 private constant SLOT_GOV_RATIO_MULTIPLIER = 2;
-    uint256 private constant SLOT_PUBLIC_VERIFIER_RATIO = 3;
-    uint256 private constant TARGET_DATA_LENGTH = 4;
+    uint256 private constant CREATION_DATA_BYTES = 96;
 
     GroupServiceStorage.Layout internal _layout;
 
@@ -384,67 +380,52 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     // forge-lint: disable-next-item(missing-events-access-control)
     function onProposalCreated(
         address tokenAddress,
-        uint256 serviceActionId,
-        bytes[] calldata targetData
+        uint256 proposalId,
+        bytes calldata creationData
     ) external override onlyActionTarget {
-        if (targetData.length < TARGET_DATA_LENGTH) {
-            revert InsufficientTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
+        if (creationData.length != CREATION_DATA_BYTES) {
+            revert InvalidCreationDataLength(creationData.length, CREATION_DATA_BYTES);
         }
-        if (targetData.length > TARGET_DATA_LENGTH) {
-            revert TooManyTargetDataItems(targetData.length, TARGET_DATA_LENGTH);
-        }
-        // forge-lint: disable-next-item(require-revert-in-loop)
-        for (uint256 i = 0; i < TARGET_DATA_LENGTH; i++) {
-            if (targetData[i].length != ABI_WORD_BYTES) {
-                revert InvalidTargetDataShape(i, targetData[i].length);
-            }
-        }
+        GroupServiceCreationParams memory params = abi.decode(creationData, (GroupServiceCreationParams));
 
-        address sourceTokenAddress =
-            abi.decode(targetData[SLOT_SOURCE_TOKEN], (address));
-        uint256 govRatioMultiplierValue =
-            abi.decode(targetData[SLOT_GOV_RATIO_MULTIPLIER], (uint256));
-        uint256 publicVerifierRatioValue =
-            abi.decode(targetData[SLOT_PUBLIC_VERIFIER_RATIO], (uint256));
-
-        if (sourceTokenAddress == address(0)) {
+        if (params.actionTokenAddress == address(0)) {
             revert ZeroActionTokenAddress();
         }
-        if (publicVerifierRatioValue == 0 || publicVerifierRatioValue >= PRECISION) {
-            revert InvalidRatioForPublicVerifier(publicVerifierRatioValue);
+        if (params.publicVerifierRatio == 0 || params.publicVerifierRatio >= PRECISION) {
+            revert InvalidRatioForPublicVerifier(params.publicVerifierRatio);
         }
-        if (sourceTokenAddress != tokenAddress) {
-            address parentTokenAddress = ILaunch(LAUNCH_ADDRESS).parentToken(sourceTokenAddress);
+        if (params.actionTokenAddress != tokenAddress) {
+            address parentTokenAddress = ILaunch(LAUNCH_ADDRESS).parentToken(params.actionTokenAddress);
             if (parentTokenAddress != tokenAddress) {
-                revert ActionTokenParentMismatch(sourceTokenAddress, tokenAddress, parentTokenAddress);
+                revert ActionTokenParentMismatch(params.actionTokenAddress, tokenAddress, parentTokenAddress);
             }
         }
 
-        _layout.actionTokenAddressByActionId[tokenAddress][serviceActionId] = sourceTokenAddress;
-        _layout.govRatioMultiplierByActionId[tokenAddress][serviceActionId] = govRatioMultiplierValue;
-        _layout.publicVerifierRatioByActionId[tokenAddress][serviceActionId] = publicVerifierRatioValue;
+        uint256 serviceActionId = proposalId;
+        _layout.actionTokenAddressByActionId[tokenAddress][serviceActionId] = params.actionTokenAddress;
+        _layout.govRatioMultiplierByActionId[tokenAddress][serviceActionId] = params.govRatioMultiplier;
+        _layout.publicVerifierRatioByActionId[tokenAddress][serviceActionId] = params.publicVerifierRatio;
         _layout.createdRoundByActionId[tokenAddress][serviceActionId] = IPhase(PHASE_ADDRESS).currentPhase();
 
         emit ServiceActionCreated({
             tokenAddress: tokenAddress,
             actionId: serviceActionId,
-            actionTokenAddress: sourceTokenAddress,
-            govRatioMultiplier: govRatioMultiplierValue,
-            publicVerifierRatio: publicVerifierRatioValue
+            actionTokenAddress: params.actionTokenAddress,
+            govRatioMultiplier: params.govRatioMultiplier,
+            publicVerifierRatio: params.publicVerifierRatio
         });
     }
 
     function onProposalVoted(
-        address,
-        uint256,
-        uint256,
-        uint256,
-        uint256,
-        bytes[] calldata targetData
+        address tokenAddress,
+        uint256 round,
+        uint256 proposalId,
+        uint256 voterId,
+        uint256 voteAmount,
+        bytes calldata voteData
     ) external virtual override onlyActionTarget {
-        if (targetData.length > 1) {
-            revert TooManyTargetDataItems(targetData.length, 1);
-        }
+        (tokenAddress, round, proposalId, voterId, voteAmount);
+        if (voteData.length != 0) revert UnexpectedVoteData();
     }
 
     function _distribution(

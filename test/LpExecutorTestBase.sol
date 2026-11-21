@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {LpExecutor} from "../src/LpExecutor.sol";
+import {LpCreationParams} from "../src/interfaces/ILpExecutor.sol";
 import {
     MockERC20,
     MockLpActionTarget,
@@ -115,7 +116,7 @@ abstract contract LpExecutorTestBase {
         return MEMBER3;
     }
 
-    function _targetData() internal view returns (bytes[] memory targetData) {
+    function _targetData() internal view returns (bytes memory) {
         return _targetDataWithConfig(GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO, address(joinToken));
     }
 
@@ -123,12 +124,12 @@ abstract contract LpExecutorTestBase {
         uint256 govRatioMultiplier,
         uint256 minGovRatio,
         address joinTokenAddress
-    ) internal view returns (bytes[] memory targetData) {
-        targetData = new bytes[](4);
-        targetData[0] = abi.encode(address(lpExecutor));
-        targetData[1] = abi.encode(joinTokenAddress);
-        targetData[2] = abi.encode(govRatioMultiplier);
-        targetData[3] = abi.encode(minGovRatio);
+    ) internal pure returns (bytes memory) {
+        return abi.encode(LpCreationParams({
+            joinTokenAddress: joinTokenAddress,
+            govRatioMultiplier: govRatioMultiplier,
+            minGovRatio: minGovRatio
+        }));
     }
 
     function _createAction(uint256 actionId) internal {

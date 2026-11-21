@@ -13,17 +13,18 @@ contract CallbackStub {
         target = target_;
     }
 
-    function callCreated(address tokenAddress, uint256 proposalId, bytes[] calldata targetData) external {
+    function callCreated(address tokenAddress, uint256 proposalId, bytes calldata targetData) external {
         target.onProposalCreated(tokenAddress, proposalId, targetData);
     }
 
     function callSubmitted(
         address tokenAddress,
+        uint256 round,
         uint256 proposalId,
         uint256 submitterId,
-        bytes[] calldata targetData
+        bytes calldata targetData
     ) external {
-        target.onProposalSubmitted(tokenAddress, proposalId, submitterId, targetData);
+        target.onProposalSubmitted(tokenAddress, round, proposalId, submitterId, targetData);
     }
 
     function callVoted(
@@ -32,7 +33,7 @@ contract CallbackStub {
         uint256 proposalId,
         uint256 voterId,
         uint256 votes,
-        bytes[] calldata targetData
+        bytes calldata targetData
     ) external {
         target.onProposalVoted(tokenAddress, round, proposalId, voterId, votes, targetData);
     }
@@ -60,16 +61,15 @@ contract ActionTargetStubTest is ActionTargetTestBase {
     }
 
     function testStubCallbacksRejectUnboundProposal() external {
-        bytes[] memory targetData = _targetData(address(executor));
         vm.expectRevert(
             abi.encodeWithSelector(IActionTargetErrors.UnboundProposal.selector, address(token), 99)
         );
-        stub.callSubmitted(address(token), 99, 7, targetData);
+        stub.callSubmitted(address(token), 3, 99, 7, "");
 
         vm.expectRevert(
             abi.encodeWithSelector(IActionTargetErrors.UnboundProposal.selector, address(token), 98)
         );
-        stub.callVoted(address(token), 3, 98, 5, 250, targetData);
+        stub.callVoted(address(token), 3, 98, 5, 250, "");
         require(stubTarget.executorByActionId(address(token), 99) == address(0), "no binding created");
     }
 

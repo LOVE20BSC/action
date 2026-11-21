@@ -39,40 +39,27 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(executorTotal == 1 && byExecutor.length == 1 && byExecutor[0] == 11, "executor index");
         require(executor.createdCalls() == 1, "executor notified");
         require(
-            executor.lastCreatedTargetDataHash() == keccak256(abi.encode(_targetData(address(executor)))),
-            "full target data forwarded"
+            executor.lastCreatedTargetDataHash() == keccak256(""),
+            "empty executor data forwarded"
         );
     }
 
-    function testCreateForwardsFullTargetData() external {
-        bytes[] memory targetData = _targetDataWithBusiness(address(executor), 777);
+    function testCreateForwardsOnlyExecutorData() external {
+        bytes memory executorData = hex"010203";
+        bytes memory targetData = abi.encode(address(executor), executorData);
         vm.prank(submitAddress);
         actionTarget.onProposalCreated(address(token), 12, targetData);
-        require(executor.lastCreatedTargetDataHash() == keccak256(abi.encode(targetData)), "business items forwarded");
+        require(executor.lastCreatedTargetDataHash() == keccak256(executorData), "executor config forwarded");
         require(actionTarget.executorByActionId(address(token), 12) == address(executor), "bound");
     }
 
     function testCreateRejectsNonSubmitCaller() external {
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotSubmit.selector, OUTSIDER));
-        actionTarget.onProposalCreated(address(token), 11, _targetData(address(executor)));
+        actionTarget.onProposalCreated(address(token), 11, "");
     }
 
     function testCreateRejectsInvalidExecutorData() external {
-        vm.prank(submitAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.InsufficientTargetDataItems.selector, 0, 1)
-        );
-        actionTarget.onProposalCreated(address(token), 11, new bytes[](0));
-
-        bytes[] memory malformed = new bytes[](1);
-        malformed[0] = new bytes(31);
-        vm.prank(submitAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, 31)
-        );
-        actionTarget.onProposalCreated(address(token), 11, malformed);
-
         vm.prank(submitAddress);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.ExecutorNotContract.selector, address(0)));
         actionTarget.onProposalCreated(address(token), 11, _targetData(address(0)));
@@ -126,55 +113,38 @@ contract ActionTargetTest is ActionTargetTestBase {
 
     function testSubmittedForwardsContext() external {
         _createAction(11);
-        bytes[] memory targetData = _targetDataWithBusiness(address(executor), 7);
+        bytes memory submitData = abi.encode(uint256(7));
         vm.prank(submitAddress);
-        actionTarget.onProposalSubmitted(address(token), 11, 7, targetData);
+        actionTarget.onProposalSubmitted(address(token), 3, 11, 7, submitData);
         require(executor.submittedCalls() == 1, "executor notified");
         require(executor.lastCallbackTokenAddress() == address(token), "token forwarded");
+        require(executor.lastSubmittedRound() == 3, "round forwarded");
         require(executor.lastSubmittedProposalId() == 11, "proposalId forwarded");
         require(executor.lastSubmittedSubmitterId() == 7, "submitterId forwarded");
-        require(executor.lastSubmittedTargetDataHash() == keccak256(abi.encode(targetData)), "target data forwarded");
+        require(executor.lastSubmittedTargetDataHash() == keccak256(submitData), "submission data forwarded");
     }
 
     function testSubmittedRejectsNonSubmitCaller() external {
         _createAction(11);
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotSubmit.selector, OUTSIDER));
-        actionTarget.onProposalSubmitted(address(token), 11, 7, _targetData(address(executor)));
+        actionTarget.onProposalSubmitted(address(token), 3, 11, 7, "");
     }
 
     function testSubmittedRejectsUnboundProposal() external {
-        bytes[] memory targetData = _targetData(address(executor));
         vm.prank(submitAddress);
         vm.expectRevert(
             abi.encodeWithSelector(IActionTargetErrors.UnboundProposal.selector, address(token), 99)
         );
-        actionTarget.onProposalSubmitted(address(token), 99, 7, targetData);
+        actionTarget.onProposalSubmitted(address(token), 3, 99, 7, "");
     }
 
-    function testSubmittedRejectsMismatchedTargetData() external {
+    function testSubmittedForwardsEmptyData() external {
         _createAction(11);
         vm.prank(submitAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.InsufficientTargetDataItems.selector, 0, 1)
-        );
-        actionTarget.onProposalSubmitted(address(token), 11, 7, new bytes[](0));
-
-        bytes[] memory malformed = new bytes[](1);
-        malformed[0] = new bytes(33);
-        vm.prank(submitAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, 33)
-        );
-        actionTarget.onProposalSubmitted(address(token), 11, 7, malformed);
-
-        vm.prank(submitAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionTargetErrors.TargetDataExecutorMismatch.selector, address(executor), OUTSIDER
-            )
-        );
-        actionTarget.onProposalSubmitted(address(token), 11, 7, _targetData(OUTSIDER));
+        actionTarget.onProposalSubmitted(address(token), 3, 11, 7, "");
+        require(executor.submittedCalls() == 1, "executor notified");
+        require(executor.lastSubmittedTargetDataHash() == keccak256(""), "empty data forwarded");
     }
 
     function testSubmittedCallbackRevertBubbles() external {
@@ -182,13 +152,13 @@ contract ActionTargetTest is ActionTargetTestBase {
         executor.setRevertSubmitted(true);
         vm.prank(submitAddress);
         vm.expectRevert(abi.encodeWithSelector(MockExecutor.SubmittedCallbackReverted.selector));
-        actionTarget.onProposalSubmitted(address(token), 11, 7, _targetData(address(executor)));
+        actionTarget.onProposalSubmitted(address(token), 3, 11, 7, "");
     }
 
     function testVotedForwardsContextWithEmptyData() external {
         _createAction(11);
         vm.prank(voteAddress);
-        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, new bytes[](0));
+        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, "");
         require(executor.votedCalls() == 1, "executor notified");
         require(executor.lastCallbackTokenAddress() == address(token), "token forwarded");
         require(executor.lastVotedRound() == 3, "round forwarded");
@@ -196,25 +166,23 @@ contract ActionTargetTest is ActionTargetTestBase {
         require(executor.lastVotedVoterId() == 5, "voterId forwarded");
         require(executor.lastVotedVotes() == 250, "votes forwarded");
         require(
-            executor.lastVotedTargetDataHash() == keccak256(abi.encode(new bytes[](0))), "empty data forwarded"
+            executor.lastVotedTargetDataHash() == keccak256(""), "empty data forwarded"
         );
     }
 
-    function testVotedForwardsBusinessTargetData() external {
+    function testVotedForwardsVoteData() external {
         _createAction(11);
-        bytes[] memory targetData = new bytes[](2);
-        targetData[0] = abi.encode(address(executor));
-        targetData[1] = abi.encode(uint256(88));
+        bytes memory voteData = abi.encode(uint256(88));
         vm.prank(voteAddress);
-        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, targetData);
-        require(executor.lastVotedTargetDataHash() == keccak256(abi.encode(targetData)), "business items forwarded");
+        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, voteData);
+        require(executor.lastVotedTargetDataHash() == keccak256(voteData), "vote data forwarded");
     }
 
     function testVotedRejectsNonVoteCaller() external {
         _createAction(11);
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.NotVote.selector, OUTSIDER));
-        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, new bytes[](0));
+        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, "");
     }
 
     function testVotedRejectsUnboundProposal() external {
@@ -222,28 +190,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionTargetErrors.UnboundProposal.selector, address(token), 99)
         );
-        actionTarget.onProposalVoted(address(token), 3, 99, 5, 250, new bytes[](0));
-    }
-
-    function testVotedRejectsMismatchedTargetData() external {
-        _createAction(11);
-        bytes[] memory malformed = new bytes[](1);
-        malformed[0] = new bytes(20);
-        vm.prank(voteAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.InvalidTargetDataShape.selector, 0, 20)
-        );
-        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, malformed);
-
-        bytes[] memory mismatched = new bytes[](1);
-        mismatched[0] = abi.encode(OUTSIDER);
-        vm.prank(voteAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionTargetErrors.TargetDataExecutorMismatch.selector, address(executor), OUTSIDER
-            )
-        );
-        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, mismatched);
+        actionTarget.onProposalVoted(address(token), 3, 99, 5, 250, "");
     }
 
     function testVotedCallbackRevertBubbles() external {
@@ -251,7 +198,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         executor.setRevertVoted(true);
         vm.prank(voteAddress);
         vm.expectRevert(abi.encodeWithSelector(MockExecutor.VotedCallbackReverted.selector));
-        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, new bytes[](0));
+        actionTarget.onProposalVoted(address(token), 3, 11, 5, 250, "");
     }
 
     function testRegisterJoinStateRecordsJoinRound() external {

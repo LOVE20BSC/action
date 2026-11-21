@@ -63,8 +63,7 @@ contract ActionTargetHandler {
         if (created[actionId]) return;
         created[actionId] = true;
         phaseContract.setPhase(CREATE_PHASE);
-        bytes[] memory targetData = new bytes[](1);
-        targetData[0] = abi.encode(executorAddress);
+        bytes memory targetData = abi.encode(executorAddress, bytes(""));
         vm.prank(submitAddress);
         actionTarget.onProposalCreated(address(token), actionId, targetData);
         phaseContract.setPhase(JOIN_PHASE);

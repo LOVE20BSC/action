@@ -17,14 +17,6 @@ import {MockUniswapV2Factory, MockUniswapV2Pair} from "./mocks/UniswapV2Mocks.so
 import {LpExecutorTestBase} from "./LpExecutorTestBase.sol";
 
 contract LpExecutorTest is LpExecutorTestBase {
-    function _cloneTargetData() internal view returns (bytes[] memory copy) {
-        bytes[] memory data = _targetData();
-        copy = new bytes[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            copy[i] = data[i];
-        }
-    }
-
     function testConstructorDerivesDependenciesFromStake() external {
         require(lpExecutor.ACTION_TARGET_ADDRESS() == address(actionTarget), "action target bound");
         require(lpExecutor.MEMBER_NFT_ADDRESS() == address(memberNFT), "member nft bound");
@@ -82,49 +74,19 @@ contract LpExecutorTest is LpExecutorTestBase {
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, _targetData());
     }
 
-    function testCreateRejectsWrongItemCount() external {
-        uint256[3] memory counts = [uint256(0), 3, 5];
-        for (uint256 c = 0; c < counts.length; c++) {
-            bytes[] memory targetData = new bytes[](counts[c]);
-            for (uint256 i = 0; i < counts[c]; i++) {
-                targetData[i] = abi.encode(uint256(i));
-            }
+    function testCreateRejectsWrongDataLength() external {
+        uint256[5] memory lengths = [uint256(0), 64, 95, 97, 128];
+        for (uint256 i; i < lengths.length; ++i) {
+            bytes memory creationData = new bytes(lengths[i]);
             vm.prank(address(actionTarget));
-            if (counts[c] < 4) {
-                vm.expectRevert(
-                    abi.encodeWithSelector(ILpExecutorErrors.InsufficientTargetDataItems.selector, counts[c], 4)
-                );
-            } else {
-                vm.expectRevert(
-                    abi.encodeWithSelector(ILpExecutorErrors.TooManyTargetDataItems.selector, counts[c], 4)
-                );
-            }
-            lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
+            vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidCreationDataLength.selector, lengths[i], 96));
+            lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, creationData);
         }
-        require(
-            lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0),
-            "nothing stored"
-        );
-    }
-
-    function testCreateRejectsMalformedItemLengths() external {
-        uint256[4] memory lengths = [uint256(0), 31, 33, 64];
-        for (uint256 position = 0; position < 4; position++) {
-            for (uint256 i = 0; i < lengths.length; i++) {
-                bytes[] memory targetData = _cloneTargetData();
-                targetData[position] = new bytes(lengths[i]);
-                vm.prank(address(actionTarget));
-                vm.expectRevert(
-                    abi.encodeWithSelector(ILpExecutorErrors.InvalidTargetDataShape.selector, position, lengths[i])
-                );
-                lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
-            }
-        }
+        require(lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0), "nothing stored");
     }
 
     function testCreateRejectsZeroJoinToken() external {
-        bytes[] memory targetData = _cloneTargetData();
-        targetData[1] = abi.encode(address(0));
+        bytes memory targetData = _targetDataWithConfig(GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO, address(0));
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.ZeroJoinTokenAddress.selector));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
@@ -140,8 +102,7 @@ contract LpExecutorTest is LpExecutorTestBase {
             address(new MockRevertingPairToken1(address(token)))
         ];
         for (uint256 i = 0; i < joinTokens.length; i++) {
-            bytes[] memory targetData = _cloneTargetData();
-            targetData[1] = abi.encode(joinTokens[i]);
+            bytes memory targetData = _targetDataWithConfig(GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO, joinTokens[i]);
             vm.prank(address(actionTarget));
             vm.expectRevert(
                 abi.encodeWithSelector(
@@ -173,17 +134,14 @@ contract LpExecutorTest is LpExecutorTestBase {
     }
 
     function testCreateRejectsMinGovRatioAbovePrecision() external {
-        bytes[] memory targetData = _cloneTargetData();
-        targetData[3] = abi.encode(PRECISION + 1);
+        bytes memory targetData = _targetDataWithConfig(GOV_RATIO_MULTIPLIER, PRECISION + 1, address(joinToken));
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector, PRECISION + 1));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
     }
 
     function testCreateAcceptsBoundaryConfigs() external {
-        bytes[] memory targetData = _cloneTargetData();
-        targetData[2] = abi.encode(uint256(0));
-        targetData[3] = abi.encode(PRECISION);
+        bytes memory targetData = _targetDataWithConfig(0, PRECISION, address(joinToken));
         vm.prank(address(actionTarget));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
         require(lpExecutor.govRatioMultiplier(address(token), SECOND_ACTION_ID) == 0, "zero multiplier");
@@ -191,8 +149,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     }
 
     function testCreateRollsBackOnFailure() external {
-        bytes[] memory targetData = _cloneTargetData();
-        targetData[3] = abi.encode(PRECISION + 1);
+        bytes memory targetData = _targetDataWithConfig(GOV_RATIO_MULTIPLIER, PRECISION + 1, address(joinToken));
         vm.prank(address(actionTarget));
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector, PRECISION + 1));
         lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, targetData);
@@ -215,32 +172,24 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testSubmittedCallbackGatesCaller() external {
         vm.prank(address(actionTarget));
-        lpExecutor.onProposalSubmitted(address(token), ACTION_ID, 1, _targetData());
+        lpExecutor.onProposalSubmitted(address(token), 3, ACTION_ID, 1, "");
 
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
-        lpExecutor.onProposalSubmitted(address(token), ACTION_ID, 1, _targetData());
+        lpExecutor.onProposalSubmitted(address(token), 3, ACTION_ID, 1, "");
     }
 
     function testVotedCallbackGatesCallerAndDataLength() external {
         vm.prank(address(actionTarget));
-        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, new bytes[](0));
+        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, "");
 
-        bytes[] memory oneItem = new bytes[](1);
-        oneItem[0] = abi.encode(address(lpExecutor));
         vm.prank(address(actionTarget));
-        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, oneItem);
-
-        bytes[] memory twoItems = new bytes[](2);
-        twoItems[0] = abi.encode(address(lpExecutor));
-        twoItems[1] = abi.encode(uint256(1));
-        vm.prank(address(actionTarget));
-        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.TooManyTargetDataItems.selector, 2, 1));
-        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, twoItems);
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.UnexpectedVoteData.selector));
+        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, abi.encode(uint256(1)));
 
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
-        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, new bytes[](0));
+        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, "");
     }
 
     function testJoinRecordsDeductionAtPhaseStart() external {

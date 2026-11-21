@@ -5,7 +5,7 @@ import {ActionTarget} from "../../src/ActionTarget.sol";
 import {LpExecutor} from "../../src/LpExecutor.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
-import {ILpExecutorErrors} from "../../src/interfaces/ILpExecutor.sol";
+import {ILpExecutorErrors, LpCreationParams} from "../../src/interfaces/ILpExecutor.sol";
 import {MockERC20} from "../mocks/LpExecutorMocks.sol";
 import {MockUniswapV2Factory, MockUniswapV2Pair, MockUniswapV2Router} from "../mocks/UniswapV2Mocks.sol";
 import {Phase} from "@core/Phase.sol";
@@ -157,12 +157,8 @@ contract LpExecutorRealIntegrationTest {
         vm.stopPrank();
     }
 
-    function _lpTargetData() internal view returns (bytes[] memory targetData) {
-        targetData = new bytes[](4);
-        targetData[0] = abi.encode(address(lpExecutor));
-        targetData[1] = abi.encode(address(lpPair));
-        targetData[2] = abi.encode(GOV_RATIO_MULTIPLIER);
-        targetData[3] = abi.encode(MIN_GOV_RATIO);
+    function _lpTargetData(address pair, uint256 minGovRatio) internal view returns (bytes memory) {
+        return abi.encode(address(lpExecutor), abi.encode(LpCreationParams(pair, GOV_RATIO_MULTIPLIER, minGovRatio)));
     }
 
     function _createLpProposal(address proposer, uint256 memberId) internal returns (uint256 proposalId) {
@@ -175,8 +171,9 @@ contract LpExecutorRealIntegrationTest {
                 details: "details",
                 target: address(actionTarget),
                 targetMode: TargetMode.Callback,
-                targetData: _lpTargetData()
-            })
+                creationData: _lpTargetData(address(lpPair), MIN_GOV_RATIO)
+            }),
+            ""
         );
     }
 
@@ -185,10 +182,8 @@ contract LpExecutorRealIntegrationTest {
         proposalIds[0] = proposalId;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = votes;
-        bytes[][] memory targetData = new bytes[][](1);
-        targetData[0] = new bytes[](0);
         vm.prank(voter);
-        vote.vote(address(token), memberId, proposalIds, amounts, targetData);
+        vote.vote(address(token), memberId, proposalIds, amounts, new bytes[](0));
     }
 
     function _advanceToPhaseStart(uint256 targetPhase) internal {
@@ -404,7 +399,7 @@ contract LpExecutorRealIntegrationTest {
         _createProposalExpecting(
             member1,
             1,
-            _targetDataWithItem(1, abi.encode(unregisteredPair)),
+            _lpTargetData(unregisteredPair, MIN_GOV_RATIO),
             abi.encodeWithSelector(
                 ILpExecutorErrors.InvalidJoinTokenFactory.selector, unregisteredPair, address(factory)
             )
@@ -413,20 +408,18 @@ contract LpExecutorRealIntegrationTest {
         _createProposalExpecting(
             member1,
             1,
-            _targetDataWithItem(1, abi.encode(address(0))),
+            _lpTargetData(address(0), MIN_GOV_RATIO),
             abi.encodeWithSelector(ILpExecutorErrors.ZeroJoinTokenAddress.selector)
         );
 
         _createProposalExpecting(
             member1,
             1,
-            _targetDataWithItem(3, abi.encode(PRECISION + 1)),
+            _lpTargetData(address(lpPair), PRECISION + 1),
             abi.encodeWithSelector(ILpExecutorErrors.InvalidMinGovRatio.selector, PRECISION + 1)
         );
 
         uint256 round = phase.currentPhase();
-        bytes[] memory minData = _lpTargetData();
-        minData[3] = abi.encode(PRECISION);
         vm.prank(member1);
         uint256 proposalId = submit.submitNewProposal(
             address(token),
@@ -436,8 +429,9 @@ contract LpExecutorRealIntegrationTest {
                 details: "details",
                 target: address(actionTarget),
                 targetMode: TargetMode.Callback,
-                targetData: minData
-            })
+                creationData: _lpTargetData(address(lpPair), PRECISION)
+            }),
+            ""
         );
         _voteOne(member1, 1, proposalId, MEMBER1_VOTES);
         _advanceToPhaseStart(round + 1);
@@ -451,15 +445,10 @@ contract LpExecutorRealIntegrationTest {
         lpExecutor.join(address(token), proposalId, 2, LP_JOIN_AMOUNT);
     }
 
-    function _targetDataWithItem(uint256 position, bytes memory item) internal view returns (bytes[] memory targetData) {
-        targetData = _lpTargetData();
-        targetData[position] = item;
-    }
-
     function _createProposalExpecting(
         address proposer,
         uint256 memberId,
-        bytes[] memory targetData,
+        bytes memory creationData,
         bytes memory expectedRevert
     ) internal {
         vm.prank(proposer);
@@ -472,8 +461,9 @@ contract LpExecutorRealIntegrationTest {
                 details: "details",
                 target: address(actionTarget),
                 targetMode: TargetMode.Callback,
-                targetData: targetData
-            })
+                creationData: creationData
+            }),
+            ""
         );
     }
 }

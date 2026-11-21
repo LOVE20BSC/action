@@ -4,6 +4,8 @@ pragma solidity =0.8.37;
 import {ActionTarget} from "../../src/ActionTarget.sol";
 import {GroupActionExecutor} from "../../src/GroupActionExecutor.sol";
 import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
+import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
+import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
@@ -143,16 +145,15 @@ abstract contract ActionTargetIntegrationFixture {
         vm.stopPrank();
     }
 
-    function _executorTargetData(address executorAddress) internal pure returns (bytes[] memory targetData) {
-        targetData = new bytes[](1);
-        targetData[0] = abi.encode(executorAddress);
+    function _executorTargetData(address executorAddress) internal pure returns (bytes memory) {
+        return abi.encode(executorAddress, bytes(""));
     }
 
     function _createActionProposal(uint256 memberId) internal returns (uint256 proposalId) {
         return _submitActionProposal(memberId, "Action proposal", _executorTargetData(address(executor)));
     }
 
-    function _submitActionProposal(uint256 memberId, string memory title, bytes[] memory targetData)
+    function _submitActionProposal(uint256 memberId, string memory title, bytes memory creationData)
         internal returns (uint256 proposalId)
     {
         address proposer = memberNFT.ownerOf(memberId);
@@ -165,8 +166,9 @@ abstract contract ActionTargetIntegrationFixture {
                 details: "details",
                 target: address(actionTarget),
                 targetMode: TargetMode.Callback,
-                targetData: targetData
-            })
+                creationData: creationData
+            }),
+            ""
         );
     }
 
@@ -174,16 +176,16 @@ abstract contract ActionTargetIntegrationFixture {
         uint256 memberId,
         uint256 proposalId,
         uint256 votes,
-        bytes[] memory proposalTargetData
+        bytes memory proposalVoteData
     ) internal {
         uint256[] memory proposalIds = new uint256[](1);
         proposalIds[0] = proposalId;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = votes;
-        bytes[][] memory targetData = new bytes[][](1);
-        targetData[0] = proposalTargetData;
+        bytes[] memory voteData = new bytes[](1);
+        voteData[0] = proposalVoteData;
         vm.prank(memberId == 1 ? member1 : member2);
-        vote.vote(address(token), memberId, proposalIds, amounts, targetData);
+        vote.vote(address(token), memberId, proposalIds, amounts, voteData);
     }
 }
 
@@ -203,24 +205,22 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     function _createGroupActionProposal(GroupActionExecutor groupExecutor, uint256 activationStake)
         internal returns (uint256)
     {
-        bytes[] memory targetData = new bytes[](7);
-        targetData[0] = abi.encode(address(groupExecutor));
-        targetData[1] = abi.encode(address(token));
-        targetData[2] = abi.encode(activationStake);
-        targetData[3] = abi.encode(uint256(1e18));
-        targetData[4] = abi.encode(uint256(0));
-        targetData[5] = abi.encode(uint256(40));
-        targetData[6] = abi.encode(uint256(9e17));
-        return _submitActionProposal(1, "Group action", targetData);
+        bytes memory creationData = abi.encode(address(groupExecutor), abi.encode(GroupActionCreationParams({
+            joinTokenAddress: address(token),
+            activationStakeAmount: activationStake,
+            maxJoinAmountRatio: 1e18,
+            activationMinGovRatio: 0,
+            verifierStakeAmount: 40,
+            verifierPunishmentRatio: 9e17,
+            verificationKeys: new string[](0),
+            verificationDescriptions: new string[](0)
+        })));
+        return _submitActionProposal(1, "Group action", creationData);
     }
 
     function _createServiceActionProposal(GroupServiceExecutor service) internal returns (uint256) {
-        bytes[] memory targetData = new bytes[](4);
-        targetData[0] = abi.encode(address(service));
-        targetData[1] = abi.encode(address(token));
-        targetData[2] = abi.encode(uint256(0));
-        targetData[3] = abi.encode(uint256(5e17));
-        return _submitActionProposal(2, "Group service", targetData);
+        bytes memory creationData = abi.encode(address(service), abi.encode(GroupServiceCreationParams(address(token), 0, 5e17)));
+        return _submitActionProposal(2, "Group service", creationData);
     }
 
     function _createBelowThresholdProposal() internal returns (uint256) {
@@ -235,8 +235,9 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
                 details: "",
                 target: member1,
                 targetMode: TargetMode.NoCallback,
-                targetData: new bytes[](0)
-            })
+                creationData: ""
+            }),
+            ""
         );
         vm.stopPrank();
         return proposalId;
@@ -254,12 +255,10 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         token.approve(address(group), type(uint256).max);
         group.submitVerifierApplication(address(token), sourceActionId, 2, "verifier");
         vm.stopPrank();
-        bytes[] memory verifierVote = new bytes[](2);
-        verifierVote[0] = abi.encode(address(group));
-        verifierVote[1] = abi.encode(uint256(2));
+        bytes memory verifierVote = abi.encode(uint256(2));
         _voteOne(1, sourceActionId, MEMBER1_VOTES, verifierVote);
-        _voteOne(2, serviceActionId, MEMBER2_VOTES, new bytes[](0));
-        _voteOne(1, belowThresholdProposalId, BELOW_THRESHOLD_VOTES, new bytes[](0));
+        _voteOne(2, serviceActionId, MEMBER2_VOTES, "");
+        _voteOne(1, belowThresholdProposalId, BELOW_THRESHOLD_VOTES, "");
 
         vm.roll(block.number + BLOCKS_PER_PHASE);
         vm.startPrank(member1);
@@ -334,7 +333,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
 
         uint256 round = phase.currentPhase();
         _voteWithBusinessData(round, proposalId);
-        _rejectMismatchedVoteData(proposalId);
+        _assertVoteCallbackFailureRollsBack(proposalId);
         _votePlainProposal(round);
 
         vm.roll(block.number + BLOCKS_PER_PHASE);
@@ -349,45 +348,37 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         require(executor.submittedCalls() == 1, "submission callback forwarded");
         require(
             executor.lastCreatedTargetDataHash()
-                == keccak256(abi.encode(_executorTargetData(address(executor)))),
-            "creation target data forwarded verbatim"
+                == keccak256(""),
+            "creation data forwarded verbatim"
         );
         require(
             executor.lastSubmittedTargetDataHash()
-                == keccak256(abi.encode(_executorTargetData(address(executor)))),
-            "submission target data forwarded verbatim"
+                == keccak256(""),
+            "submission data forwarded verbatim"
         );
     }
 
     function _voteWithBusinessData(uint256 round, uint256 proposalId) internal {
-        bytes[] memory voteTargetData = new bytes[](2);
-        voteTargetData[0] = abi.encode(address(executor));
-        voteTargetData[1] = abi.encode(uint256(42));
-        _voteOne(1, proposalId, MEMBER1_VOTES, voteTargetData);
+        bytes memory voteData = abi.encode(uint256(42));
+        _voteOne(1, proposalId, MEMBER1_VOTES, voteData);
         require(executor.votedCalls() == 1, "vote callback forwarded");
         require(executor.lastVotedRound() == round, "vote round forwarded");
         require(executor.lastVotedProposalId() == proposalId, "proposal id forwarded");
         require(executor.lastVotedVoterId() == 1, "voter id forwarded");
         require(executor.lastVotedVotes() == MEMBER1_VOTES, "vote amount forwarded");
-        require(executor.lastVotedTargetDataHash() == keccak256(abi.encode(voteTargetData)), "vote data forwarded");
+        require(executor.lastVotedTargetDataHash() == keccak256(voteData), "vote data forwarded");
     }
 
-    function _rejectMismatchedVoteData(uint256 proposalId) internal {
-        uint256[] memory proposalIds = new uint256[](1);
-        proposalIds[0] = proposalId;
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = MEMBER1_VOTES;
-        bytes[][] memory mismatchedData = new bytes[][](1);
-        mismatchedData[0] = new bytes[](1);
-        mismatchedData[0][0] = abi.encode(address(0xdead));
-        vm.prank(member1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IActionTargetErrors.TargetDataExecutorMismatch.selector, address(executor), address(0xdead)
-            )
+    function _assertVoteCallbackFailureRollsBack(uint256 proposalId) internal {
+        executor.setRevertVoted(true);
+        uint256 beforeAmount = vote.voteAmountByProposalId(address(token), vote.currentRound(), proposalId);
+        vm.expectRevert(abi.encodeWithSelector(MockExecutor.VotedCallbackReverted.selector));
+        _voteOne(1, proposalId, 1, abi.encode(uint256(42)));
+        require(executor.votedCalls() == 1, "failed callback rolled back");
+        require(
+            vote.voteAmountByProposalId(address(token), vote.currentRound(), proposalId) == beforeAmount, "vote rolled back"
         );
-        vote.vote(address(token), 1, proposalIds, amounts, mismatchedData);
-        require(executor.votedCalls() == 1, "failed callback rolled the vote back");
+        executor.setRevertVoted(false);
     }
 
     function _votePlainProposal(uint256 round) internal {
@@ -400,10 +391,11 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
                 details: "details",
                 target: address(0x4001),
                 targetMode: TargetMode.NoCallback,
-                targetData: new bytes[](0)
-            })
+                creationData: ""
+            }),
+            ""
         );
-        _voteOne(1, plainId, 10, new bytes[](0));
+        _voteOne(1, plainId, 10, "");
 
         (uint256[] memory actionIds, address[] memory executors, uint256 total) =
             actionTarget.votedActionIds(address(token), round, 0, 10, false);
@@ -434,8 +426,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     }
 
     function testRealIntegration_JoinWindowAndForceClearJoinState() external {
-        bytes[] memory badData = new bytes[](1);
-        badData[0] = abi.encode(address(0xdead));
+        bytes memory badData = _executorTargetData(address(0xdead));
         vm.prank(member1);
         vm.expectRevert(
             abi.encodeWithSelector(IActionTargetErrors.ExecutorNotContract.selector, address(0xdead))
@@ -448,8 +439,9 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
                 details: "details",
                 target: address(actionTarget),
                 targetMode: TargetMode.Callback,
-                targetData: badData
-            })
+                creationData: badData
+            }),
+            ""
         );
 
         uint256 proposalId = _createActionProposal(1);
@@ -488,7 +480,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     function testRealIntegration_SettlesToExecutorAndVoidsNothing() external {
         uint256 proposalId = _createActionProposal(1);
         uint256 round = phase.currentPhase();
-        _voteOne(1, proposalId, MEMBER1_VOTES, new bytes[](0));
+        _voteOne(1, proposalId, MEMBER1_VOTES, "");
         vm.roll(block.number + BLOCKS_PER_PHASE);
         require(vote.isRoundEnded(round), "round ended");
 
