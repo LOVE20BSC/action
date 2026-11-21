@@ -47,6 +47,18 @@ contract BrokenHandshakeExecutor {
     }
 }
 
+contract HandshakeReturnStub {
+    bytes private _response;
+
+    constructor(bytes memory response) {
+        _response = response;
+    }
+
+    fallback(bytes calldata) external returns (bytes memory) {
+        return _response;
+    }
+}
+
 contract ActionTargetStubTest is ActionTargetTestBase {
     CallbackStub internal stub;
     ActionTarget internal stubTarget;
@@ -74,11 +86,20 @@ contract ActionTargetStubTest is ActionTargetTestBase {
     }
 
     function testStubHandshakeRevertReportsHandshakeFailure() external {
-        BrokenHandshakeExecutor broken = new BrokenHandshakeExecutor();
+        _expectHandshakeFailure(address(new BrokenHandshakeExecutor()));
+    }
+
+    function testStubHandshakeRejectsInvalidReturnData() external {
+        _expectHandshakeFailure(address(new HandshakeReturnStub("")));
+        _expectHandshakeFailure(address(new HandshakeReturnStub(new bytes(31))));
+        _expectHandshakeFailure(address(new HandshakeReturnStub(abi.encode(uint256(1) << 160))));
+    }
+
+    function _expectHandshakeFailure(address executorAddress) private {
         vm.expectRevert(
-            abi.encodeWithSelector(IActionTargetErrors.ExecutorHandshakeFailed.selector, address(broken))
+            abi.encodeWithSelector(IActionTargetErrors.ExecutorHandshakeFailed.selector, executorAddress)
         );
-        stub.callCreated(address(token), 11, _targetData(address(broken)));
+        stub.callCreated(address(token), 11, _targetData(executorAddress));
         require(stubTarget.executorByActionId(address(token), 11) == address(0), "no binding created");
     }
 }

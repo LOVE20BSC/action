@@ -71,7 +71,7 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testCreateRejectsNonActionTargetCaller() external {
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
-        lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, _targetData());
+        lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, "");
     }
 
     function testCreateRejectsWrongDataLength() external {
@@ -82,6 +82,15 @@ contract LpExecutorTest is LpExecutorTestBase {
             vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidCreationDataLength.selector, lengths[i], 96));
             lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, creationData);
         }
+        require(lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0), "nothing stored");
+    }
+
+    function testCreateRejectsInvalidAddressEncoding() external {
+        uint256 invalidTokenWord = (uint256(1) << 160) | uint160(address(joinToken));
+        bytes memory creationData = abi.encode(invalidTokenWord, GOV_RATIO_MULTIPLIER, MIN_GOV_RATIO);
+        vm.prank(address(actionTarget));
+        vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InvalidCreationDataEncoding.selector));
+        lpExecutor.onProposalCreated(address(token), SECOND_ACTION_ID, creationData);
         require(lpExecutor.joinTokenAddress(address(token), SECOND_ACTION_ID) == address(0), "nothing stored");
     }
 
@@ -189,7 +198,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
         vm.prank(OUTSIDER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, OUTSIDER));
-        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, "");
+        lpExecutor.onProposalVoted(address(token), 3, ACTION_ID, 1, 100, abi.encode(uint256(1)));
     }
 
     function testJoinRecordsDeductionAtPhaseStart() external {

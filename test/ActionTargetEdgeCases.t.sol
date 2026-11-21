@@ -9,11 +9,11 @@ import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
     function testCreateRejectsIncompleteExecutorAddress() external {
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidActionTargetCreationData.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.CreationDataTooShort.selector, 0, 20));
         actionTarget.onProposalCreated(address(token), 11, "");
 
         vm.prank(submitAddress);
-        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidActionTargetCreationData.selector, 19));
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.CreationDataTooShort.selector, 19, 20));
         actionTarget.onProposalCreated(address(token), 11, new bytes(19));
 
         require(actionTarget.executorByActionId(address(token), 11) == address(0), "never bound");

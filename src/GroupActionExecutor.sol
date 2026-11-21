@@ -17,6 +17,7 @@ import {IStake} from "@core/interfaces/IStake.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {LowLevelCall} from "@openzeppelin/contracts/utils/LowLevelCall.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
@@ -148,10 +149,13 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 proposalId,
         bytes calldata creationData
     ) external override onlyActionTarget {
-        try GroupActionManager.checkCreationEncoding(creationData) {} catch {
-            revert IGroupActionExecutorErrors.InvalidGroupActionCreationData(creationData.length);
+        try GroupActionManager.onProposalCreated(_layout, _protocol(), tokenAddress, proposalId, creationData) {}
+        catch (bytes memory reason) {
+            try GroupActionManager.checkCreationEncoding(creationData) {} catch {
+                revert IGroupActionExecutorErrors.InvalidGroupActionCreationData(creationData.length);
+            }
+            LowLevelCall.bubbleRevert(reason);
         }
-        GroupActionManager.onProposalCreated(_layout, _protocol(), tokenAddress, proposalId, creationData);
     }
 
     function onProposalVoted(

@@ -24,6 +24,7 @@ interface ILpExecutorErrors {
         uint256 length,
         uint256 expectedLength
     );
+    error InvalidCreationDataEncoding();
     error UnexpectedVoteData();
     error ZeroParticipationAmount();
     error WithdrawAmountExceeded(

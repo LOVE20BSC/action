@@ -52,7 +52,6 @@ library GroupActionManager {
         return owner;
     }
 
-    // forge-lint: disable-next-item(missing-events-access-control)
     function checkCreationEncoding(bytes calldata creationData) external pure {
         abi.decode(creationData, (GroupActionCreationParams));
     }

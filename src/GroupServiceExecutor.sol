@@ -386,6 +386,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (creationData.length != CREATION_DATA_BYTES) {
             revert InvalidCreationDataLength(creationData.length, CREATION_DATA_BYTES);
         }
+        if (abi.decode(creationData, (uint256)) > type(uint160).max) {
+            revert InvalidCreationDataEncoding();
+        }
         GroupServiceCreationParams memory params = abi.decode(creationData, (GroupServiceCreationParams));
 
         if (params.actionTokenAddress == address(0)) {

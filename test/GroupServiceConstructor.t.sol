@@ -94,6 +94,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
     }
 
     function testOnProposalCreatedRejectsInvalidCreationData() external {
+        uint256 invalidTokenWord = (uint256(1) << 160) | uint160(address(token));
         _expectCreateRevert(
             address(token),
             new bytes(95),
@@ -103,6 +104,11 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
             address(token),
             new bytes(97),
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 97, 96)
+        );
+        _expectCreateRevert(
+            address(token),
+            abi.encode(invalidTokenWord, 0, PRECISION - 1),
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataEncoding.selector)
         );
         _expectCreateRevert(
             address(token),
@@ -177,7 +183,7 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         _atPhase(CREATION_PHASE);
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotActionTarget.selector, address(0xBEEF)));
-        executor.onProposalCreated(address(token), SERVICE_ACTION_ID, _serviceTargetData(address(token), 0, PRECISION - 1));
+        executor.onProposalCreated(address(token), SERVICE_ACTION_ID, "");
     }
 
     function testOnProposalSubmittedChecksCallerOnly() external {

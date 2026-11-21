@@ -430,6 +430,23 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(executor.joinTokenAddress(address(token), ACTION_2) == address(0), "config never written");
     }
 
+    function testOnProposalCreatedBubblesPhaseFailure() external {
+        bytes memory createCall = abi.encodeCall(executor.onProposalCreated, (address(token), ACTION_2, _targetData()));
+        bytes memory readPhaseCall = abi.encodeCall(phase.currentPhase, ());
+        bytes memory phaseError = abi.encodeWithSignature("PhaseUnavailable(uint256)", 5);
+        vm.mockCallRevert(address(phase), readPhaseCall, phaseError);
+
+        vm.prank(address(actionTarget));
+        vm.expectRevert(phaseError);
+        executor.onProposalCreated(address(token), ACTION_2, _targetData());
+
+        vm.mockCallRevert(address(phase), readPhaseCall, "");
+        vm.prank(address(actionTarget));
+        (bool success, bytes memory reason) = address(executor).call(createCall);
+        require(!success && reason.length == 0, "empty dependency error preserved");
+        require(executor.joinTokenAddress(address(token), ACTION_2) == address(0), "config rolled back");
+    }
+
     function testVerificationKeysMustBeNonemptyAndUnique() external {
         string[] memory keys = new string[](3);
         keys[0] = "proof";

@@ -10,6 +10,7 @@ import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IMint, ProposalRewardStatus} from "@core/interfaces/IMint.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
 import {IVote} from "@core/interfaces/IVote.sol";
+import {LowLevelCall} from "@openzeppelin/contracts/utils/LowLevelCall.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 
 contract ActionTarget is IActionTarget {
@@ -481,19 +482,13 @@ contract ActionTarget is IActionTarget {
         bytes calldata creationData
     ) external onlySubmit {
         if (creationData.length < EXECUTOR_ADDRESS_BYTES) {
-            revert InvalidActionTargetCreationData(creationData.length);
+            revert CreationDataTooShort(creationData.length, EXECUTOR_ADDRESS_BYTES);
         }
         address executor = address(bytes20(creationData[:EXECUTOR_ADDRESS_BYTES]));
         if (executor.code.length == 0) {
             revert ExecutorNotContract(executor);
         }
-        try IActionExecutor(executor).ACTION_TARGET_ADDRESS() returns (address acknowledged) {
-            if (acknowledged != address(this)) {
-                revert ExecutorTargetMismatch(address(this), acknowledged);
-            }
-        } catch {
-            revert ExecutorHandshakeFailed(executor);
-        }
+        _checkExecutorHandshake(executor);
         if (_executorByActionId[tokenAddress][proposalId] != address(0)) {
             revert AlreadyCreated(tokenAddress, proposalId);
         }
@@ -552,6 +547,18 @@ contract ActionTarget is IActionTarget {
             voteAmount,
             voteData
         );
+    }
+
+    function _checkExecutorHandshake(address executor) private view {
+        (bool success, bytes32 targetWord, ) =
+            LowLevelCall.staticcallReturn64Bytes(executor, abi.encodeCall(IActionExecutor.ACTION_TARGET_ADDRESS, ()));
+        if (!success || LowLevelCall.returnDataSize() < 32 || uint256(targetWord) > type(uint160).max) {
+            revert ExecutorHandshakeFailed(executor);
+        }
+        address acknowledged = address(uint160(uint256(targetWord)));
+        if (acknowledged != address(this)) {
+            revert ExecutorTargetMismatch(address(this), acknowledged);
+        }
     }
 
     function _boundExecutor(

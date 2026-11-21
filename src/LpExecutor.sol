@@ -96,6 +96,9 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         if (creationData.length != CREATION_DATA_BYTES) {
             revert InvalidCreationDataLength(creationData.length, CREATION_DATA_BYTES);
         }
+        if (abi.decode(creationData, (uint256)) > type(uint160).max) {
+            revert InvalidCreationDataEncoding();
+        }
         LpCreationParams memory params = abi.decode(creationData, (LpCreationParams));
 
         if (params.joinTokenAddress == address(0)) {

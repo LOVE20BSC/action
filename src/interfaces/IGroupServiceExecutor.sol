@@ -71,6 +71,7 @@ interface IGroupServiceExecutorErrors {
         uint256 length,
         uint256 expectedLength
     );
+    error InvalidCreationDataEncoding();
     error UnexpectedVoteData();
     error NotJoined(
         address tokenAddress,
