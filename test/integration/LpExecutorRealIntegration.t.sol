@@ -158,7 +158,7 @@ contract LpExecutorRealIntegrationTest {
     }
 
     function _lpTargetData(address pair, uint256 minGovRatio) internal view returns (bytes memory) {
-        return abi.encode(address(lpExecutor), abi.encode(LpCreationParams(pair, GOV_RATIO_MULTIPLIER, minGovRatio)));
+        return abi.encodePacked(address(lpExecutor), abi.encode(LpCreationParams(pair, GOV_RATIO_MULTIPLIER, minGovRatio)));
     }
 
     function _createLpProposal(address proposer, uint256 memberId) internal returns (uint256 proposalId) {

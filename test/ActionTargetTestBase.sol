@@ -73,7 +73,7 @@ abstract contract ActionTargetTestBase {
     }
 
     function _targetData(address executorAddress) internal pure returns (bytes memory) {
-        return abi.encode(executorAddress, bytes(""));
+        return abi.encodePacked(executorAddress);
     }
 
     function _createAction(uint256 actionId) internal {

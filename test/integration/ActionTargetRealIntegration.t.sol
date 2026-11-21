@@ -146,7 +146,7 @@ abstract contract ActionTargetIntegrationFixture {
     }
 
     function _executorTargetData(address executorAddress) internal pure returns (bytes memory) {
-        return abi.encode(executorAddress, bytes(""));
+        return abi.encodePacked(executorAddress);
     }
 
     function _createActionProposal(uint256 memberId) internal returns (uint256 proposalId) {
@@ -194,32 +194,49 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         _setUpProtocol(5e16, 5e16);
     }
 
-    function testRealIntegration_GroupActionCreationForwardsPunishmentRatio() external {
+    function testRealIntegration_GroupActionCreationForwardsConfig() external {
         GroupActionExecutor groupExecutor = new GroupActionExecutor(address(actionTarget));
-        uint256 proposalId = _createGroupActionProposal(groupExecutor, 0);
+        string[] memory keys = new string[](2);
+        keys[0] = "account";
+        keys[1] = "submission";
+        string[] memory descriptions = new string[](2);
+        descriptions[0] = "Account used to complete the action";
+        descriptions[1] = "Link to the submitted work";
+
+        uint256 proposalId = _createGroupActionProposal(groupExecutor, 0, keys, descriptions);
         require(actionTarget.executorByActionId(address(token), proposalId) == address(groupExecutor), "group executor bound");
         require(groupExecutor.requiredVerifierStake(address(token), proposalId) == 40, "stake forwarded");
-        require(groupExecutor.verifierPunishmentRatio(address(token), proposalId) == 9e17, "punishment ratio forwarded through both callbacks");
+        require(groupExecutor.verifierPunishmentRatio(address(token), proposalId) == 9e17, "punishment ratio forwarded");
+        (string[] memory savedKeys, string[] memory savedDescriptions) =
+            groupExecutor.verificationSchema(address(token), proposalId);
+        require(
+            keccak256(abi.encode(savedKeys, savedDescriptions)) == keccak256(abi.encode(keys, descriptions)),
+            "verification schema forwarded"
+        );
     }
 
-    function _createGroupActionProposal(GroupActionExecutor groupExecutor, uint256 activationStake)
-        internal returns (uint256)
-    {
-        bytes memory creationData = abi.encode(address(groupExecutor), abi.encode(GroupActionCreationParams({
+    function _createGroupActionProposal(
+        GroupActionExecutor groupExecutor,
+        uint256 activationStake,
+        string[] memory keys,
+        string[] memory descriptions
+    ) internal returns (uint256) {
+        bytes memory creationData = abi.encodePacked(address(groupExecutor), abi.encode(GroupActionCreationParams({
             joinTokenAddress: address(token),
             activationStakeAmount: activationStake,
             maxJoinAmountRatio: 1e18,
             activationMinGovRatio: 0,
             verifierStakeAmount: 40,
             verifierPunishmentRatio: 9e17,
-            verificationKeys: new string[](0),
-            verificationDescriptions: new string[](0)
+            verificationKeys: keys,
+            verificationDescriptions: descriptions
         })));
         return _submitActionProposal(1, "Group action", creationData);
     }
 
     function _createServiceActionProposal(GroupServiceExecutor service) internal returns (uint256) {
-        bytes memory creationData = abi.encode(address(service), abi.encode(GroupServiceCreationParams(address(token), 0, 5e17)));
+        bytes memory creationData =
+            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(token), 0, 5e17)));
         return _submitActionProposal(2, "Group service", creationData);
     }
 
@@ -246,7 +263,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     function testRealIntegration_OwnerClaimsHistoricalRewardAfterDeactivation() external {
         GroupActionExecutor group = new GroupActionExecutor(address(actionTarget));
         GroupServiceExecutor service = new GroupServiceExecutor(address(group));
-        uint256 sourceActionId = _createGroupActionProposal(group, 100);
+        uint256 sourceActionId = _createGroupActionProposal(group, 100, new string[](0), new string[](0));
         uint256 serviceActionId = _createServiceActionProposal(service);
         uint256 belowThresholdProposalId = _createBelowThresholdProposal();
         uint256 round = phase.currentPhase();

@@ -171,7 +171,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     }
 
     function _createActions() private {
-        bytes memory groupData = abi.encode(address(group), abi.encode(GroupActionCreationParams({
+        bytes memory groupData = abi.encodePacked(address(group), abi.encode(GroupActionCreationParams({
             joinTokenAddress: address(token),
             activationStakeAmount: 0,
             maxJoinAmountRatio: 1e18,
@@ -186,10 +186,10 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         actionC = _submitActionProposal(_newProposer("Carol"), "Source C", groupData);
 
         GroupServiceCreationParams memory params = GroupServiceCreationParams(address(token), 0, 5e17);
-        bytes memory serviceData = abi.encode(address(service), abi.encode(params));
+        bytes memory serviceData = abi.encodePacked(address(service), abi.encode(params));
         serviceActionId = _submitActionProposal(_newProposer("David"), "Service A", serviceData);
         params.publicVerifierRatio = 75e16;
-        serviceData = abi.encode(address(service), abi.encode(params));
+        serviceData = abi.encodePacked(address(service), abi.encode(params));
         secondServiceActionId = _submitActionProposal(_newProposer("Eve"), "Service B", serviceData);
 
         _voteForSource(actionA, 19);

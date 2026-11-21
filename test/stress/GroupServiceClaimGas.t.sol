@@ -139,7 +139,7 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         private
         returns (uint256[] memory actionIds)
     {
-        bytes memory creationData = abi.encode(address(group), abi.encode(GroupActionCreationParams({
+        bytes memory creationData = abi.encodePacked(address(group), abi.encode(GroupActionCreationParams({
             joinTokenAddress: address(sourceToken),
             activationStakeAmount: 0,
             maxJoinAmountRatio: 1e18,
@@ -194,7 +194,8 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
 
     function _createServiceActions(uint256 count) private returns (uint256[] memory serviceActionIds) {
         serviceActionIds = new uint256[](count);
-        bytes memory serviceData = abi.encode(address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17)));
+        bytes memory serviceData =
+            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17)));
         for (uint256 i; i < count; ++i) {
             uint256 proposerId = i + 1;
             uint256 serviceActionId = _submitActionProposal(proposerId, "Group service", serviceData);

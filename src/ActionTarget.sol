@@ -16,9 +16,7 @@ contract ActionTarget is IActionTarget {
     using RoundHistoryUint256Set for RoundHistoryUint256Set.Storage;
     using Uint256Set for Uint256Set.Storage;
 
-    uint256 private constant ABI_WORD_BYTES = 32;
-    uint256 private constant EXECUTOR_DATA_OFFSET = 2 * ABI_WORD_BYTES;
-    uint256 private constant CREATION_DATA_HEADER_BYTES = EXECUTOR_DATA_OFFSET + ABI_WORD_BYTES;
+    uint256 private constant EXECUTOR_ADDRESS_BYTES = 20;
 
     address public MEMBER_NFT_ADDRESS;
     address public SUBMIT_ADDRESS;
@@ -482,7 +480,10 @@ contract ActionTarget is IActionTarget {
         uint256 proposalId,
         bytes calldata creationData
     ) external onlySubmit {
-        (address executor, bytes calldata executorData) = _decodeCreationPayload(creationData);
+        if (creationData.length < EXECUTOR_ADDRESS_BYTES) {
+            revert InvalidActionTargetCreationData(creationData.length);
+        }
+        address executor = address(bytes20(creationData[:EXECUTOR_ADDRESS_BYTES]));
         if (executor.code.length == 0) {
             revert ExecutorNotContract(executor);
         }
@@ -515,7 +516,7 @@ contract ActionTarget is IActionTarget {
         IActionExecutor(executor).onProposalCreated(
             tokenAddress,
             proposalId,
-            executorData
+            creationData[EXECUTOR_ADDRESS_BYTES:]
         );
     }
 
@@ -550,30 +551,6 @@ contract ActionTarget is IActionTarget {
             voterId,
             voteAmount,
             voteData
-        );
-    }
-
-    function _decodeCreationPayload(bytes calldata creationData)
-        private
-        pure
-        returns (address executor, bytes calldata executorData)
-    {
-        if (creationData.length < CREATION_DATA_HEADER_BYTES) {
-            revert InvalidActionTargetCreationData(creationData.length);
-        }
-
-        (uint256 executorWord, uint256 dataOffset, uint256 dataLength) =
-            abi.decode(creationData[:CREATION_DATA_HEADER_BYTES], (uint256, uint256, uint256));
-        uint256 availableDataBytes = creationData.length - CREATION_DATA_HEADER_BYTES;
-        if (
-            executorWord > type(uint160).max || dataOffset != EXECUTOR_DATA_OFFSET || dataLength > availableDataBytes
-                || availableDataBytes % ABI_WORD_BYTES != 0 || availableDataBytes - dataLength >= ABI_WORD_BYTES
-        ) {
-            revert InvalidActionTargetCreationData(creationData.length);
-        }
-        return (
-            abi.decode(creationData[:ABI_WORD_BYTES], (address)),
-            creationData[CREATION_DATA_HEADER_BYTES:CREATION_DATA_HEADER_BYTES + dataLength]
         );
     }
 

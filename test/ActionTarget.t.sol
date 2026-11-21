@@ -46,9 +46,9 @@ contract ActionTargetTest is ActionTargetTestBase {
 
     function testCreateForwardsOnlyExecutorData() external {
         bytes memory executorData = hex"010203";
-        bytes memory targetData = abi.encode(address(executor), executorData);
+        bytes memory creationData = abi.encodePacked(address(executor), executorData);
         vm.prank(submitAddress);
-        actionTarget.onProposalCreated(address(token), 12, targetData);
+        actionTarget.onProposalCreated(address(token), 12, creationData);
         require(executor.lastCreatedTargetDataHash() == keccak256(executorData), "executor config forwarded");
         require(actionTarget.executorByActionId(address(token), 12) == address(executor), "bound");
     }

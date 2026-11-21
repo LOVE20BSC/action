@@ -126,7 +126,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
 
     function testFuzzCreateForwardsExecutorData(bytes calldata executorData) external {
         vm.prank(submitAddress);
-        actionTarget.onProposalCreated(address(token), 11, abi.encode(address(executor), executorData));
+        actionTarget.onProposalCreated(address(token), 11, abi.encodePacked(address(executor), executorData));
         require(executor.lastCreatedTargetDataHash() == keccak256(executorData), "executor data forwarded verbatim");
     }
 

@@ -7,22 +7,15 @@ import {MockExecutor, MockToken} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
 contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
-    function testCreateRejectsInvalidEnvelope() external {
-        bytes[] memory invalidData = new bytes[](6);
-        invalidData[0] = "";
-        invalidData[1] = new bytes(95);
-        invalidData[2] = abi.encode(address(executor), uint256(96), uint256(0), uint256(0));
-        invalidData[3] = abi.encode(address(executor), uint256(64), uint256(1));
-        invalidData[4] = abi.encode(address(executor), uint256(64), uint256(0), uint256(0));
-        invalidData[5] = abi.encode(type(uint256).max, bytes(""));
+    function testCreateRejectsIncompleteExecutorAddress() external {
+        vm.prank(submitAddress);
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidActionTargetCreationData.selector, 0));
+        actionTarget.onProposalCreated(address(token), 11, "");
 
-        for (uint256 i = 0; i < invalidData.length; i++) {
-            vm.prank(submitAddress);
-            vm.expectRevert(
-                abi.encodeWithSelector(IActionTargetErrors.InvalidActionTargetCreationData.selector, invalidData[i].length)
-            );
-            actionTarget.onProposalCreated(address(token), 11, invalidData[i]);
-        }
+        vm.prank(submitAddress);
+        vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.InvalidActionTargetCreationData.selector, 19));
+        actionTarget.onProposalCreated(address(token), 11, new bytes(19));
+
         require(actionTarget.executorByActionId(address(token), 11) == address(0), "never bound");
     }
 
@@ -158,7 +151,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
     function testCreateAcceptsPackedBusinessData() external {
         bytes memory executorData = abi.encode(uint256(1), hex"deadbeef", OUTSIDER, uint256(9));
         vm.prank(submitAddress);
-        actionTarget.onProposalCreated(address(token), 11, abi.encode(address(executor), executorData));
+        actionTarget.onProposalCreated(address(token), 11, abi.encodePacked(address(executor), executorData));
         require(executor.lastCreatedTargetDataHash() == keccak256(executorData), "executor data forwarded");
     }
 
