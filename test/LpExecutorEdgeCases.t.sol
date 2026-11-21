@@ -40,9 +40,9 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _join(1, 100e18);
         bytes memory expected = abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, type(uint256).max, 2);
         vm.expectRevert(expected);
-        lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, type(uint256).max);
+        lpExecutor.joinedAmountByActionId(address(token), type(uint256).max, ACTION_ID);
         vm.expectRevert(expected);
-        lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, type(uint256).max, 1);
+        lpExecutor.joinedAmountByMemberId(address(token), type(uint256).max, ACTION_ID, 1);
     }
 
     function testJoinExitSameBlockLeavesNoEffectiveAmount() external {
@@ -50,14 +50,14 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _join(1, 100e18);
         _exit(1);
 
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "total cleared");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction cleared");    }
+        require(lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 0, "total cleared");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 0, "deduction cleared");    }
 
     function testJoinMinimumAmount() external {
         _atPhaseBlock(3, 3300);
         _join(1, 1);
-        require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 1, "one wei joined");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "floor rounds to zero");
+        require(lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 1, "one wei joined");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 0, "floor rounds to zero");
     }
 
     function testMemberLedgersAreIndependent() external {
@@ -65,22 +65,22 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _join(1, 100e18);
         _atPhaseBlock(3, 3300);
         _join(2, 200e18);
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 60e18, "aggregated deduction");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 60e18, "aggregated deduction");
 
         _withdraw(1, 50e18);
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 50e18,
+            lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 50e18,
             "member 1 reduced"
         );
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 2) == 200e18,
+            lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 2) == 200e18,
             "member 2 untouched"
         );
-        (uint256 deduction1,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
-        (uint256 deduction2,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 2);
+        (uint256 deduction1,,) = lpExecutor.deduction(address(token), 2, ACTION_ID, 1);
+        (uint256 deduction2,,) = lpExecutor.deduction(address(token), 2, ACTION_ID, 2);
         require(deduction1 == 0 && deduction2 == 60e18, "deductions independent");
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 250e18, "total joined");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 60e18, "total deduction");
+        require(lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 250e18, "total joined");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 60e18, "total deduction");
     }
 
     function testExitOneMemberKeepsOthers() external {
@@ -91,15 +91,15 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _exit(1);
 
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0,
+            lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 0,
             "member 1 cleared"
         );
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 2) == 200e18,
+            lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 2) == 200e18,
             "member 2 retained"
         );
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 200e18, "total retained");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 60e18, "deduction retained");    }
+        require(lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 200e18, "total retained");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 60e18, "deduction retained");    }
 
     function testAllMembersExitClearsEffectiveAmount() external {
         _atPhaseBlock(3, 3000);
@@ -108,13 +108,13 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _exit(1);
         _exit(2);
 
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "total cleared");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "deduction cleared");    }
+        require(lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 0, "total cleared");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 0, "deduction cleared");    }
 
     function testGovRatioFloorRounding() external {
         stake.setTotalGovVotes(address(token), 2, 3);
         stake.setGovVotes(address(token), 2, 1, 1);
-        (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
+        (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(minted == false && ratio == 333333333333333333, "one third floors");
     }
 
@@ -123,7 +123,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         actionTarget.setJoined(address(token), ACTION_ID, 1, false);
         _join(1, 10e18);
         require(actionTarget.registerCalls() == 2, "re-registered after the target state was cleared");
-        require(lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 20e18, "balance accumulates");
+        require(lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 20e18, "balance accumulates");
     }
 
     function testActionStateIsScopedByTokenAddress() external {
@@ -145,8 +145,8 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         vm.prank(MEMBER1);
         lpExecutor.join(address(secondToken), ACTION_ID, 1, 5e18);
 
-        require(lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 10e18, "first token ledger");
-        require(lpExecutor.joinedAmountByActionId(address(secondToken), ACTION_ID, 2) == 5e18, "second token ledger");
+        require(lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 10e18, "first token ledger");
+        require(lpExecutor.joinedAmountByActionId(address(secondToken), 2, ACTION_ID) == 5e18, "second token ledger");
         require(
             lpExecutor.joinTokenAddress(address(secondToken), ACTION_ID) == address(secondJoinToken),
             "second join token"
@@ -163,10 +163,10 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _join(SECOND_ACTION_ID, 1, 100e18);
         stake.setTotalGovVotes(address(token), 2, 0);
         _atPhase(4);
-        _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
+        _setActionReward(2, SECOND_ACTION_ID, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, SECOND_ACTION_ID, 1);
         require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "cap disabled skips the zero vote burn");
     }
 
@@ -191,7 +191,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
 
         _setActionReward(2, 999e18, true);
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
+            lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
         require(minted && mintAmount == 200e18 && burnAmount == 800e18, "recorded settlement is stable");
     }
 
@@ -206,7 +206,7 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
 
         _join(ACTION_ID, 1, 1e18);
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 1e18,
+            lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 1e18,
             "default action remains joinable"
         );
     }

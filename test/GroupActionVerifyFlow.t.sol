@@ -23,7 +23,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "latest next text");
         require(keccak256(bytes(_application(3).description)) == keccak256("latest next text"), "next-round edit can be replaced");
-        (, uint256 applicationId, uint256 votes) = executor.verifier(address(token), ACTION_ID, 2);
+        (, uint256 applicationId, uint256 votes) = executor.verifier(address(token), 2, ACTION_ID);
         require(applicationId == 1 && votes == 100e18, "edits preserve votes");
         _atPhase(3);
         vm.prank(VERIFIER);
@@ -37,11 +37,11 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _applySecond();
         _castVotesFor(VERIFIER2_ID, 100);
         _castVotesFor(VERIFIER_ID, 100);
-        (uint256 electedId,,) = executor.verifier(address(token), ACTION_ID, 2);
+        (uint256 electedId,,) = executor.verifier(address(token), 2, ACTION_ID);
         require(electedId == VERIFIER2_ID, "older application does not break a tie");
         _castVotesFor(VERIFIER_ID, 1);
         _castVotesFor(VERIFIER2_ID, 1);
-        (electedId,,) = executor.verifier(address(token), ACTION_ID, 2);
+        (electedId,,) = executor.verifier(address(token), 2, ACTION_ID);
         require(electedId == VERIFIER_ID, "incumbent retains tied tally");
         (, uint256 total) = executor.verifierElectedRounds(address(token), ACTION_ID, 1, 0, 10, false);
         require(total == 0, "current leader is not final history");
@@ -70,7 +70,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
             executor.submitOriginScores(address(token), ACTION_ID, VERIFIER2_ID, GROUP_ID, 0, _scores(100));
         }
         _submitScores(_scores(100));
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "winner has the entire period");
+        require(executor.isRoundVerified(address(token), 2, ACTION_ID), "winner has the entire period");
     }
 
     function testStoppingKeepsVotesAndOldVerificationRights() external {
@@ -88,7 +88,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         _atPhase(4);
         _submitScores(_scores(0, 0));
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "zero scores still fulfill the duty");
+        require(executor.isRoundVerified(address(token), 2, ACTION_ID), "zero scores still fulfill the duty");
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         require(executor.hasVerifierApplicationByRound(address(token), 4, VERIFIER_ID), "withdrawal round still counts");
@@ -138,21 +138,21 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.cancelVerifierApplication(address(token), ACTION_ID, VERIFIER_ID);
         (VerifierApplication[] memory applications, uint256[] memory votes, uint256 total) =
-            executor.verifierApplicationsByRound(address(token), ACTION_ID, 2, 0, 10, false);
+            executor.verifierApplicationsByRound(address(token), 2, ACTION_ID, 0, 10, false);
         require(total == 2 && applications[0].applicationId == 2 && applications[1].applicationId == 1, "withdrawn voted application archived");
         require(votes[0] == 90 && votes[1] == 70 && applications[1].withdrawnRound == 2, "archived votes and lifecycle");
-        (applications, votes, total) = executor.verifierApplicationsByRound(address(token), ACTION_ID, 2, 1, 1, false);
+        (applications, votes, total) = executor.verifierApplicationsByRound(address(token), 2, ACTION_ID, 1, 1, false);
         require(total == 2 && applications.length == 1 && votes[0] == 70, "pagination crosses archive boundary");
-        (applications, votes, total) = executor.verifierApplicationsByRound(address(token), ACTION_ID, 2, 0, 1, true);
+        (applications, votes, total) = executor.verifierApplicationsByRound(address(token), 2, ACTION_ID, 0, 1, true);
         require(total == 2 && applications[0].applicationId == 1 && votes[0] == 70, "reverse archive page");
-        (, , total) = executor.verifierApplicationsByRound(address(token), ACTION_ID, 2, 0, 0, false);
+        (, , total) = executor.verifierApplicationsByRound(address(token), 2, ACTION_ID, 0, 0, false);
         require(total == 2, "count-only history");
-        (applications, votes, total) = executor.verifierApplicationsByRound(address(token), ACTION_ID, 2, 2, 10, false);
+        (applications, votes, total) = executor.verifierApplicationsByRound(address(token), 2, ACTION_ID, 2, 10, false);
         require(total == 2 && applications.length == 0 && votes.length == 0, "empty page preserves total");
         uint256[] memory ids = new uint256[](1);
         ids[0] = VERIFIER_ID;
-        require(executor.voteAmountsByVerifierIds(address(token), ACTION_ID, 2, ids)[0] == 70, "member history keeps votes");
-        (uint256[] memory voters,,) = executor.applicationVotersByVerifierId(address(token), ACTION_ID, 2, VERIFIER_ID, 0, 10, false);
+        require(executor.voteAmountsByVerifierIds(address(token), 2, ACTION_ID, ids)[0] == 70, "member history keeps votes");
+        (uint256[] memory voters,,) = executor.applicationVotersByVerifierId(address(token), 2, ACTION_ID, VERIFIER_ID, 0, 10, false);
         require(voters.length == 1 && voters[0] == MEMBER1_ID, "member history keeps voters");
         _atPhase(3);
         vm.prank(VERIFIER);
@@ -244,7 +244,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER1);
         executor.join(address(token), ACTION_2, GROUP_ID, MEMBER1_ID, 1e18, 0, new string[](0));
         _atPhase(5);
-        VerifierApplication memory application = executor.verifierApplication(address(token), ACTION_2, 2, VERIFIER_ID);
+        VerifierApplication memory application = executor.verifierApplication(address(token), 2, ACTION_2, VERIFIER_ID);
         uint256 expected = collateral * ratio / (3 * PRECISION);
         require(application.punishmentAmount == expected && application.failedRounds.length == 1, "single final rounding");
         vm.prank(address(actionTarget));
@@ -277,7 +277,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
     }
 
     function _application(uint256 round) internal view returns (VerifierApplication memory) {
-        return executor.verifierApplication(address(token), ACTION_ID, round, VERIFIER_ID);
+        return executor.verifierApplication(address(token), round, ACTION_ID, VERIFIER_ID);
     }
 
     function testOriginScoreSubmissionReverts() external {
@@ -338,10 +338,10 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         uint256[] memory secondBatch = new uint256[](1);
         secondBatch[0] = 90;
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, secondBatch);
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "round verified");
+        require(executor.isRoundVerified(address(token), 2, ACTION_ID), "round verified");
 
         uint256[] memory again = new uint256[](1);
         again[0] = 50;
@@ -403,7 +403,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         (string[] memory valueKeys, string[] memory values) =
             executor.verificationInfos(address(token), ACTION_2, MEMBER1_ID);
         require(valueKeys.length == 2 && keccak256(bytes(values[1])) == keccak256(bytes("sh")), "infos latest");
-        (valueKeys, values) = executor.verificationInfosByRound(address(token), ACTION_2, 2, MEMBER1_ID);
+        (valueKeys, values) = executor.verificationInfosByRound(address(token), 2, ACTION_2, MEMBER1_ID);
         require(values.length == 2 && keccak256(bytes(values[0])) == keccak256(bytes("alice")), "infos by round");
         require(
             bytes(executor.verificationValue(address(token), ACTION_2, MEMBER1_ID, "missing")).length == 0,
@@ -447,13 +447,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
 
         vm.prank(address(actionTarget));
         executor.onProposalVoted(address(token), 2, ACTION_ID, MEMBER2_ID, 0, votedData);
-        (uint256 verifierId,,) = executor.verifier(address(token), ACTION_ID, 2);
+        (uint256 verifierId,,) = executor.verifier(address(token), 2, ACTION_ID);
         require(verifierId == 0, "zero votes elect nobody");
-        (, , uint256 rosterTotal) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
+        (, , uint256 rosterTotal) = executor.applicationVoters(address(token), 2, ACTION_ID, 1, 0, 10, false);
         require(rosterTotal == 0, "zero votes name no voter");
 
         _castVotesFor(VERIFIER_ID, 5e18);
-        (verifierId,,) = executor.verifier(address(token), ACTION_ID, 2);
+        (verifierId,,) = executor.verifier(address(token), 2, ACTION_ID);
         require(verifierId == VERIFIER_ID, "positive vote elects the verifier");
     }
 
@@ -487,7 +487,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER2_ID) == 0, "nothing recorded");
         require(
-            executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER2_ID).applicationId == 0,
+            executor.verifierApplication(address(token), 2, ACTION_ID, VERIFIER2_ID).applicationId == 0,
             "no application"
         );
 
@@ -496,7 +496,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER2_ID, "v2");
         require(
-            executor.verifierApplication(address(token), ACTION_ID, 2, VERIFIER2_ID).applicationId == 0,
+            executor.verifierApplication(address(token), 2, ACTION_ID, VERIFIER2_ID).applicationId == 0,
             "no application"
         );
 
@@ -552,7 +552,7 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         require(token.balanceOf(VERIFIER) == before, "no charge on rejected applications");
         require(executor.verifierStake(address(token), ACTION_ID, VERIFIER_ID) == 0, "nothing staked");
         require(
-            executor.verifierApplication(address(token), ACTION_ID, 3, VERIFIER_ID).applicationId == 0, "no application"
+            executor.verifierApplication(address(token), 3, ACTION_ID, VERIFIER_ID).applicationId == 0, "no application"
         );
     }
 
@@ -646,25 +646,25 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _castVotesFrom(MEMBER2_ID, VERIFIER_ID, 10e18);
 
         (uint256[] memory voterIds, uint256[] memory votes, uint256 total) =
-            executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
+            executor.applicationVoters(address(token), 2, ACTION_ID, 1, 0, 10, false);
         require(total == 2, "one row per voter");
         require(voterIds[0] == MEMBER2_ID && voterIds[1] == PROVIDER_ID, "first-vote order");
         require(votes[0] == 40e18 && votes[1] == 20e18, "repeat votes accumulate on the voter row");
 
-        (uint256 electedId,, uint256 electedVotes) = executor.verifier(address(token), ACTION_ID, 2);
+        (uint256 electedId,, uint256 electedVotes) = executor.verifier(address(token), 2, ACTION_ID);
         require(electedId == VERIFIER_ID && electedVotes == votes[0] + votes[1], "voter totals match election");
 
-        (voterIds, votes, ) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, true);
+        (voterIds, votes, ) = executor.applicationVoters(address(token), 2, ACTION_ID, 1, 0, 10, true);
         require(voterIds[0] == PROVIDER_ID && voterIds[1] == MEMBER2_ID, "reverse is first-vote reverse");
         require(votes[1] == 40e18, "votes follow their voter");
 
-        (voterIds, votes, total) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 2, 10, false);
+        (voterIds, votes, total) = executor.applicationVoters(address(token), 2, ACTION_ID, 1, 2, 10, false);
         require(voterIds.length == 0 && votes.length == 0 && total == 2, "out of range returns the true total");
 
-        (, , total) = executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 0, false);
+        (, , total) = executor.applicationVoters(address(token), 2, ACTION_ID, 1, 0, 0, false);
         require(total == 2, "limit 0 is the count entry");
 
-        (, , total) = executor.applicationVoters(address(token), ACTION_ID, 2, 99, 0, 10, false);
+        (, , total) = executor.applicationVoters(address(token), 2, ACTION_ID, 99, 0, 10, false);
         require(total == 0, "an unknown application has no roster");
     }
 
@@ -676,12 +676,12 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _castVotesFromAt(PROVIDER_ID, VERIFIER_ID, 60e18, 4);
 
         (uint256[] memory voterIds, uint256[] memory votes, uint256 total) = executor.applicationVotersByVerifierId(
-            address(token), ACTION_ID, 2, VERIFIER_ID, 0, 10, false
+            address(token), 2, ACTION_ID, VERIFIER_ID, 0, 10, false
         );
         require(total == 1 && voterIds[0] == MEMBER2_ID && votes[0] == 100e18, "round 2 keeps its own voters");
 
         (voterIds, votes, total) = executor.applicationVotersByVerifierId(
-            address(token), ACTION_ID, 4, VERIFIER_ID, 0, 10, false
+            address(token), 4, ACTION_ID, VERIFIER_ID, 0, 10, false
         );
         require(total == 1 && voterIds[0] == PROVIDER_ID && votes[0] == 60e18, "round 4 keeps only round-4 votes");
 
@@ -689,17 +689,17 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.submitVerifierApplication(address(token), ACTION_ID, VERIFIER_ID, "round 7");
         (voterIds, votes, total) = executor.applicationVotersByVerifierId(
-            address(token), ACTION_ID, 7, VERIFIER_ID, 0, 10, false
+            address(token), 7, ACTION_ID, VERIFIER_ID, 0, 10, false
         );
         require(total == 0 && voterIds.length == 0 && votes.length == 0, "a fresh application starts empty");
 
         (, , total) = executor.applicationVotersByVerifierId(
-            address(token), ACTION_ID, 4, VERIFIER_ID, 0, 10, false
+            address(token), 4, ACTION_ID, VERIFIER_ID, 0, 10, false
         );
         require(total == 1, "the round that saw the earlier application keeps its roster");
 
         (, , total) = executor.applicationVotersByVerifierId(
-            address(token), ACTION_ID, 2, MEMBER1_ID, 0, 10, false
+            address(token), 2, ACTION_ID, MEMBER1_ID, 0, 10, false
         );
         require(total == 0, "a member without an application has no roster");
     }
@@ -717,13 +717,13 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
         _castVotesFrom(PROVIDER_ID, VERIFIER2_ID, 10e18);
 
         (uint256[] memory voterIds, uint256[] memory votes, uint256 total) =
-            executor.applicationVoters(address(token), ACTION_ID, 2, 1, 0, 10, false);
+            executor.applicationVoters(address(token), 2, ACTION_ID, 1, 0, 10, false);
         require(total == 1 && voterIds[0] == MEMBER2_ID && votes[0] == 70e18, "verifier one keeps its own roster");
 
-        (voterIds, votes, total) = executor.applicationVoters(address(token), ACTION_ID, 2, 2, 0, 10, false);
+        (voterIds, votes, total) = executor.applicationVoters(address(token), 2, ACTION_ID, 2, 0, 10, false);
         require(total == 2 && votes[0] == 90e18 && votes[1] == 10e18, "verifier two keeps both voters");
 
-        (uint256 electedId,, uint256 electedVotes) = executor.verifier(address(token), ACTION_ID, 2);
+        (uint256 electedId,, uint256 electedVotes) = executor.verifier(address(token), 2, ACTION_ID);
         require(electedId == VERIFIER2_ID && electedVotes == 100e18, "separate vote totals");
     }
 

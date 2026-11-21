@@ -97,8 +97,8 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     ) external;
     function mintActionReward(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external returns (uint256 amount);
 
     function isJoined(
@@ -108,8 +108,8 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     ) external view returns (bool);
     function isJoinedByRound(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (bool);
     function joinedRounds(
@@ -123,8 +123,8 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     ) external view returns (address);
     function actionReward(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (uint256 amount, bool minted);
     function actionIdsByMemberId(
         address tokenAddress,
@@ -135,8 +135,8 @@ interface IActionTarget is IProposalTarget, IActionTargetEvents, IActionTargetEr
     ) external view returns (uint256[] memory actionIds, uint256 totalCount);
     function memberIdsByActionId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 offset,
         uint256 limit,
         bool reverse

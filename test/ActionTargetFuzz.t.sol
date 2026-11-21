@@ -38,7 +38,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
             _join(11, model[i]);
         }
 
-        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, offset, limit, reverse);
+        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, offset, limit, reverse);
         (uint256[] memory expected, uint256 expectedTotal) = _expectedPage(model, offset, limit, reverse);
         require(total == expectedTotal, "total");
         _requireSamePage(page, expected);
@@ -84,7 +84,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
             }
         }
         for (uint256 i = 0; i < 4; i++) {
-            (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), actionIds[i], 1, 0, 10, false);
+            (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, actionIds[i], 0, 10, false);
             uint256 expectedTotal;
             for (uint256 memberId = 1; memberId <= 3; memberId++) {
                 if (_joined[memberId][actionIds[i]]) expectedTotal++;
@@ -114,10 +114,10 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         } else {
             _join(11, 1);
             uint256 joinRound = atPhase - 1;
-            require(actionTarget.isJoinedByRound(address(token), 11, joinRound, 1), "snapshot at join round");
+            require(actionTarget.isJoinedByRound(address(token), joinRound, 11, 1), "snapshot at join round");
             if (joinRound > 0) {
                 require(
-                    actionTarget.isJoinedByRound(address(token), 11, joinRound - 1, 1) == false,
+                    actionTarget.isJoinedByRound(address(token), joinRound - 1, 11, 1) == false,
                     "no snapshot before join round"
                 );
             }
@@ -137,12 +137,12 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         vote.setProposalVoted(address(token), roundB, 11, true);
 
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, roundA);
+        actionTarget.mintActionReward(address(token), roundA, 11);
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, roundB);
+        actionTarget.mintActionReward(address(token), roundB, 11);
 
-        (uint256 amountA, bool mintedA) = actionTarget.actionReward(address(token), 11, roundA);
-        (uint256 amountB, bool mintedB) = actionTarget.actionReward(address(token), 11, roundB);
+        (uint256 amountA, bool mintedA) = actionTarget.actionReward(address(token), roundA, 11);
+        (uint256 amountB, bool mintedB) = actionTarget.actionReward(address(token), roundB, 11);
         require(amountA == MINT_AMOUNT && mintedA, "round A minted");
         require(amountB == MINT_AMOUNT && mintedB, "round B minted");
 
@@ -150,7 +150,7 @@ contract ActionTargetFuzzTest is ActionTargetTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), roundA, 11)
         );
-        actionTarget.mintActionReward(address(token), 11, roundA);
+        actionTarget.mintActionReward(address(token), roundA, 11);
     }
 
     function testFuzzVotedActionIdsFiltering(uint256 idA, uint256 idB, uint256 idC) external {

@@ -110,7 +110,7 @@ contract ActionTargetHandler {
         minted[actionId][round] = true;
         vote.setProposalVoted(address(token), round, actionId, true);
         vm.prank(executorAddress);
-        actionTarget.mintActionReward(address(token), actionId, round);
+        actionTarget.mintActionReward(address(token), round, actionId);
         mintRewardCalls++;
     }
 
@@ -207,7 +207,7 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
         for (uint256 i = 0; i < 4; i++) {
             uint256 actionId = handler.actionIdAt(i);
             (uint256[] memory page, uint256 total) =
-                actionTarget.memberIdsByActionId(address(token), actionId, joinRound, 0, 3, false);
+                actionTarget.memberIdsByActionId(address(token), joinRound, actionId, 0, 3, false);
             uint256 expectedTotal;
             for (uint256 memberId = 1; memberId <= 3; memberId++) {
                 if (handler.joined(actionId, memberId)) expectedTotal++;
@@ -249,7 +249,7 @@ contract ActionTargetInvariantTest is ActionTargetTestBase {
         for (uint256 i = 0; i < 4; i++) {
             uint256 actionId = handler.actionIdAt(i);
             for (uint256 round = 0; round < 3; round++) {
-                (uint256 amount, bool mintedFlag) = actionTarget.actionReward(address(token), actionId, round);
+                (uint256 amount, bool mintedFlag) = actionTarget.actionReward(address(token), round, actionId);
                 if (handler.minted(actionId, round)) {
                     require(mintedFlag && amount == handler.MINT_AMOUNT(), "minted ledger");
                 } else {

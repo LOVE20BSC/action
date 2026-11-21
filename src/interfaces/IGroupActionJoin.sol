@@ -164,22 +164,22 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
 
     function joinInfo(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (JoinInfo memory info);
 
     function joinedAmountByGroupId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (uint256);
 
     function groupIdsByRound(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 offset,
         uint256 limit,
         bool reverse
@@ -202,8 +202,8 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
 
     function memberIdsByGroupId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 offset,
         uint256 limit,
@@ -253,8 +253,8 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
 
     function providerAmountsByMemberId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 offset,
         uint256 limit,

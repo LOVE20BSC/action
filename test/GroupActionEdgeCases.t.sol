@@ -18,7 +18,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         _joinAt(GROUP_B_ID, MEMBER2_ID, 60e18, 0);
         _joinAt(GROUP_B_ID, MEMBER2_ID, 40e18, 0);
         require(
-            executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_B_ID) == 100e18,
+            executor.joinedAmountByGroupId(address(token), 2, ACTION_ID, GROUP_B_ID) == 100e18,
             "capacity filled exactly"
         );
 
@@ -44,7 +44,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         });
         _activateGroupWith(GROUP_B_ID, config);
         require(
-            bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_B_ID)).length == 1024,
+            bytes(executor.descriptionByRound(address(token), 3, ACTION_ID, GROUP_B_ID)).length == 1024,
             "1024 bytes accepted"
         );
     }
@@ -83,7 +83,7 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         require(executor.activationStakeByActionId(address(token), ACTION_ID) == ACTIVATION_STAKE, "stake taken again");
 
         _join(MEMBER2_ID, 1e18, 0);
-        require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 4, MEMBER2_ID) == 1e18, "join resumed");
+        require(executor.joinedAmountByMemberId(address(token), 4, ACTION_ID, MEMBER2_ID) == 1e18, "join resumed");
     }
 
     function testGroupRoundSnapshotAfterLastExit() external {
@@ -93,14 +93,14 @@ contract GroupActionEdgeCasesTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(MEMBER2, 10e18);
         _joinOn(address(token), ACTION_ID, GROUP_B_ID, MEMBER2_ID, 1e18);
 
-        (uint256[] memory groupIds, uint256 total) = executor.groupIdsByRound(address(token), ACTION_ID, 2, 0, 10, false);
+        (uint256[] memory groupIds, uint256 total) = executor.groupIdsByRound(address(token), 2, ACTION_ID, 0, 10, false);
         require(total == 1 && groupIds[0] == GROUP_B_ID, "group registered for the join round");
 
         _atPhase(4);
         _exitOn(address(token), ACTION_ID, MEMBER2_ID);
-        (groupIds, total) = executor.groupIdsByRound(address(token), ACTION_ID, 3, 0, 10, false);
+        (groupIds, total) = executor.groupIdsByRound(address(token), 3, ACTION_ID, 0, 10, false);
         require(total == 0, "empty group leaves the later round");
-        (groupIds, total) = executor.groupIdsByRound(address(token), ACTION_ID, 2, 0, 10, false);
+        (groupIds, total) = executor.groupIdsByRound(address(token), 2, ACTION_ID, 0, 10, false);
         require(total == 1 && groupIds[0] == GROUP_B_ID, "join-round history kept");
         require(executor.isGroupActive(address(token), ACTION_ID, GROUP_B_ID), "group stays active");
     }

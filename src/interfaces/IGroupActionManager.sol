@@ -125,8 +125,8 @@ interface IGroupActionManager is IGroupActionManagerEvents, IGroupActionManagerE
 
     function descriptionByRound(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (string memory);
 

@@ -48,8 +48,8 @@ library GroupRecipients {
     function setRecipients(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        uint256 round,
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
         uint256 groupId,
         uint256[] calldata recipientIds,
@@ -59,8 +59,8 @@ library GroupRecipients {
         _setRecipients(
             self,
             protocol,
-            round,
             sourceTokenAddress,
+            round,
             sourceActionId,
             groupId,
             RecipientTable({recipientIds: recipientIds, ratios: ratios, remarks: remarks})
@@ -70,8 +70,8 @@ library GroupRecipients {
     function _setRecipients(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        uint256 round,
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
         uint256 groupId,
         RecipientTable memory table
@@ -128,9 +128,9 @@ library GroupRecipients {
     function recipients(
         GroupServiceStorage.Layout storage self,
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
-        uint256 groupId,
-        uint256 round
+        uint256 groupId
     )
         external
         view
@@ -160,9 +160,9 @@ library GroupRecipients {
     function distribution(
         GroupServiceStorage.Layout storage self,
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256 round,
         uint256 groupReward
     ) external view returns (Distribution memory distributionInfo) {
         distributionInfo.recipientIds = self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
@@ -178,8 +178,8 @@ library GroupRecipients {
         GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 groupId,
         uint256 ownerReward,
         uint256 ownerWeight
@@ -193,12 +193,12 @@ library GroupRecipients {
         for (uint256 i = 0; i < sourceActionIds.length; i++) {
             uint256 sourceActionId = sourceActionIds[i];
             uint256 slice =
-                ownerSlice(protocol, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight);
+                ownerSlice(protocol, sourceTokenAddress, round, sourceActionId, groupId, ownerReward, ownerWeight);
             if (slice == 0) {
                 continue;
             }
             distributed += _distributeToRecipients(
-                self, protocol, slice, sourceTokenAddress, serviceTokenAddress, serviceActionId, round, groupId, sourceActionId
+                self, protocol, slice, sourceTokenAddress, serviceTokenAddress, round, serviceActionId, groupId, sourceActionId
             );
         }
     }
@@ -220,7 +220,7 @@ library GroupRecipients {
             self.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, 0, type(uint256).max, false);
         for (uint256 i = 0; i < sourceActionIds.length; i++) {
             distributed += _projectedForAction(
-                self, protocol, sourceTokenAddress, sourceActionIds[i], round, groupId, ownerReward, ownerWeight
+                self, protocol, sourceTokenAddress, round, sourceActionIds[i], groupId, ownerReward, ownerWeight
             );
         }
     }
@@ -231,8 +231,8 @@ library GroupRecipients {
         uint256 slice,
         address sourceTokenAddress,
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 groupId,
         uint256 sourceActionId
     ) internal returns (uint256 distributed) {
@@ -268,14 +268,14 @@ library GroupRecipients {
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
-        uint256 sourceActionId,
         uint256 round,
+        uint256 sourceActionId,
         uint256 groupId,
         uint256 ownerReward,
         uint256 ownerWeight
     ) internal view returns (uint256 distributed) {
         uint256 slice = ownerSlice(
-            protocol, sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight
+            protocol, sourceTokenAddress, round, sourceActionId, groupId, ownerReward, ownerWeight
         );
         if (slice == 0) {
             return 0;
@@ -290,14 +290,14 @@ library GroupRecipients {
     function ownerSlice(
         GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
-        uint256 sourceActionId,
         uint256 round,
+        uint256 sourceActionId,
         uint256 groupId,
         uint256 ownerReward,
         uint256 ownerWeight
     ) internal view returns (uint256) {
         uint256 groupReward = GroupServiceStorage.groupReward(
-            protocol.groupActionExecutorAddress, sourceTokenAddress, sourceActionId, round, groupId
+            protocol.groupActionExecutorAddress, sourceTokenAddress, round, sourceActionId, groupId
         );
         if (groupReward == 0) {
             return 0;

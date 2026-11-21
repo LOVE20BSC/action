@@ -198,8 +198,8 @@ contract ActionTarget is IActionTarget {
 
     function isJoinedByRound(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (bool) {
         _checkJoinRound(round);
@@ -239,8 +239,8 @@ contract ActionTarget is IActionTarget {
 
     function memberIdsByActionId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 offset,
         uint256 limit,
         bool reverse
@@ -252,8 +252,8 @@ contract ActionTarget is IActionTarget {
 
     function mintActionReward(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external onlyBoundExecutor(tokenAddress, actionId) returns (uint256 amount) {
         if (!IVote(VOTE_ADDRESS).isProposalIdVoted(tokenAddress, round, actionId)) {
             revert ProposalNotVoted(tokenAddress, actionId);
@@ -273,8 +273,8 @@ contract ActionTarget is IActionTarget {
 
     function actionReward(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (uint256 amount, bool minted) {
         if (_executorByActionId[tokenAddress][actionId] == address(0)) return (amount, minted);
 

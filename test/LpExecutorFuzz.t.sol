@@ -11,11 +11,11 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000 + joinElapsed);
         _join(1, joinAmount);
 
-        (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
+        (uint256 deduction,,) = lpExecutor.deduction(address(token), 2, ACTION_ID, 1);
         require(deduction == joinAmount * joinElapsed / PHASE_BLOCKS, "deduction formula");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == deduction, "total deduction");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == deduction, "total deduction");
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == joinAmount,
+            lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == joinAmount,
             "balance recorded"
         );
     }
@@ -26,9 +26,9 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000 + joinElapsed);
         _join(1, joinAmount);
 
-        (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, 1);
+        (uint256 deduction,,) = lpExecutor.deduction(address(token), 2, ACTION_ID, 1);
         require(deduction == joinAmount, "deduction capped at the amount");
-        require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == joinAmount, "total capped");
+        require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == joinAmount, "total capped");
     }
 
     function testFuzzWithdrawScalesDeduction(uint96 amount, uint16 elapsed, uint96 withdrawSeed) external {
@@ -36,25 +36,25 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         uint256 joinElapsed = uint256(elapsed) % PHASE_BLOCKS;
         _atPhaseBlock(3, 3000 + joinElapsed);
         _join(1, joinAmount);
-        uint256 deductionBefore = lpExecutor.deductionByRound(address(token), ACTION_ID, 2);
+        uint256 deductionBefore = lpExecutor.deductionByRound(address(token), 2, ACTION_ID);
         uint256 withdrawAmount = uint256(withdrawSeed) % joinAmount + 1;
 
         _withdraw(1, withdrawAmount);
 
         if (withdrawAmount == joinAmount) {
-            require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "full withdraw takes all");
+            require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 0, "full withdraw takes all");
             require(
-                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0,
+                lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 0,
                 "balance cleared"
             );
         } else {
             uint256 reduction = deductionBefore * withdrawAmount / joinAmount;
             require(
-                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == joinAmount - withdrawAmount,
+                lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == joinAmount - withdrawAmount,
                 "balance reduced"
             );
             require(
-                lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == deductionBefore - reduction,
+                lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == deductionBefore - reduction,
                 "deduction reduced proportionally"
             );
         }
@@ -77,17 +77,17 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         stake.setGovVotes(address(token), 2, 1, validVotes);
         stake.setTotalGovVotes(address(token), 2, totalGovVotes);
         _atPhase(4);
-        _setActionReward(SECOND_ACTION_ID, 2, reward, true);
+        _setActionReward(2, SECOND_ACTION_ID, reward, true);
         _fundExecutor(reward);
 
         (uint256 expectedMint, uint256 expectedBurn) =
             _referenceReward(reward, validVotes, totalGovVotes, multiplier);
         (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 2, 1);
+            lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
         require(mintedBefore == false, "not minted yet");
         require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending matches the reference");
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, SECOND_ACTION_ID, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "split matches the reference");
         require(mintAmount + burnAmount == reward, "reward is conserved");
     }
@@ -101,13 +101,13 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         if (fullWithdraw) {
             _withdraw(1, joinAmount);
             require(
-                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == 0, "joined amount cleared to zero"
+                lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 0, "joined amount cleared to zero"
             );
-            require(lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == 0, "round deduction cleared to zero");
+            require(lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == 0, "round deduction cleared to zero");
             require(actionTarget.isJoined(address(token), ACTION_ID, 1) == false, "join state cleared");
         } else {
             require(
-                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, 1) == joinAmount,
+                lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == joinAmount,
                 "joined amount untouched without a withdrawal"
             );
             require(actionTarget.isJoined(address(token), ACTION_ID, 1), "join state kept without a withdrawal");
@@ -120,15 +120,15 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         stake.setTotalGovVotes(address(token), 2, totalGovVotes);
         stake.setGovVotes(address(token), 2, 1, validVotes);
 
-        (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), ACTION_ID, 2, 1);
+        (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(minted == false && ratio == validVotes * 1e18 / totalGovVotes, "floor division");
     }
 
     function test_ZeroBoundaries(uint256 effectiveAmount, uint256 totalVotes, uint256 multiplier) external {
         _atPhase(4);
-        _setActionReward(ACTION_ID, 2, PROPOSAL_REWARD, true);
+        _setActionReward(2, ACTION_ID, PROPOSAL_REWARD, true);
         (uint256 idleMint, uint256 idleBurn, bool idleMinted) =
-            lpExecutor.memberReward(address(token), ACTION_ID, 2, 1);
+            lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
         require(!idleMinted && idleMint == 0 && idleBurn == 0, "zero total effective amount");
 
         uint256 memberAmount = effectiveAmount % 1e24 + 1e18;
@@ -143,7 +143,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         stake.setGovVotes(address(token), 2, 1, validVotes);
         stake.setTotalGovVotes(address(token), 2, totalGovVotes);
         _atPhase(4);
-        _setActionReward(SECOND_ACTION_ID, 2, PROPOSAL_REWARD, true);
+        _setActionReward(2, SECOND_ACTION_ID, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
         uint256 totalEffectiveAmount = memberAmount + 1e18;
@@ -166,11 +166,11 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         }
 
         (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), SECOND_ACTION_ID, 2, 1);
+            lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
         require(!mintedBefore, "not minted yet");
         require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending zero boundary");
 
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(SECOND_ACTION_ID, 2, 1);
+        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, SECOND_ACTION_ID, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "zero boundary split");
         require(mintAmount + burnAmount == theoreticalReward, "reward is conserved");
     }
@@ -188,7 +188,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
                 IActionExecutorErrors.BatchLengthMismatch.selector, actionIdsLength, roundsLength
             )
         );
-        lpExecutor.mintMemberRewards(address(token), actionIds, rounds, 1);
+        lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
     }
 
     function _referenceReward(

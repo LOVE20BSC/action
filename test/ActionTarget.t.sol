@@ -7,7 +7,11 @@ import {MockExecutor, MockMint} from "./mocks/ActionTargetMocks.sol";
 import {ActionTargetTestBase} from "./ActionTargetTestBase.sol";
 
 contract ActionTargetTest is ActionTargetTestBase {
-    function _joinNotOpenData(uint256 actionId, uint256 currentRound, uint256 createdRound)
+    function _joinNotOpenData(
+        uint256 currentRound,
+        uint256 actionId,
+        uint256 createdRound
+    )
         internal
         view
         returns (bytes memory)
@@ -206,7 +210,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(2);
         _join(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1), "joined");
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 1 && memberIds.length == 1 && memberIds[0] == 1, "snapshot at join round");
         (uint256[] memory actionIds, uint256 actionTotal) =
             actionTarget.actionIdsByMemberId(address(token), 1, 0, 10, false);
@@ -234,12 +238,12 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(1);
         _createAction(11);
         vm.prank(address(executor));
-        vm.expectRevert(_joinNotOpenData(11, 1, 1));
+        vm.expectRevert(_joinNotOpenData(1, 11, 1));
         actionTarget.registerJoinState(address(token), 11, 1);
 
         phase.setPhase(0);
         vm.prank(address(executor));
-        vm.expectRevert(_joinNotOpenData(11, 0, 1));
+        vm.expectRevert(_joinNotOpenData(0, 11, 1));
         actionTarget.registerJoinState(address(token), 11, 1);
 
         phase.setPhase(2);
@@ -252,7 +256,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         phase.setPhase(2);
         _join(11, 1);
         _join(11, 1);
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 1 && memberIds.length == 1, "single membership");
     }
 
@@ -266,8 +270,8 @@ contract ActionTargetTest is ActionTargetTestBase {
         (uint256[] memory actionIds, uint256 actionTotal) =
             actionTarget.actionIdsByMemberId(address(token), 1, 0, 10, false);
         require(actionTotal == 0 && actionIds.length == 0, "mirror cleared");
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 1), "round 1 snapshot retained");
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        require(actionTarget.isJoinedByRound(address(token), 1, 11, 1), "round 1 snapshot retained");
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 1 && memberIds.length == 1, "round 1 member list retained");
     }
 
@@ -321,7 +325,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         _forceClearJoinState(11, 1);
         _clear(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "still cleared");
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 2, 11, 0, 10, false);
         require(total == 0 && memberIds.length == 0, "round 2 snapshot stays empty");
     }
 
@@ -362,14 +366,14 @@ contract ActionTargetTest is ActionTargetTestBase {
         _join(11, 1);
         phase.setPhase(3);
         _clear(11, 1);
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 1), "joined as of round 1");
-        require(actionTarget.isJoinedByRound(address(token), 11, 2, 1) == false, "cleared as of round 2");
-        require(actionTarget.isJoinedByRound(address(token), 11, 0, 1) == false, "not joined before round 1");
+        require(actionTarget.isJoinedByRound(address(token), 1, 11, 1), "joined as of round 1");
+        require(actionTarget.isJoinedByRound(address(token), 2, 11, 1) == false, "cleared as of round 2");
+        require(actionTarget.isJoinedByRound(address(token), 0, 11, 1) == false, "not joined before round 1");
         phase.setPhase(4);
         _join(11, 1);
-        require(actionTarget.isJoinedByRound(address(token), 11, 3, 1), "rejoined as of round 3");
+        require(actionTarget.isJoinedByRound(address(token), 3, 11, 1), "rejoined as of round 3");
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 4, 3));
-        actionTarget.isJoinedByRound(address(token), 11, 4, 1);
+        actionTarget.isJoinedByRound(address(token), 4, 11, 1);
         require(actionTarget.isJoined(address(token), 11, 1), "currently joined");
     }
 
@@ -433,10 +437,10 @@ contract ActionTargetTest is ActionTargetTestBase {
         _join(11, 1);
         phase.setPhase(4);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 5, 3));
-        actionTarget.memberIdsByActionId(address(token), 11, 5, 0, 10, false);
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 3, 0, 10, false);
+        actionTarget.memberIdsByActionId(address(token), 5, 11, 0, 10, false);
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 3, 11, 0, 10, false);
         require(total == 1 && memberIds[0] == 1, "nearest snapshot at round 3");
-        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 11, 0, 0, 10, false);
+        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 0, 11, 0, 10, false);
         require(total == 0 && memberIds.length == 0, "before first join is empty");
     }
 
@@ -475,19 +479,19 @@ contract ActionTargetTest is ActionTargetTestBase {
         _join(11, 2);
         _join(11, 3);
 
-        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 3 && page.length == 3 && page[0] == 1 && page[1] == 2 && page[2] == 3, "forward page");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 1, 1, false);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 1, 1, false);
         require(total == 3 && page.length == 1 && page[0] == 2, "offset and limit");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 0, false);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 0, false);
         require(total == 3 && page.length == 0, "limit zero returns total only");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 9, 10, false);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 9, 10, false);
         require(total == 3 && page.length == 0, "out of range offset");
 
         _clear(11, 1);
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 2 && page[0] == 3 && page[1] == 2, "swap-and-pop changes same offset");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, true);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, true);
         require(total == 2 && page[0] == 2 && page[1] == 3, "reverse walks current storage order");
     }
 
@@ -639,7 +643,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         vote.setProposalVoted(address(token), round, 11, true);
 
         vm.prank(address(executor));
-        uint256 amount = actionTarget.mintActionReward(address(token), 11, round);
+        uint256 amount = actionTarget.mintActionReward(address(token), round, 11);
         require(amount == MINT_AMOUNT, "amount returned");
         require(mint.mintCalls() == 1, "mint called once");
         require(mint.lastMintCaller() == address(actionTarget), "action target is the caller");
@@ -649,7 +653,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         // The reward is minted straight to the executor; there is no forwarding transfer any more.
         require(mint.lastMintRecipient() == address(executor), "executor named as recipient");
         require(token.transferCalls() == 0, "no token transfer on the mint path");
-        (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), round, 11);
         require(recorded == MINT_AMOUNT && minted, "reward query");
     }
 
@@ -659,11 +663,11 @@ contract ActionTargetTest is ActionTargetTestBase {
         vote.setProposalVoted(address(token), round, 11, true);
         vm.prank(OUTSIDER);
         vm.expectRevert(_unauthorizedExecutorData(11));
-        actionTarget.mintActionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
 
         vm.prank(address(executor));
         vm.expectRevert(_unauthorizedExecutorData(99));
-        actionTarget.mintActionReward(address(token), 99, round);
+        actionTarget.mintActionReward(address(token), round, 99);
     }
 
     function testMintActionRewardRejectsRepeat() external {
@@ -671,14 +675,14 @@ contract ActionTargetTest is ActionTargetTestBase {
         uint256 round = 5;
         vote.setProposalVoted(address(token), round, 11, true);
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
 
         // Dedup belongs to Mint; the repeat must be rejected there.
         vm.prank(address(executor));
         vm.expectRevert(
             abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, 11)
         );
-        actionTarget.mintActionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
         require(mint.mintCalls() == 1, "mint not repeated");
         require(token.transferCalls() == 0, "no token transfer on the mint path");
     }
@@ -688,7 +692,7 @@ contract ActionTargetTest is ActionTargetTestBase {
         uint256 round = 5;
         vm.prank(address(executor));
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.ProposalNotVoted.selector, address(token), 11));
-        actionTarget.mintActionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
         require(mint.mintCalls() == 0, "mint not attempted");
     }
 
@@ -697,11 +701,11 @@ contract ActionTargetTest is ActionTargetTestBase {
         vote.setProposalVoted(address(token), 5, 11, true);
         vote.setProposalVoted(address(token), 6, 11, true);
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, 5);
+        actionTarget.mintActionReward(address(token), 5, 11);
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, 6);
-        (uint256 amount5, bool minted5) = actionTarget.actionReward(address(token), 11, 5);
-        (uint256 amount6, bool minted6) = actionTarget.actionReward(address(token), 11, 6);
+        actionTarget.mintActionReward(address(token), 6, 11);
+        (uint256 amount5, bool minted5) = actionTarget.actionReward(address(token), 5, 11);
+        (uint256 amount6, bool minted6) = actionTarget.actionReward(address(token), 6, 11);
         require(amount5 == MINT_AMOUNT && minted5 && amount6 == MINT_AMOUNT && minted6, "per-round dedup");
         require(mint.mintCalls() == 2, "one mint per round");
     }
@@ -714,25 +718,25 @@ contract ActionTargetTest is ActionTargetTestBase {
         mint.setRevertOnMint(true);
         vm.prank(address(executor));
         vm.expectRevert(abi.encodeWithSelector(MockMint.MintProposalRewardReverted.selector));
-        actionTarget.mintActionReward(address(token), 11, round);
-        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
+        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), round, 11);
         require(amount == MINT_AMOUNT && minted == false, "expected amount remains after revert");
     }
 
     function testActionRewardReturnsExpectedBeforeMint() external {
         _createAction(11);
         uint256 round = 5;
-        (uint256 unset, bool unsetMinted) = actionTarget.actionReward(address(token), 11, round);
+        (uint256 unset, bool unsetMinted) = actionTarget.actionReward(address(token), round, 11);
         require(unset == 0 && unsetMinted == false, "no reward set");
 
         mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, ProposalRewardStatus.Unsettled);
-        (uint256 expected, bool mintedBefore) = actionTarget.actionReward(address(token), 11, round);
+        (uint256 expected, bool mintedBefore) = actionTarget.actionReward(address(token), round, 11);
         require(expected == MINT_AMOUNT && mintedBefore == false, "expected amount before mint");
 
         vote.setProposalVoted(address(token), round, 11, true);
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, round);
-        (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
+        (uint256 recorded, bool minted) = actionTarget.actionReward(address(token), round, 11);
         require(recorded == MINT_AMOUNT && minted, "recorded amount after mint");
     }
 
@@ -742,19 +746,19 @@ contract ActionTargetTest is ActionTargetTestBase {
         vote.setProposalVoted(address(token), round, 11, true);
         mint.setProposalReward(address(token), round, 11, MINT_AMOUNT, ProposalRewardStatus.Burned);
 
-        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, round);
+        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), round, 11);
         require(amount == 0 && !minted, "burned shares cannot be distributed");
         vm.prank(address(executor));
         vm.expectRevert(
             abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyBurned.selector, address(token), round, 11)
         );
-        actionTarget.mintActionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
     }
 
     function testRewardQueriesDefaultForUnboundRounds() external view {
-        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 11, 5);
+        (uint256 amount, bool minted) = actionTarget.actionReward(address(token), 5, 11);
         require(amount == 0 && minted == false, "unbound action defaults");
-        (amount, minted) = actionTarget.actionReward(address(token), 11, 0);
+        (amount, minted) = actionTarget.actionReward(address(token), 0, 11);
         require(amount == 0 && minted == false, "round zero defaults");
     }
 

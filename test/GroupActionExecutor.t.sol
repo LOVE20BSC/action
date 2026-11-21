@@ -25,20 +25,20 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _prepareRound();
 
         _atPhase(4);
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         _submitScores(_scores(100, 60));
 
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "round verified");
-        (uint256 verifierId,,) = executor.verifier(address(token), ACTION_ID, 2);
+        require(executor.isRoundVerified(address(token), 2, ACTION_ID), "round verified");
+        (uint256 verifierId,,) = executor.verifier(address(token), 2, ACTION_ID);
         require(verifierId == VERIFIER_ID, "elected verifier");
-        require(executor.verifiedMemberCount(address(token), ACTION_ID, 2, GROUP_ID) == 2, "cursor complete");
+        require(executor.verifiedMemberCount(address(token), 2, ACTION_ID, GROUP_ID) == 2, "cursor complete");
 
         uint256 memberFinal1 = 100e18 * 100;
         uint256 memberFinal2 = PROVIDER_QUOTA * 60;
         uint256 totalFinal = memberFinal1 + memberFinal2;
-        require(executor.totalFinalScore(address(token), ACTION_ID, 2) == totalFinal, "total final score");
+        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == totalFinal, "total final score");
         require(
-            executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID) == PROVIDER_QUOTA,
+            executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER2_ID) == PROVIDER_QUOTA,
             "provider quota counted as join amount"
         );
 
@@ -51,11 +51,11 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         require(expected1 + expected2 == PROPOSAL_REWARD - 1, "dust sanity");
 
         (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
-            executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+            executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(viewAmount == expected1 && viewBurn == 0 && !viewMinted, "member reward preview");
 
         require(
-            executor.generatedActionRewardByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == PROPOSAL_REWARD,
+            executor.generatedActionRewardByGroupId(address(token), 2, ACTION_ID, GROUP_ID) == PROPOSAL_REWARD,
             "group reward"
         );
 
@@ -71,7 +71,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
 
         require(actionTarget.mintRewardCalls() == 1, "single reward pull");
         require(actionTarget.registerCalls() == 2, "join state registered");
-        (viewAmount, viewBurn, viewMinted) = executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+        (viewAmount, viewBurn, viewMinted) = executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(viewAmount == expected1 && viewBurn == 0 && viewMinted, "minted flag recorded");
     }
 
@@ -80,7 +80,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
 
         _atPhase(5);
         require(
-            executor.generatedActionRewardByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == 0,
+            executor.generatedActionRewardByGroupId(address(token), 2, ACTION_ID, GROUP_ID) == 0,
             "no group reward"
         );
 
@@ -92,10 +92,10 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 2
             )
         );
-        executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
 
         (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
-            executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+            executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(viewAmount == 0 && viewBurn == 0 && !viewMinted, "unsettled round stays pending");
     }
 
@@ -106,14 +106,14 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _submitScores(_scores(100));
 
         require(
-            executor.totalFinalScore(address(token), ACTION_ID, 2) == 100e18 * 100,
+            executor.totalFinalScore(address(token), 2, ACTION_ID) == 100e18 * 100,
             "scored member counted"
         );
-        require(!executor.isRoundVerified(address(token), ACTION_ID, 2), "round not complete");
+        require(!executor.isRoundVerified(address(token), 2, ACTION_ID), "round not complete");
 
         _atPhase(5);
         require(
-            executor.generatedActionRewardByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == 0,
+            executor.generatedActionRewardByGroupId(address(token), 2, ACTION_ID, GROUP_ID) == 0,
             "partial batches unlock nothing"
         );
 
@@ -125,7 +125,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 2
             )
         );
-        executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
     }
 
     function testBatchMintMemberRewards() external {
@@ -134,7 +134,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _submitScores(_scores(100, 60));
         _atPhase(5);
         _fundExecutor(PROPOSAL_REWARD);
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
 
         uint256 expected1 = Math.mulDiv(PROPOSAL_REWARD, 100e18 * 100, 100e18 * 100 + PROVIDER_QUOTA * 60);
@@ -145,7 +145,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         rounds[0] = 2;
         vm.prank(MEMBER1);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            executor.mintMemberRewards(address(token), actionIds, rounds, MEMBER1_ID);
+            executor.mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
         require(mintAmounts[0] == expected1 && burnAmounts[0] == 0, "batch mint amount");
         require(token.balanceOf(MEMBER1) == expected1, "batch mint paid");
 
@@ -154,11 +154,11 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         mismatched[1] = ACTION_ID;
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
-        executor.mintMemberRewards(address(token), mismatched, rounds, MEMBER1_ID);
+        executor.mintMemberRewards(address(token), rounds, mismatched, MEMBER1_ID);
 
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
-        executor.mintMemberRewards(address(token), mismatched, rounds, MEMBER1_ID);
+        executor.mintMemberRewards(address(token), rounds, mismatched, MEMBER1_ID);
 
         vm.prank(MEMBER1);
         vm.expectRevert(
@@ -166,7 +166,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), ACTION_ID, MEMBER1_ID, 2
             )
         );
-        executor.mintMemberRewards(address(token), actionIds, rounds, MEMBER1_ID);
+        executor.mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
     }
 
     function testBatchSettlementLocalizesTheFailingElement() external {
@@ -175,7 +175,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _submitScores(_scores(100, 60));
         _atPhase(5);
         _fundExecutor(PROPOSAL_REWARD);
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
 
         uint256[] memory actionIds = new uint256[](2);
@@ -189,9 +189,9 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
         );
-        executor.mintMemberRewards(address(token), actionIds, rounds, MEMBER1_ID);
+        executor.mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
 
-        (,, bool minted) = executor.memberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+        (,, bool minted) = executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(!minted, "earlier element rolled back");
         require(actionTarget.mintRewardCalls() == 0, "no action reward pulled");
     }
@@ -199,15 +199,15 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
     function testJoinedAmountQueryGuards() external {
         _prepareRound();
 
-        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18 + PROVIDER_QUOTA, "round total");
+        require(executor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 100e18 + PROVIDER_QUOTA, "round total");
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 3, 2));
-        executor.joinedAmountByActionId(address(token), ACTION_ID, 3);
+        executor.joinedAmountByActionId(address(token), 3, ACTION_ID);
         require(
-            executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == 100e18,
+            executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER1_ID) == 100e18,
             "member round amount"
         );
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 3, 2));
-        executor.joinedAmountByMemberId(address(token), ACTION_ID, 3, MEMBER1_ID);
+        executor.joinedAmountByMemberId(address(token), 3, ACTION_ID, MEMBER1_ID);
         require(executor.joinTokenAddress(address(token), ACTION_ID) == address(joinToken), "join token");
         require(executor.currentJoinRound() == 2, "join round getter");
         require(executor.currentVoteRound() == 3, "vote round getter");
@@ -235,12 +235,12 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _join(MEMBER1_ID, 50e18, PROVIDER_ID);
 
         (uint256[] memory providerIds, uint256[] memory amounts, uint256 total) =
-            executor.providerAmountsByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID, 0, 10, false);
+            executor.providerAmountsByMemberId(address(token), 2, ACTION_ID, MEMBER2_ID, 0, 10, false);
         require(total == 2, "two sources");
         require(providerIds[0] == PROVIDER_ID && amounts[0] == 120e18, "first source");
         require(providerIds[1] == secondProviderId && amounts[1] == 80e18, "second source");
         require(
-            amounts[0] + amounts[1] == executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID),
+            amounts[0] + amounts[1] == executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER2_ID),
             "sources sum to join amount"
         );
 
@@ -298,8 +298,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _atPhase(4);
         _submitScores(_scores(0, 0));
 
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "verified");
-        require(executor.totalFinalScore(address(token), ACTION_ID, 2) == 0, "zero total");
+        require(executor.isRoundVerified(address(token), 2, ACTION_ID), "verified");
+        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == 0, "zero total");
 
         _atPhase(5);
         vm.prank(MEMBER1);
@@ -310,7 +310,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
                 2
             )
         );
-        executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
     }
 
     function testMintRejectsAnUncreatedAction() external {
@@ -319,14 +319,14 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.ActionNotCreated.selector, address(token), ACTION_ID + 1)
         );
-        executor.mintMemberReward(address(token), ACTION_ID + 1, 2, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 2, ACTION_ID + 1, MEMBER1_ID);
     }
 
     function testMintChecksOwnerBeforeActionExistence() external {
         _atPhase(4);
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
-        executor.mintMemberReward(address(token), ACTION_ID + 1, 2, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 2, ACTION_ID + 1, MEMBER1_ID);
     }
 
     function testMintRoundGuards() external {
@@ -337,11 +337,11 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, 1, 2)
         );
-        executor.mintMemberReward(address(token), ACTION_ID, 1, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 1, ACTION_ID, MEMBER1_ID);
 
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, 3, 2));
-        executor.mintMemberReward(address(token), ACTION_ID, 3, MEMBER1_ID);
+        executor.mintMemberReward(address(token), 3, ACTION_ID, MEMBER1_ID);
     }
 
     /// @dev The action is reusable: a later round re-submits it, the community votes again, members
@@ -359,34 +359,34 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         vote.setVotesNum(address(token), 5, 1000e18);
         vote.setVotesNumByProposalId(address(token), 5, ACTION_ID, 1000e18);
         require(
-            executor.verifierApplication(address(token), ACTION_ID, 5, VERIFIER_ID).applicationId
-                == executor.verifierApplication(address(token), ACTION_ID, CREATION_PHASE, VERIFIER_ID).applicationId,
+            executor.verifierApplication(address(token), 5, ACTION_ID, VERIFIER_ID).applicationId
+                == executor.verifierApplication(address(token), CREATION_PHASE, ACTION_ID, VERIFIER_ID).applicationId,
             "the creation-round application still stands"
         );
         _castVotesForAt(VERIFIER_ID, 100e18, 5);
 
-        (uint256 round5Verifier,, uint256 round5Votes) = executor.verifier(address(token), ACTION_ID, 5);
+        (uint256 round5Verifier,, uint256 round5Votes) = executor.verifier(address(token), 5, ACTION_ID);
         require(round5Verifier == VERIFIER_ID && round5Votes == 100e18, "round 5 election");
-        (uint256 creationVerifier,,) = executor.verifier(address(token), ACTION_ID, CREATION_PHASE);
+        (uint256 creationVerifier,,) = executor.verifier(address(token), CREATION_PHASE, ACTION_ID);
         require(creationVerifier == 0, "creation round has no votes");
 
         _atPhase(6);
         _fundJoinTokenFor(MEMBER1, 100e18);
         _join(MEMBER1_ID, 100e18, 0);
         require(
-            executor.joinedAmountByMemberId(address(token), ACTION_ID, 5, MEMBER1_ID) == 100e18,
+            executor.joinedAmountByMemberId(address(token), 5, ACTION_ID, MEMBER1_ID) == 100e18,
             "round 5 participation"
         );
 
         _atPhase(7);
         _submitScores(_scores(100));
-        require(executor.isRoundVerified(address(token), ACTION_ID, 5), "round 5 verified");
-        (uint256 verifierId,,) = executor.verifier(address(token), ACTION_ID, 5);
+        require(executor.isRoundVerified(address(token), 5, ACTION_ID), "round 5 verified");
+        (uint256 verifierId,,) = executor.verifier(address(token), 5, ACTION_ID);
         require(verifierId == VERIFIER_ID, "round 5 verifier");
 
         _atPhase(8);
         _fundExecutor(PROPOSAL_REWARD);
-        actionTarget.setActionReward(address(token), ACTION_ID, 5, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 5, ACTION_ID, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
         (uint256 mintAmount, uint256 burnAmount) = _settle(5, MEMBER1_ID);
         require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "round 5 settles on its own weights");

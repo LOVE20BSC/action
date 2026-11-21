@@ -71,7 +71,7 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         require(participationCount == 2 * SUBMIT_ROUND_LIMIT + 1, "historical positions carry forward");
         vm.resumeGasMetering();
 
-        _assertClaim(serviceActionIds[0], round, SINGLE_ACTION_CLAIM_BUDGET, 0);
+        _assertClaim(round, serviceActionIds[0], SINGLE_ACTION_CLAIM_BUDGET, 0);
     }
 
     function testOwnerClaimWithAThousandRewardedActionsAndFullRecipientLists() external {
@@ -88,18 +88,18 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         uint256 distributed = perRecipient * _recipientCount();
         uint256 unpreparedSnapshot = vm.snapshotState();
         _assertProgress(round, 0);
-        _assertClaim(serviceActionId, round, UNPREPARED_CLAIM_BUDGET, distributed);
+        _assertClaim(round, serviceActionId, UNPREPARED_CLAIM_BUDGET, distributed);
         _assertRecipientBalances(perRecipient);
         require(vm.revertToStateAndDelete(unpreparedSnapshot), "restore unprepared claim");
 
         uint256 firstPageGas = _preparePage(round, ACTIONS_PER_PAGE);
         uint256 onePageSnapshot = vm.snapshotState();
-        _assertClaim(serviceActionId, round, ONE_PAGE_CLAIM_BUDGET, distributed);
+        _assertClaim(round, serviceActionId, ONE_PAGE_CLAIM_BUDGET, distributed);
         _assertRecipientBalances(perRecipient);
         require(vm.revertToStateAndDelete(onePageSnapshot), "restore partially prepared claim");
 
         _finishPreparation(round, ACTIONS_PER_PAGE, firstPageGas);
-        _assertClaim(serviceActionId, round, PREPARED_CLAIM_BUDGET, distributed);
+        _assertClaim(round, serviceActionId, PREPARED_CLAIM_BUDGET, distributed);
         _assertRecipientBalances(perRecipient);
     }
 
@@ -300,7 +300,12 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         }
     }
 
-    function _assertClaim(uint256 serviceActionId, uint256 round, uint256 gasBudget, uint256 expectedDistributed) private {
+    function _assertClaim(
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 gasBudget,
+        uint256 expectedDistributed
+    ) private {
         uint256 expected = 2 * (mint.proposalReward(address(token), round) / 2);
         require(expected > 0, "positive service reward");
         uint256 beforeBalance = token.balanceOf(member1);
@@ -309,7 +314,7 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         vm.prank(member1);
         uint256 beforeGas = gasleft();
         (uint256 paid, uint256 burned) =
-            service.mintMemberReward{gas: gasBudget}(address(token), serviceActionId, round, MEMBER_ID);
+            service.mintMemberReward{gas: gasBudget}(address(token), round, serviceActionId, MEMBER_ID);
         uint256 gasUsed = beforeGas - gasleft();
         emit log_named_uint("claim gas", gasUsed);
         require(gasUsed < gasBudget, "claim exceeds the local gas budget");
@@ -328,7 +333,7 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         vm.prank(member1);
         uint256 beforeGas = gasleft();
         (uint256[] memory paid, uint256[] memory burned) =
-            service.mintMemberRewards{gas: gasBudget}(address(token), serviceActionIds, rounds, MEMBER_ID);
+            service.mintMemberRewards{gas: gasBudget}(address(token), rounds, serviceActionIds, MEMBER_ID);
         uint256 gasUsed = beforeGas - gasleft();
         emit log_named_uint("batch claim gas", gasUsed);
         require(gasUsed < gasBudget, "batch exceeds its measurement budget");

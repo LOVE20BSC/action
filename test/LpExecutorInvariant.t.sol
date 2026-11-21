@@ -124,7 +124,7 @@ contract LpExecutorHandler {
         mintPhase = true;
         MockLpPhase(phaseContract).setCurrentPhase(JOIN_PHASE + 1);
         vm.roll((JOIN_PHASE + 1) * PHASE_BLOCKS);
-        MockLpActionTarget(actionTarget).setActionReward(token, ACTION_ID, 2, PROPOSAL_REWARD, true);
+        MockLpActionTarget(actionTarget).setActionReward(token, 2, ACTION_ID, PROPOSAL_REWARD, true);
         MockERC20(token).mint(lpExecutor, PROPOSAL_REWARD);
         phaseAdvances++;
     }
@@ -144,7 +144,7 @@ contract LpExecutorHandler {
 
         vm.prank(_memberAddress(memberId));
         (uint256 mintAmount, uint256 burnAmount) =
-            LpExecutor(lpExecutor).mintMemberReward(token, ACTION_ID, 2, memberId);
+            LpExecutor(lpExecutor).mintMemberReward(token, 2, ACTION_ID, memberId);
         mintedModel[memberId] = true;
         mintedAmountModel[memberId] = mintAmount;
         burnedAmountModel[memberId] = burnAmount;
@@ -201,28 +201,28 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
 
     function invariant_LedgersMatchModel() public view {
         require(
-            lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2) == handler.totalJoinedModel(),
+            lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID) == handler.totalJoinedModel(),
             "total joined matches model"
         );
         require(
-            lpExecutor.deductionByRound(address(token), ACTION_ID, 2) == handler.totalDeductionModel(),
+            lpExecutor.deductionByRound(address(token), 2, ACTION_ID) == handler.totalDeductionModel(),
             "total deduction matches model"
         );
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
             require(
-                lpExecutor.joinedAmountByMemberId(address(token), ACTION_ID, 2, memberId)
+                lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, memberId)
                     == handler.balanceModel(memberId),
                 "member balance matches model"
             );
-            (uint256 deduction,,) = lpExecutor.deduction(address(token), ACTION_ID, 2, memberId);
+            (uint256 deduction,,) = lpExecutor.deduction(address(token), 2, ACTION_ID, memberId);
             require(deduction == handler.deductionModel(memberId), "member deduction matches model");
         }
     }
 
     function invariant_DeductionNeverExceedsBalance() public view {
         require(
-            lpExecutor.deductionByRound(address(token), ACTION_ID, 2)
-                <= lpExecutor.joinedAmountByActionId(address(token), ACTION_ID, 2),
+            lpExecutor.deductionByRound(address(token), 2, ACTION_ID)
+                <= lpExecutor.joinedAmountByActionId(address(token), 2, ACTION_ID),
             "contract deduction bound"
         );
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
@@ -233,7 +233,7 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
     function invariant_MintRecordsMatchModel() public view {
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
             (uint256 mintAmount, uint256 burnAmount, bool minted) =
-                lpExecutor.memberReward(address(token), ACTION_ID, 2, memberId);
+                lpExecutor.memberReward(address(token), 2, ACTION_ID, memberId);
             if (handler.mintedModel(memberId)) {
                 require(minted, "minted flag matches model");
                 require(

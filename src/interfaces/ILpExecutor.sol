@@ -90,8 +90,8 @@ interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
 
     function deduction(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     )
         external
@@ -102,12 +102,16 @@ interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
             uint256[] memory joinAmounts
         );
 
-    function deductionByRound(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256);
+    function deductionByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    ) external view returns (uint256);
 
     function govRatio(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 ratio, bool minted);
 }

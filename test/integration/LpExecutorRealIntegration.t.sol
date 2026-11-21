@@ -219,34 +219,40 @@ contract LpExecutorRealIntegrationTest {
         _fundMemberLp(member1, LP_JOIN_AMOUNT);
         vm.prank(member1);
         lpExecutor.join(address(token), proposalId, 1, LP_JOIN_AMOUNT);
-        _assertJoinLedger(proposalId, round);
+        _assertJoinLedger(round, proposalId);
 
         _advanceToPhaseStart(round + 2);
         (uint256 cappedMint, uint256 cappedBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), proposalId, round, 1);
+            lpExecutor.memberReward(address(token), round, proposalId, 1);
         require(!mintedBefore && cappedBurn != 0, "reward has pending overflow");
         vm.prank(member1);
         stake.increasePromisedWaitingPhases(address(token), 1, PROMISED_WAITING_PHASES * 3);
-        (uint256 toppedUpMint, uint256 toppedUpBurn,) = lpExecutor.memberReward(address(token), proposalId, round, 1);
+        (uint256 toppedUpMint, uint256 toppedUpBurn,) = lpExecutor.memberReward(address(token), round, proposalId, 1);
         require(toppedUpMint > cappedMint && toppedUpBurn < cappedBurn, "current governance reduces overflow");
         require(toppedUpMint + toppedUpBurn == cappedMint + cappedBurn, "historical theoretical reward stays fixed");
         require(
             stake.govVotes(address(token), round, 1) < stake.govVotes(address(token), phase.currentPhase(), 1),
             "historical votes stay unchanged"
         );
-        _assertSettlement(proposalId, round);
-        _expectRewardAlreadyMinted(proposalId, round);
+        _assertSettlement(round, proposalId);
+        _expectRewardAlreadyMinted(round, proposalId);
     }
 
-    function _assertJoinLedger(uint256 proposalId, uint256 round) internal view {
+    function _assertJoinLedger(
+        uint256 round,
+        uint256 proposalId
+    ) internal view {
         require(actionTarget.isJoined(address(token), proposalId, 1), "action target joined");
-        require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == LP_JOIN_AMOUNT, "join ledger");
-        (uint256 deduction,,) = lpExecutor.deduction(address(token), proposalId, round, 1);
+        require(lpExecutor.joinedAmountByActionId(address(token), round, proposalId) == LP_JOIN_AMOUNT, "join ledger");
+        (uint256 deduction,,) = lpExecutor.deduction(address(token), round, proposalId, 1);
         require(deduction == 0, "joined at the phase start");
         require(lpPair.balanceOf(address(lpExecutor)) == LP_JOIN_AMOUNT, "lp escrowed");
     }
 
-    function _assertSettlement(uint256 proposalId, uint256 round) internal {
+    function _assertSettlement(
+        uint256 round,
+        uint256 proposalId
+    ) internal {
         require(lpExecutor.currentMintRound() == round, "mint round reached");
         (uint256 expectedReward,) = mint.proposalRewardSettlement(address(token), round, proposalId);
         require(expectedReward > 0, "reward available");
@@ -254,16 +260,16 @@ contract LpExecutorRealIntegrationTest {
 
         uint256 memberBefore = token.balanceOf(member1);
         vm.prank(member1);
-        (uint256 mintAmount, uint256 burnAmount) = lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
+        (uint256 mintAmount, uint256 burnAmount) = lpExecutor.mintMemberReward(address(token), round, proposalId, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "split follows the cap");
         require(token.balanceOf(member1) - memberBefore == expectedMint, "member received the mint");
         require(token.balanceOf(address(lpExecutor)) == 0, "executor keeps no reward");
         require(mint.totalRewardMinted(address(token)) == expectedReward, "mint ledger matches the action reward");
 
         (uint256 recordedMint, uint256 recordedBurn, bool minted) =
-            lpExecutor.memberReward(address(token), proposalId, round, 1);
+            lpExecutor.memberReward(address(token), round, proposalId, 1);
         require(minted && recordedMint == mintAmount && recordedBurn == burnAmount, "settlement recorded");
-        (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), proposalId, round, 1);
+        (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), round, proposalId, 1);
         require(
             ratioMinted
                 && ratio
@@ -274,14 +280,17 @@ contract LpExecutorRealIntegrationTest {
         require(lpPair.balanceOf(address(lpExecutor)) == LP_JOIN_AMOUNT, "principal untouched");
     }
 
-    function _expectRewardAlreadyMinted(uint256 proposalId, uint256 round) internal {
+    function _expectRewardAlreadyMinted(
+        uint256 round,
+        uint256 proposalId
+    ) internal {
         vm.prank(member1);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), proposalId, 1, round
             )
         );
-        lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
+        lpExecutor.mintMemberReward(address(token), round, proposalId, 1);
     }
 
     function _expectedSplit(uint256 proposalReward) internal view returns (uint256 mintAmount, uint256 burnAmount) {
@@ -316,7 +325,7 @@ contract LpExecutorRealIntegrationTest {
                 IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), round
             )
         );
-        lpExecutor.mintMemberReward(address(token), proposalId, round, 1);
+        lpExecutor.mintMemberReward(address(token), round, proposalId, 1);
 
         (, status) = mint.proposalRewardSettlement(address(token), round, proposalId);
         require(status == ProposalRewardStatus.Unsettled, "failed attempt leaves the share unsettled");
@@ -339,14 +348,14 @@ contract LpExecutorRealIntegrationTest {
         require(lpPair.balanceOf(member1) - memberBefore == LP_JOIN_AMOUNT / 4, "partial withdraw returned");
         require(actionTarget.isJoined(address(token), proposalId, 1), "partial withdraw keeps the join state");
         require(
-            lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == LP_JOIN_AMOUNT - LP_JOIN_AMOUNT / 4,
+            lpExecutor.joinedAmountByActionId(address(token), round, proposalId) == LP_JOIN_AMOUNT - LP_JOIN_AMOUNT / 4,
             "balance reduced"
         );
 
         vm.prank(member1);
         lpExecutor.withdraw(address(token), proposalId, 1, LP_JOIN_AMOUNT - LP_JOIN_AMOUNT / 4);
         require(actionTarget.isJoined(address(token), proposalId, 1) == false, "full withdraw auto exits");
-        require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == 0, "ledger cleared");
+        require(lpExecutor.joinedAmountByActionId(address(token), round, proposalId) == 0, "ledger cleared");
 
         vm.prank(member1);
         lpExecutor.join(address(token), proposalId, 1, LP_JOIN_AMOUNT / 2);
@@ -354,7 +363,7 @@ contract LpExecutorRealIntegrationTest {
         lpExecutor.exit(address(token), proposalId, 1);
         require(actionTarget.isJoined(address(token), proposalId, 1) == false, "explicit exit");
         require(
-            lpExecutor.joinedAmountByMemberId(address(token), proposalId, round, 1) == 0,
+            lpExecutor.joinedAmountByMemberId(address(token), round, proposalId, 1) == 0,
             "member ledger cleared"
         );
 
@@ -388,10 +397,10 @@ contract LpExecutorRealIntegrationTest {
 
         require(lpPair.balanceOf(member1) == lpBefore, "lp not moved");
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, round, round - 1));
-        lpExecutor.joinedAmountByActionId(address(token), proposalId, round);
+        lpExecutor.joinedAmountByActionId(address(token), round, proposalId);
         _advanceToPhaseStart(round + 1);
-        require(lpExecutor.joinedAmountByActionId(address(token), proposalId, round) == 0, "join ledger rolled back");
-        require(lpExecutor.deductionByRound(address(token), proposalId, round) == 0, "deduction rolled back");
+        require(lpExecutor.joinedAmountByActionId(address(token), round, proposalId) == 0, "join ledger rolled back");
+        require(lpExecutor.deductionByRound(address(token), round, proposalId) == 0, "deduction rolled back");
     }
 
     function testRealIntegration_AdmissionRejects() external {

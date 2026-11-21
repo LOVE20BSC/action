@@ -210,8 +210,8 @@ library GroupActionStorage {
     function generatedActionRewardByGroupId(
         Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) internal view returns (uint256) {
         uint256 groupFinalScore = self.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
@@ -226,8 +226,8 @@ library GroupActionStorage {
     function memberAmountAt(
         Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) internal view returns (uint256) {
         return self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round)

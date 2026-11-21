@@ -139,8 +139,8 @@ interface IGroupServiceExecutor is
 
     function serviceRewardByMemberId(
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 memberId
     )
         external

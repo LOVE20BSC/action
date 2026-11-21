@@ -209,7 +209,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         bool isFullExit = amount == memberJoinedAmount;
         if (isFullExit) {
-            _clearJoinState(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
+            _clearJoinState(tokenAddress, joinRound, actionId, memberId, memberJoinedAmount);
         } else {
             uint256 memberDeduction = _deductionByMemberId[tokenAddress][actionId][joinRound][memberId];
             uint256 deductionReduction = Math.mulDiv(memberDeduction, amount, memberJoinedAmount);
@@ -222,7 +222,7 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         IERC20(_joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, amount);
 
-        _emitLpWithdrawn(tokenAddress, actionId, joinRound, memberId, amount);
+        _emitLpWithdrawn(tokenAddress, joinRound, actionId, memberId, amount);
 
         if (isFullExit) {
             IActionTarget(ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
@@ -247,11 +247,11 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
             revert NotJoined(tokenAddress, actionId, memberId);
         }
 
-        _clearJoinState(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
+        _clearJoinState(tokenAddress, joinRound, actionId, memberId, memberJoinedAmount);
 
         IERC20(_joinTokenAddressByActionId[tokenAddress][actionId]).safeTransfer(msg.sender, memberJoinedAmount);
 
-        _emitLpWithdrawn(tokenAddress, actionId, joinRound, memberId, memberJoinedAmount);
+        _emitLpWithdrawn(tokenAddress, joinRound, actionId, memberId, memberJoinedAmount);
 
         IActionTarget(ACTION_TARGET_ADDRESS).clearJoinState(tokenAddress, actionId, memberId);
 
@@ -266,8 +266,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     // forge-lint: disable-next-item(missing-events-access-control)
     function _clearJoinState(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 memberJoinedAmount
     ) internal {
@@ -281,8 +281,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     function _emitLpWithdrawn(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 amount
     ) private {
@@ -297,8 +297,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     function _calculateReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 totalEffectiveAmount,
         uint256 proposalReward
@@ -332,8 +332,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     function deduction(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 amount, uint256[] memory joinBlocks, uint256[] memory joinAmounts) {
         amount = _deductionByMemberId[tokenAddress][actionId][round][memberId];
@@ -341,7 +341,11 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         joinAmounts = _joinAmountsByMemberId[tokenAddress][actionId][round][memberId];
     }
 
-    function deductionByRound(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256) {
+    function deductionByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    ) external view returns (uint256) {
         return _deductionByRound[tokenAddress][actionId][round];
     }
 
@@ -360,8 +364,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     function govRatio(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 ratio, bool minted) {
         minted = _memberMinted[tokenAddress][actionId][round][memberId];
@@ -374,8 +378,8 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     function memberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
         minted = _memberMinted[tokenAddress][actionId][round][memberId];
@@ -387,19 +391,23 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
         uint256 createdRound = _createdRoundByActionId[tokenAddress][actionId];
         if (createdRound != 0 && round >= createdRound && round <= _mintRound()) {
-            (mintAmount, burnAmount) = _pendingMemberReward(tokenAddress, actionId, round, memberId);
+            (mintAmount, burnAmount) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
         }
     }
 
-    function joinedAmountByActionId(address tokenAddress, uint256 actionId, uint256 round) external view returns (uint256 amount) {
+    function joinedAmountByActionId(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    ) external view returns (uint256 amount) {
         _checkJoinRound(round);
         return _joinedAmountByActionId[tokenAddress][actionId].value(round);
     }
 
     function joinedAmountByMemberId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 amount) {
         _checkJoinRound(round);
@@ -415,25 +423,25 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
 
     function _totalEffectiveAmount(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) internal view returns (uint256) {
         return _joinedAmountByActionId[tokenAddress][actionId].value(round) - _deductionByRound[tokenAddress][actionId][round];
     }
 
     function _pendingMemberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) internal view returns (uint256 mintAmount, uint256 burnAmount) {
-        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
+        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, round, actionId);
         if (totalEffectiveAmount == 0) {
             return (0, 0);
         }
-        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, round, actionId);
         (mintAmount, burnAmount) =
-            _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
+            _calculateReward(tokenAddress, round, actionId, memberId, totalEffectiveAmount, proposalReward);
     }
 
     function _mintRound() internal view override returns (uint256) {
@@ -472,36 +480,36 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
     // forge-lint: disable-next-item(require-revert-in-loop, missing-events-access-control)
     function _mintMemberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         _checkMintWindow(
             tokenAddress,
-            actionId,
             round,
+            actionId,
             memberId,
             _createdRoundByActionId[tokenAddress][actionId],
             _memberMinted[tokenAddress][actionId][round][memberId]
         );
 
-        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, actionId, round);
+        uint256 totalEffectiveAmount = _totalEffectiveAmount(tokenAddress, round, actionId);
         if (totalEffectiveAmount == 0) {
             revert MemberRewardPoolEmpty(tokenAddress, round);
         }
 
         (uint256 proposalReward, bool actionMinted) =
-            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, actionId, round);
+            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, round, actionId);
         if (!actionMinted && proposalReward != 0) {
             // forge-lint: disable-next-line(reentrancy-no-eth)
-            proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
+            proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, round, actionId);
         }
         if (proposalReward == 0) {
             revert MemberRewardPoolEmpty(tokenAddress, round);
         }
 
         (mintAmount, burnAmount) =
-            _calculateReward(tokenAddress, actionId, round, memberId, totalEffectiveAmount, proposalReward);
+            _calculateReward(tokenAddress, round, actionId, memberId, totalEffectiveAmount, proposalReward);
 
         if (mintAmount == 0 && burnAmount == 0) {
             uint256 effectiveAmount = _joinedAmountByMemberId[tokenAddress][actionId][memberId].value(round)

@@ -39,12 +39,12 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         require(actionTotal == 1 && actionIds[0] == ACTION_ID, "action ids");
 
         require(
-            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_ID)))
+            keccak256(bytes(executor.descriptionByRound(address(token), 3, ACTION_ID, GROUP_ID)))
                 == keccak256(bytes("group")),
             "description by round"
         );
         require(
-            bytes(executor.descriptionByRound(address(token), ACTION_ID, 1, GROUP_ID)).length == 0,
+            bytes(executor.descriptionByRound(address(token), 1, ACTION_ID, GROUP_ID)).length == 0,
             "no earlier description"
         );
     }
@@ -256,12 +256,12 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
             "config updated"
         );
         require(
-            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 4, GROUP_ID)))
+            keccak256(bytes(executor.descriptionByRound(address(token), 4, ACTION_ID, GROUP_ID)))
                 == keccak256(bytes("v2")),
             "description history at update round"
         );
         require(
-            keccak256(bytes(executor.descriptionByRound(address(token), ACTION_ID, 3, GROUP_ID)))
+            keccak256(bytes(executor.descriptionByRound(address(token), 3, ACTION_ID, GROUP_ID)))
                 == keccak256(bytes("group")),
             "history keeps activation round"
         );

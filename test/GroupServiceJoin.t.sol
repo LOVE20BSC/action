@@ -23,7 +23,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _joinService(GROUP_ID);
 
         require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target joined");
-        require(actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "round snapshot");
+        require(actionTarget.isJoinedByRound(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID), "round snapshot");
         require(executor.actionTokenAddress(address(token), SERVICE_ACTION_ID) == address(token), "join token");
     }
 
@@ -164,7 +164,7 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "target cleared");
         require(
-            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, VERIFY_PHASE - 1, GROUP_ID),
+            !actionTarget.isJoinedByRound(address(token), VERIFY_PHASE - 1, SERVICE_ACTION_ID, GROUP_ID),
             "current round snapshot cleared"
         );
     }
@@ -204,11 +204,11 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
 
         require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, GROUP_ID), "current state cleared");
         require(
-            actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID),
+            actionTarget.isJoinedByRound(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID),
             "past round snapshot survives the exit"
         );
         require(
-            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, MINT_PHASE - 1, GROUP_ID),
+            !actionTarget.isJoinedByRound(address(token), MINT_PHASE - 1, SERVICE_ACTION_ID, GROUP_ID),
             "exit round snapshot is cleared"
         );
     }
@@ -220,10 +220,10 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         _qualifyGroupOwner(GROUP_ID);
         _joinService(GROUP_ID);
 
-        require(!actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, 0, GROUP_ID), "before join is empty");
-        require(actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID), "join round recorded");
+        require(!actionTarget.isJoinedByRound(address(token), 0, SERVICE_ACTION_ID, GROUP_ID), "before join is empty");
+        require(actionTarget.isJoinedByRound(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID), "join round recorded");
         require(
-            !actionTarget.isJoinedByRound(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID), "future round false"
+            !actionTarget.isJoinedByRound(address(token), SERVICE_ROUND + 1, SERVICE_ACTION_ID, GROUP_ID), "future round false"
         );
     }
 
@@ -265,21 +265,21 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         groupAction.setTotalStaked(address(token), SERVICE_ROUND, 777e18);
         groupAction.setStakedByMemberId(address(token), SERVICE_ROUND, GROUP_ID, 123e18);
 
-        require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 777e18, "action total");
+        require(executor.joinedAmountByActionId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID) == 777e18, "action total");
         require(
-            executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID) == 123e18,
+            executor.joinedAmountByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 123e18,
             "member total"
         );
         bytes memory expected = abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, SERVICE_ROUND + 1, SERVICE_ROUND);
         vm.expectRevert(expected);
-        executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1);
+        executor.joinedAmountByActionId(address(token), SERVICE_ROUND + 1, SERVICE_ACTION_ID);
         vm.expectRevert(expected);
-        executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND + 1, GROUP_ID);
+        executor.joinedAmountByMemberId(address(token), SERVICE_ROUND + 1, SERVICE_ACTION_ID, GROUP_ID);
 
         _atPhase(VERIFY_PHASE);
         groupAction.setTotalStaked(address(token), SERVICE_ROUND + 1, 888e18);
-        require(executor.joinedAmountByActionId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND) == 777e18, "historical total is unchanged");
+        require(executor.joinedAmountByActionId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID) == 777e18, "historical total is unchanged");
         groupAction.setStakedByMemberId(address(token), SERVICE_ROUND + 1, GROUP_ID, 0);
-        require(executor.joinedAmountByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID) == 123e18, "historical member stake is unchanged");
+        require(executor.joinedAmountByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 123e18, "historical member stake is unchanged");
     }
 }

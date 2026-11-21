@@ -69,9 +69,9 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
 
     function recipients(
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
-        uint256 groupId,
-        uint256 round
+        uint256 groupId
     ) external view returns (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory remarks);
 
     function actionIdsWithRecipients(
@@ -85,9 +85,9 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
 
     function distribution(
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256 round,
         uint256 groupReward
     )
         external

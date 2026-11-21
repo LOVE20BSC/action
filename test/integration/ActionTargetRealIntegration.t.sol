@@ -322,24 +322,29 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         }
 
         vm.roll(block.number + BLOCKS_PER_PHASE);
-        (uint256 serviceReward,) = actionTarget.actionReward(address(token), serviceActionId, round);
+        (uint256 serviceReward,) = actionTarget.actionReward(address(token), round, serviceActionId);
         require(serviceReward == pool * MEMBER2_VOTES / totalVotes, "service uses total round votes");
-        _assertServiceClaims(service, serviceActionId, round, serviceReward);
+        _assertServiceClaims(service, round, serviceActionId, serviceReward);
         require(service.totalGroupActionReward(address(token), round) == sourceReward, "round total stays fixed");
     }
 
-    function _assertServiceClaims(GroupServiceExecutor service, uint256 serviceActionId, uint256 round, uint256 serviceReward)
+    function _assertServiceClaims(
+        GroupServiceExecutor service,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 serviceReward
+    )
         internal
     {
-        (uint256 preview,, bool claimed) = service.memberReward(address(token), serviceActionId, round, 1);
+        (uint256 preview,, bool claimed) = service.memberReward(address(token), round, serviceActionId, 1);
         require(!claimed && preview == serviceReward / 2 && preview > 0, "owner preview after deactivation");
         uint256 balanceBefore = token.balanceOf(member1);
         vm.prank(member1);
-        (uint256 paid, uint256 burned) = service.mintMemberReward(address(token), serviceActionId, round, 1);
+        (uint256 paid, uint256 burned) = service.mintMemberReward(address(token), round, serviceActionId, 1);
         require(paid == preview && burned == 0 && token.balanceOf(member1) - balanceBefore == paid, "owner paid");
 
         vm.prank(member2);
-        (paid, burned) = service.mintMemberReward(address(token), serviceActionId, round, 2);
+        (paid, burned) = service.mintMemberReward(address(token), round, serviceActionId, 2);
         require(paid == serviceReward / 2 && burned == 0, "verifier paid from recorded weight");
     }
 
@@ -425,21 +430,21 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     function _assertMint(uint256 round, uint256 proposalId) internal {
         (uint256 expectedAmount,) = mint.proposalRewardSettlement(address(token), round, proposalId);
         require(expectedAmount > 0, "reward available");
-        (uint256 quotedAmount, bool mintedBefore) = actionTarget.actionReward(address(token), proposalId, round);
+        (uint256 quotedAmount, bool mintedBefore) = actionTarget.actionReward(address(token), round, proposalId);
         require(quotedAmount == expectedAmount && mintedBefore == false, "expected amount before mint");
         vm.prank(address(executor));
-        uint256 amount = actionTarget.mintActionReward(address(token), proposalId, round);
+        uint256 amount = actionTarget.mintActionReward(address(token), round, proposalId);
         require(amount == expectedAmount, "minted amount matches quote");
         require(token.balanceOf(address(executor)) == amount, "executor received the full reward");
         require(mint.totalRewardMinted(address(token)) == amount, "mint ledger matches");
-        (uint256 recorded, bool mintedFlag) = actionTarget.actionReward(address(token), proposalId, round);
+        (uint256 recorded, bool mintedFlag) = actionTarget.actionReward(address(token), round, proposalId);
         require(recorded == amount && mintedFlag, "action reward query");
 
         vm.prank(address(executor));
         vm.expectRevert(
             abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, proposalId)
         );
-        actionTarget.mintActionReward(address(token), proposalId, round);
+        actionTarget.mintActionReward(address(token), round, proposalId);
     }
 
     function testRealIntegration_JoinWindowAndForceClearJoinState() external {
@@ -479,11 +484,11 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         actionTarget.registerJoinState(address(token), proposalId, 1);
         require(actionTarget.isJoined(address(token), proposalId, 1), "joined");
         require(
-            actionTarget.isJoinedByRound(address(token), proposalId, createdRound, 1),
+            actionTarget.isJoinedByRound(address(token), createdRound, proposalId, 1),
             "snapshot lands on the first join round"
         );
         (uint256[] memory memberIds, uint256 total) =
-            actionTarget.memberIdsByActionId(address(token), proposalId, createdRound, 0, 10, false);
+            actionTarget.memberIdsByActionId(address(token), createdRound, proposalId, 0, 10, false);
         require(total == 1 && memberIds[0] == 1, "first join window list");
 
         vm.prank(member1);
@@ -502,16 +507,16 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         require(vote.isRoundEnded(round), "round ended");
 
         uint256 supplyBefore = token.totalSupply();
-        (uint256 expectedShare, bool settledBefore) = actionTarget.actionReward(address(token), proposalId, round);
+        (uint256 expectedShare, bool settledBefore) = actionTarget.actionReward(address(token), round, proposalId);
         require(expectedShare > 0 && !settledBefore, "expected share before settlement");
 
         vm.prank(address(executor));
-        uint256 settled = actionTarget.mintActionReward(address(token), proposalId, round);
+        uint256 settled = actionTarget.mintActionReward(address(token), round, proposalId);
         require(settled == expectedShare, "settled share");
         require(token.balanceOf(address(executor)) == settled, "reward minted straight to the executor");
         require(token.totalSupply() == supplyBefore + settled, "supply grew by the reward");
 
-        (uint256 recorded, bool settledAfter) = actionTarget.actionReward(address(token), proposalId, round);
+        (uint256 recorded, bool settledAfter) = actionTarget.actionReward(address(token), round, proposalId);
         require(recorded == settled && settledAfter, "settled query");
 
         // ActionTarget holds no void path any more: a repeat settlement is rejected by Mint, and no
@@ -521,7 +526,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, proposalId)
         );
-        actionTarget.mintActionReward(address(token), proposalId, round);
+        actionTarget.mintActionReward(address(token), round, proposalId);
 
         vm.prank(address(executor));
         token.burn(settled);
@@ -536,6 +541,6 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IActionTargetErrors.ProposalNotVoted.selector, address(token), proposalId)
         );
-        actionTarget.mintActionReward(address(token), proposalId, round);
+        actionTarget.mintActionReward(address(token), round, proposalId);
     }
 }

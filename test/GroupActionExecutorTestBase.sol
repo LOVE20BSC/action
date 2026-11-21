@@ -302,7 +302,7 @@ abstract contract GroupActionExecutorTestBase {
 
     function _settle(uint256 round, uint256 memberId) internal returns (uint256 mintAmount, uint256 burnAmount) {
         vm.prank(_memberAddress(memberId));
-        return executor.mintMemberReward(address(token), ACTION_ID, round, memberId);
+        return executor.mintMemberReward(address(token), round, ACTION_ID, memberId);
     }
 
     function _fundExecutor(uint256 amount) internal {

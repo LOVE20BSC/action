@@ -243,7 +243,7 @@ abstract contract GroupServiceTestBase {
     function _setGroupLedger(uint256 actionId, uint256[] memory groupIds, uint256[] memory rewards, uint256 verifierId)
         internal
     {
-        groupAction.setGroupLedger(address(token), actionId, SERVICE_ROUND, groupIds, rewards, verifierId);
+        groupAction.setGroupLedger(address(token), SERVICE_ROUND, actionId, groupIds, rewards, verifierId);
     }
 
     /// @dev Funds the executor with the service reward the way ActionTarget's
@@ -253,7 +253,7 @@ abstract contract GroupServiceTestBase {
     }
 
     function _armServiceRewardOn(uint256 actionId, uint256 amount) internal {
-        actionTarget.setActionReward(address(token), actionId, SERVICE_ROUND, amount, false);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, actionId, amount, false);
         actionTarget.setMintReturnAmount(amount);
         token.mint(address(executor), amount);
     }
@@ -267,7 +267,7 @@ abstract contract GroupServiceTestBase {
         returns (uint256 mintAmount, uint256 burnAmount)
     {
         vm.prank(_memberAddress(memberId));
-        return executor.mintMemberReward(address(token), actionId, SERVICE_ROUND, memberId);
+        return executor.mintMemberReward(address(token), SERVICE_ROUND, actionId, memberId);
     }
 
     function _setRecipients(

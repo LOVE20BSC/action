@@ -132,10 +132,10 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         );
         vm.expectRevert(abi.encodeWithSelector(OwnerTransferFailed.selector));
         vm.prank(member1);
-        service.mintMemberReward(address(token), serviceActionId, round, OWNER_ID);
+        service.mintMemberReward(address(token), round, serviceActionId, OWNER_ID);
         vm.clearMockedCalls();
 
-        (, bool actionMinted) = actionTarget.actionReward(address(token), serviceActionId, round);
+        (, bool actionMinted) = actionTarget.actionReward(address(token), round, serviceActionId);
         require(!actionMinted && token.totalSupply() == supply, "proposal mint rolled back");
         require(token.balanceOf(member1) == ownerBalance, "owner balance rolled back");
         require(token.balanceOf(member2) == recipientBalance, "recipient transfer rolled back");
@@ -149,7 +149,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
             )
         );
         vm.prank(member1);
-        service.mintMemberReward(address(token), serviceActionId, round, OWNER_ID);
+        service.mintMemberReward(address(token), round, serviceActionId, OWNER_ID);
         require(token.balanceOf(member1) == ownerBalance + ownerReward - recipientReward, "owner paid once");
         require(token.balanceOf(member2) == recipientBalance + recipientReward, "recipient paid once");
         _assertProgress(1);
@@ -243,11 +243,11 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     }
 
     function _calculateExpectedRewards() private {
-        (uint256 rewardA,) = actionTarget.actionReward(address(token), actionA, round);
-        (uint256 rewardB,) = actionTarget.actionReward(address(token), actionB, round);
-        (uint256 rewardC,) = actionTarget.actionReward(address(token), actionC, round);
-        (uint256 firstBudget,) = actionTarget.actionReward(address(token), serviceActionId, round);
-        (uint256 secondBudget,) = actionTarget.actionReward(address(token), secondServiceActionId, round);
+        (uint256 rewardA,) = actionTarget.actionReward(address(token), round, actionA);
+        (uint256 rewardB,) = actionTarget.actionReward(address(token), round, actionB);
+        (uint256 rewardC,) = actionTarget.actionReward(address(token), round, actionC);
+        (uint256 firstBudget,) = actionTarget.actionReward(address(token), round, serviceActionId);
+        (uint256 secondBudget,) = actionTarget.actionReward(address(token), round, secondServiceActionId);
         uint256 sliceA = rewardA * OWNER_SCORE_A / 100;
         firstPageWeight = rewardC * OWNER_SCORE_C / 100;
         expectedWeight = sliceA + firstPageWeight;
@@ -296,13 +296,13 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     }
 
     function _assertServiceReward(uint256 actionId, uint256 expected, bool alreadyClaimed) private view {
-        (uint256 amount, uint256 burned, bool claimed) = service.memberReward(address(token), actionId, round, OWNER_ID);
+        (uint256 amount, uint256 burned, bool claimed) = service.memberReward(address(token), round, actionId, OWNER_ID);
         require(amount == expected && burned == 0 && claimed == alreadyClaimed, "service reward and claim status");
     }
 
     function _claim(uint256 actionId, uint256 expected) private {
         vm.prank(member1);
-        (uint256 amount, uint256 burned) = service.mintMemberReward(address(token), actionId, round, OWNER_ID);
+        (uint256 amount, uint256 burned) = service.mintMemberReward(address(token), round, actionId, OWNER_ID);
         require(amount == expected && burned == 0, "claim matches preview");
     }
 }

@@ -31,7 +31,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
 
         (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory storedRemarks) =
-            executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+            executor.recipients(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds.length == 1 && recipientIds[0] == MEMBER1_ID, "recipient stored");
         require(ratios[0] == PRECISION / 2, "ratio stored");
         require(storedRemarks.length == 1 && keccak256(bytes(storedRemarks[0])) == keccak256(""), "remark stored");
@@ -214,7 +214,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
             address(token), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER1_ID), _ratios(PRECISION), new string[](1)
         );
         (uint256[] memory recipientIds,,) =
-            executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+            executor.recipients(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds[0] == MEMBER1_ID, "full precision configuration accepted");
     }
 
@@ -224,16 +224,16 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         // A later round inherits the last configuration at or before it.
         (uint256[] memory recipientIds, uint256[] memory ratios,) =
-            executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND + 3);
+            executor.recipients(address(token), SERVICE_ROUND + 3, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds[0] == MEMBER1_ID && ratios[0] == PRECISION / 2, "inherited by a later round");
 
         // Nothing is recorded before the first configuration.
-        (recipientIds,,) = executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND - 1);
+        (recipientIds,,) = executor.recipients(address(token), SERVICE_ROUND - 1, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds.length == 0, "no configuration before");
 
         // A same-round update overwrites that round's snapshot.
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(PRECISION));
-        (recipientIds, ratios,) = executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        (recipientIds, ratios,) = executor.recipients(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds.length == 1 && recipientIds[0] == MEMBER2_ID, "same round overwritten");
         require(ratios[0] == PRECISION, "ratio overwritten");
     }
@@ -249,13 +249,13 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
             executor.actionIdsWithRecipients(address(token), GROUP_ID, VERIFY_PHASE + 1, 0, 10, false);
         require(total == 0 && actionIds.length == 0, "cleared round no longer enumerates");
         (uint256[] memory recipientIds,,) =
-            executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, VERIFY_PHASE + 1);
+            executor.recipients(address(token), VERIFY_PHASE + 1, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds.length == 0, "cleared configuration is empty");
 
         // The earlier round keeps its snapshot.
         (actionIds, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 10, false);
         require(total == 1 && actionIds[0] == GROUP_ACTION_ID, "history survives the later clear");
-        (recipientIds,,) = executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+        (recipientIds,,) = executor.recipients(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds[0] == MEMBER1_ID, "recipient history survives");
     }
 
@@ -286,7 +286,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID, MEMBER2_ID), _ratios(PRECISION / 2, PRECISION / 4));
 
         (uint256[] memory recipientIds, uint256[] memory ratios, uint256[] memory amounts, uint256 ownerAmount) =
-            executor.distribution(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND, 3);
+            executor.distribution(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 3);
         require(recipientIds.length == 2 && recipientIds[0] == MEMBER1_ID, "recipients projected");
         require(ratios[0] == PRECISION / 2 && ratios[1] == PRECISION / 4, "ratios projected");
         require(amounts[0] == 1 && amounts[1] == 0, "each item floors independently");
@@ -295,12 +295,12 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         // 100% allocation of an odd amount does not underflow.
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION));
         (,, amounts, ownerAmount) =
-            executor.distribution(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND, 3);
+            executor.distribution(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 3);
         require(amounts[0] == 3 && ownerAmount == 0, "full allocation keeps the whole budget");
 
         // No configuration: the owner keeps everything.
         (,, amounts, ownerAmount) =
-            executor.distribution(address(token), GROUP_ACTION_ID_B, GROUP_ID, SERVICE_ROUND, 5);
+            executor.distribution(address(token), SERVICE_ROUND, GROUP_ACTION_ID_B, GROUP_ID, 5);
         require(amounts.length == 0 && ownerAmount == 5, "unconfigured action keeps the whole budget");
     }
 
@@ -317,7 +317,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         // action B 180e18 (MEMBER2 takes a quarter).
         _atPhase(MINT_PHASE);
         (,,, uint256 projectedDistributed, uint256 projectedRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(!claimed, "projection runs before the mint");
         require(projectedDistributed == 180e18, "projected distributed equals both slices");
         require(projectedRemaining == 270e18, "projected remainder kept by the owner");
@@ -346,7 +346,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         // The projection skips the zero-reward action exactly like the payout.
         (,,, uint256 projectedDistributed, uint256 projectedRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(!claimed, "projection runs before the mint");
         require(projectedDistributed == 225e18, "projection skips the zero-reward action");
         require(projectedRemaining == 225e18, "projected remainder kept by the owner");
@@ -404,7 +404,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(token.balanceOf(GROUP_OWNER) == 270e18, "owner keeps the remainder");
 
         (,,, uint256 ownerDistributed, uint256 ownerRemaining,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(ownerDistributed == 180e18 && ownerRemaining == 270e18, "recorded split matches the transfers");
 
         // The verifier share is paid directly and never redistributed.
@@ -461,7 +461,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(token.balanceOf(GROUP_OWNER) == 225e18, "owner keeps the shared remainder");
 
         (,,, uint256 ownerDistributedB, uint256 ownerRemainingB,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID_B, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ID);
         require(ownerDistributedB == 225e18 && ownerRemainingB == 225e18, "recorded split matches the transfers");
 
         // Settling the first proposal pays through the very same configuration.
@@ -639,7 +639,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, ids, ratios, remarks);
 
         (uint256[] memory storedIds,, string[] memory storedRemarks) =
-            executor.recipients(address(token), GROUP_ACTION_ID, GROUP_ID, SERVICE_ROUND);
+            executor.recipients(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID);
         require(storedIds.length == count, "full recipient table stored");
         require(bytes(storedRemarks[count - 1]).length == 256, "max remark stored");
     }

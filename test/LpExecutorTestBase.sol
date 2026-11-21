@@ -189,27 +189,36 @@ abstract contract LpExecutorTestBase {
         _exit(ACTION_ID, memberId);
     }
 
-    function _setActionReward(uint256 actionId, uint256 round, uint256 amount, bool minted) internal {
-        actionTarget.setActionReward(address(token), actionId, round, amount, minted);
+    function _setActionReward(
+        uint256 round,
+        uint256 actionId,
+        uint256 amount,
+        bool minted
+    ) internal {
+        actionTarget.setActionReward(address(token), round, actionId, amount, minted);
     }
 
     function _setActionReward(uint256 round, uint256 amount, bool minted) internal {
-        _setActionReward(ACTION_ID, round, amount, minted);
+        _setActionReward(round, ACTION_ID, amount, minted);
     }
 
-    function _mintMemberReward(uint256 actionId, uint256 round, uint256 memberId)
+    function _mintMemberReward(
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    )
         internal
         returns (uint256 mintAmount, uint256 burnAmount)
     {
         vm.prank(_memberAddress(memberId));
-        return lpExecutor.mintMemberReward(address(token), actionId, round, memberId);
+        return lpExecutor.mintMemberReward(address(token), round, actionId, memberId);
     }
 
     function _mintMemberReward(uint256 round, uint256 memberId)
         internal
         returns (uint256 mintAmount, uint256 burnAmount)
     {
-        return _mintMemberReward(ACTION_ID, round, memberId);
+        return _mintMemberReward(round, ACTION_ID, memberId);
     }
 
     function _fundExecutor(uint256 amount) internal {

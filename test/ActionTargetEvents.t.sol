@@ -75,8 +75,8 @@ contract ActionTargetEventsTest is ActionTargetTestBase, IActionTargetEvents {
             amount: 777
         });
         vm.prank(address(executor));
-        actionTarget.mintActionReward(address(token), 11, round);
-        (uint256 recorded, bool mintedFlag) = actionTarget.actionReward(address(token), 11, round);
+        actionTarget.mintActionReward(address(token), round, 11);
+        (uint256 recorded, bool mintedFlag) = actionTarget.actionReward(address(token), round, 11);
         require(recorded == 777 && mintedFlag, "event amount matches the ledger");
     }
 

@@ -54,17 +54,17 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
     // forge-lint: disable-next-item(missing-events-access-control)
     function mintMemberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) public override nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
-        return _mintMemberReward(tokenAddress, actionId, round, memberId);
+        return _mintMemberReward(tokenAddress, round, actionId, memberId);
     }
 
     function mintMemberRewards(
         address tokenAddress,
-        uint256[] calldata actionIds,
         uint256[] calldata rounds,
+        uint256[] calldata actionIds,
         uint256 memberId
     ) external
         override
@@ -80,7 +80,7 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         mintAmounts = new uint256[](length);
         burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, actionIds[i], rounds[i], memberId);
+            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, rounds[i], actionIds[i], memberId);
         }
     }
 
@@ -110,8 +110,8 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
 
     function _checkMintWindow(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 createdRound,
         bool alreadyMinted
@@ -147,8 +147,8 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
 
     function _mintMemberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) internal virtual returns (uint256 mintAmount, uint256 burnAmount);
 }

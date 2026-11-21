@@ -128,8 +128,8 @@ contract MockGroupActionExecutorActionTarget {
 
     function setActionReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 amount,
         bool minted
     ) external {
@@ -174,13 +174,17 @@ contract MockGroupActionExecutorActionTarget {
 
     function actionReward(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (uint256 amount, bool minted) {
         return (_actionRewardAmount[tokenAddress][actionId][round], _actionRewardMinted[tokenAddress][actionId][round]);
     }
 
-    function mintActionReward(address tokenAddress, uint256 actionId, uint256 round) external returns (uint256) {
+    function mintActionReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    ) external returns (uint256) {
         mintRewardCalls++;
         lastMintTokenAddress = tokenAddress;
         lastMintActionId = actionId;

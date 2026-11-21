@@ -150,8 +150,8 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
 
     function originScore(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     )
         external
@@ -163,35 +163,35 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
 
     function finalScore(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 score, bool verified);
 
     function totalFinalScore(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (uint256);
 
     function verifiedMemberCount(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (uint256);
 
     function isRoundVerified(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (bool);
 
     /// @notice The current leader while voting is open, or the sole elected verifier after it closes.
     function verifier(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (uint256 verifierId, uint256 applicationId, uint256 voteAmount);
 
     /// @notice Final elected rounds only; the still-open voting round is excluded.
@@ -228,8 +228,8 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
 
     function verifierApplication(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 verifierId
     ) external view returns (VerifierApplication memory application);
 
@@ -257,8 +257,8 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
     /// @dev Descriptions are round snapshots; lifecycle and punishment fields show current facts.
     function verifierApplicationsByRound(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 offset,
         uint256 limit,
         bool reverse
@@ -266,15 +266,15 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
 
     function voteAmountsByVerifierIds(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256[] calldata verifierIds
     ) external view returns (uint256[] memory voteAmounts);
 
     function applicationVoters(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 applicationId,
         uint256 offset,
         uint256 limit,
@@ -290,8 +290,8 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
 
     function applicationVotersByVerifierId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 verifierId,
         uint256 offset,
         uint256 limit,

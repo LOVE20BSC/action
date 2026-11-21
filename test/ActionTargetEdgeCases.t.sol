@@ -32,7 +32,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
 
         phase.setPhase(1);
         _join(11, 1);
-        require(actionTarget.isJoinedByRound(address(token), 11, 0, 1), "first snapshot at round zero");
+        require(actionTarget.isJoinedByRound(address(token), 0, 11, 1), "first snapshot at round zero");
     }
 
     function testSameRoundJoinAndClearOverwritesSnapshot() external {
@@ -41,8 +41,8 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         _join(11, 1);
         _clear(11, 1);
         require(actionTarget.isJoined(address(token), 11, 1) == false, "current state cleared");
-        require(actionTarget.isJoinedByRound(address(token), 11, 1, 1) == false, "same round overwritten");
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        require(actionTarget.isJoinedByRound(address(token), 1, 11, 1) == false, "same round overwritten");
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 0 && memberIds.length == 0, "same round member list overwritten");
     }
 
@@ -53,14 +53,14 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         phase.setPhase(4);
         _join(11, 2);
 
-        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (uint256[] memory memberIds, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 1 && memberIds[0] == 1, "round 1 snapshot");
-        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
+        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 2, 11, 0, 10, false);
         require(total == 1 && memberIds[0] == 1, "gap uses nearest snapshot");
-        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 11, 3, 0, 10, false);
+        (memberIds, total) = actionTarget.memberIdsByActionId(address(token), 3, 11, 0, 10, false);
         require(total == 2 && memberIds[0] == 1 && memberIds[1] == 2, "round 3 snapshot");
-        require(actionTarget.isJoinedByRound(address(token), 11, 2, 2) == false, "member 2 absent in round 2");
-        require(actionTarget.isJoinedByRound(address(token), 11, 3, 2), "member 2 present in round 3");
+        require(actionTarget.isJoinedByRound(address(token), 2, 11, 2) == false, "member 2 absent in round 2");
+        require(actionTarget.isJoinedByRound(address(token), 3, 11, 2), "member 2 present in round 3");
     }
 
     function testPaginationOffsetAtUint256Max() external {
@@ -72,7 +72,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         (uint256[] memory page, uint256 total) =
             actionTarget.actionIdsByMemberId(address(token), 1, type(uint256).max, 10, false);
         require(total == 1 && page.length == 0, "member offset saturated");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, type(uint256).max, 10, false);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, type(uint256).max, 10, false);
         require(total == 1 && page.length == 0, "action offset saturated");
         (page, total) = actionTarget.actionIdsByExecutor(address(token), address(executor), type(uint256).max, 10, false);
         require(total == 1 && page.length == 0, "executor offset saturated");
@@ -91,7 +91,7 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         require(actionTarget.isJoined(address(token), 11, 1), "joined under first token");
         require(actionTarget.isJoined(address(secondToken), 11, 1) == false, "second token independent");
 
-        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(secondToken), 11, 1, 0, 10, false);
+        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(secondToken), 1, 11, 0, 10, false);
         require(total == 0 && page.length == 0, "second token snapshot independent");
         uint256[] memory members = new uint256[](1);
         members[0] = 1;
@@ -119,9 +119,9 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         _join(11, 2);
         _clear(11, 1);
         _clear(11, 2);
-        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 0 && page.length == 0, "current list empty");
-        (page, total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 0, false);
+        (page, total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 0, false);
         require(total == 0, "total only empty");
     }
 
@@ -140,12 +140,12 @@ contract ActionTargetEdgeCasesTest is ActionTargetTestBase {
         phase.setPhase(2);
         _join(11, 1);
 
-        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 11, 1, 0, 10, false);
+        (uint256[] memory page, uint256 total) = actionTarget.memberIdsByActionId(address(token), 1, 11, 0, 10, false);
         require(total == 1 && page[0] == 1, "join round readable");
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 2, 1));
-        actionTarget.memberIdsByActionId(address(token), 11, 2, 0, 10, false);
+        actionTarget.memberIdsByActionId(address(token), 2, 11, 0, 10, false);
         vm.expectRevert(abi.encodeWithSelector(IActionTargetErrors.RoundNotStarted.selector, 2, 1));
-        actionTarget.isJoinedByRound(address(token), 11, 2, 1);
+        actionTarget.isJoinedByRound(address(token), 2, 11, 1);
     }
 
     function testCreateAcceptsPackedBusinessData() external {

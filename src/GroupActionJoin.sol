@@ -81,13 +81,13 @@ library GroupActionJoin {
         uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
 
         if (joinedGroupId == 0) {
-            _registerMembership(self, tokenAddress, actionId, round, groupId, memberId);
+            _registerMembership(self, tokenAddress, round, actionId, groupId, memberId);
         }
         if (!IActionTarget(protocol.actionTargetAddress).isJoined(tokenAddress, actionId, memberId)) {
             IActionTarget(protocol.actionTargetAddress).registerJoinState(tokenAddress, actionId, memberId);
         }
-        _applyVerificationInfos(self, tokenAddress, actionId, round, memberId, verificationValues, joinedGroupId == 0);
-        _increaseAmount(self, tokenAddress, actionId, round, groupId, memberId, amount, providerId);
+        _applyVerificationInfos(self, tokenAddress, round, actionId, memberId, verificationValues, joinedGroupId == 0);
+        _increaseAmount(self, tokenAddress, round, actionId, groupId, memberId, amount, providerId);
 
         if (providerId == 0) {
             _pullJoinToken(self, tokenAddress, actionId, amount);
@@ -163,7 +163,7 @@ library GroupActionJoin {
         }
         uint256 groupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].latestValue();
 
-        _decreaseOwnAmount(self, tokenAddress, actionId, round, groupId, memberId, ownAmount, amount);
+        _decreaseOwnAmount(self, tokenAddress, round, actionId, groupId, memberId, ownAmount, amount);
 
         _pushJoinToken(self, tokenAddress, actionId, amount);
 
@@ -178,7 +178,7 @@ library GroupActionJoin {
         });
 
         if (ownAmount - amount == 0 && self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0) {
-            _finalizeExit(self, protocol, tokenAddress, actionId, round, groupId, memberId);
+            _finalizeExit(self, protocol, tokenAddress, round, actionId, groupId, memberId);
         }
     }
 
@@ -219,7 +219,7 @@ library GroupActionJoin {
         }
 
         if (ownAmount != 0) {
-            _decreaseOwnAmount(self, tokenAddress, actionId, round, groupId, memberId, ownAmount, ownAmount);
+            _decreaseOwnAmount(self, tokenAddress, round, actionId, groupId, memberId, ownAmount, ownAmount);
             _pushJoinToken(self, tokenAddress, actionId, ownAmount);
             emit IGroupActionJoinEvents.GroupActionWithdrawn({
                 tokenAddress: tokenAddress,
@@ -232,16 +232,16 @@ library GroupActionJoin {
             });
         }
 
-        _restoreProviders(self, tokenAddress, actionId, round, groupId, memberId);
+        _restoreProviders(self, tokenAddress, round, actionId, groupId, memberId);
 
-        _finalizeExit(self, protocol, tokenAddress, actionId, round, groupId, memberId);
+        _finalizeExit(self, protocol, tokenAddress, round, actionId, groupId, memberId);
     }
 
     function _restoreProviders(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 memberId
     ) private {
@@ -258,7 +258,7 @@ library GroupActionJoin {
             if (invested == 0) {
                 continue;
             }
-            _decreaseProviderAmount(self, tokenAddress, actionId, round, groupId, memberId, providerIds[i], invested);
+            _decreaseProviderAmount(self, tokenAddress, round, actionId, groupId, memberId, providerIds[i], invested);
 
             emit IGroupActionJoinEvents.ProviderQuotaRestored({
                 tokenAddress: tokenAddress,
@@ -274,8 +274,8 @@ library GroupActionJoin {
     function joinInfo(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (JoinInfo memory info) {
         info.ownAmount = self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
@@ -290,8 +290,8 @@ library GroupActionJoin {
     function joinedAmountByGroupId(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (uint256) {
         return self.joinedAmountByGroupId[tokenAddress][actionId][groupId].value(round);
@@ -300,8 +300,8 @@ library GroupActionJoin {
     function groupIdsByRound(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 offset,
         uint256 limit,
         bool reverse
@@ -324,8 +324,8 @@ library GroupActionJoin {
     function memberIdsByGroupId(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 offset,
         uint256 limit,
@@ -424,7 +424,7 @@ library GroupActionJoin {
         uint256 round = GroupActionManager.currentJoinRound(protocol.phaseAddress);
         uint256 totalRefund = 0;
         for (uint256 i = 0; i < memberIds.length; i++) {
-            totalRefund += _revokeQuota(self, protocol, tokenAddress, actionId, round, groupId, providerId, memberIds[i]);
+            totalRefund += _revokeQuota(self, protocol, tokenAddress, round, actionId, groupId, providerId, memberIds[i]);
         }
 
         _pushJoinToken(self, tokenAddress, actionId, totalRefund);
@@ -434,14 +434,14 @@ library GroupActionJoin {
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 providerId,
         uint256 memberId
     ) private returns (uint256 refundable) {
         uint256 used;
-        (refundable, used) = _removeQuota(self, tokenAddress, actionId, round, groupId, providerId, memberId);
+        (refundable, used) = _removeQuota(self, tokenAddress, round, actionId, groupId, providerId, memberId);
 
         if (used != 0) {
             emit IGroupActionJoinEvents.GroupActionWithdrawn({
@@ -469,7 +469,7 @@ library GroupActionJoin {
             used != 0 && self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0
                 && self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].latestValue() == 0
         ) {
-            _finalizeExit(self, protocol, tokenAddress, actionId, round, groupId, memberId);
+            _finalizeExit(self, protocol, tokenAddress, round, actionId, groupId, memberId);
         }
     }
 
@@ -477,8 +477,8 @@ library GroupActionJoin {
     function _removeQuota(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 providerId,
         uint256 memberId
@@ -489,7 +489,7 @@ library GroupActionJoin {
         }
         used = _quotaUsedAt(self, tokenAddress, actionId, groupId, providerId, memberId);
         if (used != 0) {
-            _decreaseProviderAmount(self, tokenAddress, actionId, round, groupId, memberId, providerId, used);
+            _decreaseProviderAmount(self, tokenAddress, round, actionId, groupId, memberId, providerId, used);
         }
         self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = 0;
         self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].remove(memberId);
@@ -544,8 +544,8 @@ library GroupActionJoin {
     function providerAmountsByMemberId(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 offset,
         uint256 limit,
@@ -560,18 +560,18 @@ library GroupActionJoin {
         )
     {
         (providerIds, totalCount) =
-            _providerIds(self, tokenAddress, actionId, round, memberId, offset, limit, reverse);
+            _providerIds(self, tokenAddress, round, actionId, memberId, offset, limit, reverse);
         amounts = new uint256[](providerIds.length);
         for (uint256 i = 0; i < providerIds.length; i++) {
-            amounts[i] = _providerAmountAt(self, tokenAddress, actionId, round, memberId, providerIds[i]);
+            amounts[i] = _providerAmountAt(self, tokenAddress, round, actionId, memberId, providerIds[i]);
         }
     }
 
     function _providerIds(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 offset,
         uint256 limit,
@@ -584,8 +584,8 @@ library GroupActionJoin {
     function _providerAmountAt(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         uint256 providerId
     ) internal view returns (uint256) {
@@ -644,8 +644,8 @@ library GroupActionJoin {
     function _decreaseProviderAmount(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 memberId,
         uint256 providerId,
@@ -711,8 +711,8 @@ library GroupActionJoin {
     function _registerMembership(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 memberId
     ) internal {
@@ -739,8 +739,8 @@ library GroupActionJoin {
     function _applyVerificationInfos(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId,
         string[] calldata verificationValues,
         bool isFirstJoin
@@ -772,8 +772,8 @@ library GroupActionJoin {
     function _increaseAmount(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 memberId,
         uint256 amount,
@@ -802,8 +802,8 @@ library GroupActionJoin {
     function _decreaseOwnAmount(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 memberId,
         uint256 ownAmount,
@@ -818,8 +818,8 @@ library GroupActionJoin {
         GroupActionStorage.Layout storage self,
         GroupActionStorage.Protocol memory protocol,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         uint256 memberId
     ) internal {

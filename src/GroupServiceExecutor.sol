@@ -141,7 +141,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 recipientId
     ) external view returns (uint256) {
         GroupRecipients.Distribution memory distributionInfo =
-            _distribution(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
+            _distribution(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId);
 
         if (recipientId == groupId) {
             return distributionInfo.ownerAmount;
@@ -171,14 +171,14 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         )
     {
         GroupRecipients.Distribution memory distributionInfo =
-            _distribution(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
+            _distribution(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId);
         return (distributionInfo.recipientIds, distributionInfo.ratios, distributionInfo.amounts, distributionInfo.ownerAmount);
     }
 
     function joinedAmountByActionId(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) external view returns (uint256 amount) {
         _checkJoinRound(round);
         return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalActivationStakeByRound(
@@ -188,8 +188,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function joinedAmountByMemberId(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 amount) {
         _checkJoinRound(round);
@@ -214,8 +214,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function serviceRewardByMemberId(
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 memberId
     )
         external
@@ -239,12 +239,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             return (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining, true);
         }
 
-        if (!_isSettleableRound(serviceTokenAddress, serviceActionId, round)) {
+        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) {
             // forge-lint: disable-next-line(boolean-cst)
             return (0, 0, 0, 0, 0, false);
         }
 
-        Settlement memory settlement = _settlement(serviceTokenAddress, serviceActionId, round, memberId);
+        Settlement memory settlement = _settlement(serviceTokenAddress, round, serviceActionId, memberId);
         verifierReward = settlement.verifierReward;
         ownerReward = settlement.ownerReward;
         ownerBurned = settlement.ownerBurned;
@@ -260,8 +260,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function memberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
         if (_layout.memberMinted[tokenAddress][actionId][round][memberId]) {
@@ -275,12 +275,12 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             );
         }
 
-        if (!_isSettleableRound(tokenAddress, actionId, round)) {
+        if (!_isSettleableRound(tokenAddress, round, actionId)) {
             // forge-lint: disable-next-line(boolean-cst)
             return (0, 0, false);
         }
 
-        Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
+        Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId);
         // forge-lint: disable-next-line(boolean-cst)
         return (settlement.verifierReward + settlement.ownerReward, settlement.ownerBurned, false);
     }
@@ -297,8 +297,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         GroupRecipients.setRecipients(
             _layout,
             _protocol(),
-            currentVerifyRound(),
             sourceTokenAddress,
+            currentVerifyRound(),
             sourceActionId,
             groupId,
             recipientIds,
@@ -309,9 +309,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function recipients(
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
-        uint256 groupId,
-        uint256 round
+        uint256 groupId
     )
         external
         view
@@ -321,7 +321,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             string[] memory remarks
         )
     {
-        return GroupRecipients.recipients(_layout, sourceTokenAddress, sourceActionId, groupId, round);
+        return GroupRecipients.recipients(_layout, sourceTokenAddress, round, sourceActionId, groupId);
     }
 
     function actionIdsWithRecipients(
@@ -337,9 +337,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function distribution(
         address sourceTokenAddress,
+        uint256 round,
         uint256 sourceActionId,
         uint256 groupId,
-        uint256 round,
         uint256 groupReward
     )
         external
@@ -352,7 +352,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         )
     {
         GroupRecipients.Distribution memory distributionInfo =
-            GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, round, groupReward);
+            GroupRecipients.distribution(_layout, sourceTokenAddress, round, sourceActionId, groupId, groupReward);
         return (distributionInfo.recipientIds, distributionInfo.ratios, distributionInfo.amounts, distributionInfo.ownerAmount);
     }
 
@@ -433,42 +433,42 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function _distribution(
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 sourceActionId,
         uint256 groupId
     ) internal view returns (GroupRecipients.Distribution memory) {
         (address sourceTokenAddress, uint256 slice) =
-            _ownerSlice(serviceTokenAddress, serviceActionId, round, sourceActionId, groupId);
-        return GroupRecipients.distribution(_layout, sourceTokenAddress, sourceActionId, groupId, round, slice);
+            _ownerSlice(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId);
+        return GroupRecipients.distribution(_layout, sourceTokenAddress, round, sourceActionId, groupId, slice);
     }
 
     function _ownerSlice(
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 sourceActionId,
         uint256 groupId
     ) internal view returns (address sourceTokenAddress, uint256 slice) {
         uint256 ownerReward;
         uint256 ownerWeight;
         (sourceTokenAddress, ownerReward, ownerWeight) =
-            _ownerRewardAndWeight(serviceTokenAddress, serviceActionId, round, groupId);
+            _ownerRewardAndWeight(serviceTokenAddress, round, serviceActionId, groupId);
         if (ownerReward != 0 && ownerWeight != 0) {
             slice = GroupRecipients.ownerSlice(
-                _protocol(), sourceTokenAddress, sourceActionId, round, groupId, ownerReward, ownerWeight
+                _protocol(), sourceTokenAddress, round, sourceActionId, groupId, ownerReward, ownerWeight
             );
         }
     }
 
     function _settlement(
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 memberId
     ) internal view returns (Settlement memory settlement) {
         settlement.actionTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
-        if (!IActionTarget(ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, serviceActionId, round, memberId)) {
+        if (!IActionTarget(ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, round, serviceActionId, memberId)) {
             settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
             return settlement;
         }
@@ -491,7 +491,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         settlement.govRatioMultiplier = _layout.govRatioMultiplierByActionId[serviceTokenAddress][serviceActionId];
 
         (settlement.serviceReward, settlement.actionMinted) =
-            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(serviceTokenAddress, serviceActionId, round);
+            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(serviceTokenAddress, round, serviceActionId);
         if (settlement.serviceReward == 0) {
             settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
             return settlement;
@@ -547,8 +547,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function _ownerRewardAndWeight(
         address serviceTokenAddress,
-        uint256 serviceActionId,
         uint256 round,
+        uint256 serviceActionId,
         uint256 memberId
     )
         internal
@@ -569,7 +569,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             return (sourceTokenAddress, ownerReward, ownerWeight);
         }
 
-        Settlement memory settlement = _settlement(serviceTokenAddress, serviceActionId, round, memberId);
+        Settlement memory settlement = _settlement(serviceTokenAddress, round, serviceActionId, memberId);
         return (sourceTokenAddress, settlement.ownerReward, settlement.ownerWeight);
     }
 
@@ -595,8 +595,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     function _isSettleableRound(
         address tokenAddress,
-        uint256 actionId,
-        uint256 round
+        uint256 round,
+        uint256 actionId
     ) internal view returns (bool) {
         uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
         return createdRound != 0 && round >= createdRound && round <= _mintRound();
@@ -608,20 +608,20 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function _mintMemberReward(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         _checkMintWindow(
             tokenAddress,
-            actionId,
             round,
+            actionId,
             memberId,
             _layout.createdRoundByActionId[tokenAddress][actionId],
             _layout.memberMinted[tokenAddress][actionId][round][memberId]
         );
 
-        Settlement memory settlement = _settlement(tokenAddress, actionId, round, memberId);
+        Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId);
         mintAmount = settlement.verifierReward + settlement.ownerReward;
         burnAmount = settlement.ownerBurned;
         if (mintAmount == 0 && burnAmount == 0) {
@@ -636,7 +636,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
         if (!settlement.actionMinted) {
             // forge-lint: disable-next-line(reentrancy-no-eth)
-            settlement.serviceReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, actionId, round);
+            settlement.serviceReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, round, actionId);
             _applyFormulas(settlement, memberId);
             mintAmount = settlement.verifierReward + settlement.ownerReward;
             burnAmount = settlement.ownerBurned;
@@ -659,8 +659,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
                 _protocol(),
                 settlement.actionTokenAddress,
                 tokenAddress,
-                actionId,
                 round,
+                actionId,
                 memberId,
                 settlement.ownerReward,
                 settlement.ownerWeight

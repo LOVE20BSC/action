@@ -56,12 +56,12 @@ library GroupServiceStorage {
     function groupReward(
         address groupActionExecutorAddress,
         address actionTokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) internal view returns (uint256) {
         return IGroupActionExecutor(groupActionExecutorAddress).generatedActionRewardByGroupId(
-            actionTokenAddress, actionId, round, groupId
+            actionTokenAddress, round, actionId, groupId
         );
     }
 }

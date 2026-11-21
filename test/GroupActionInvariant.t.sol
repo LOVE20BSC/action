@@ -218,16 +218,16 @@ contract GroupActionInvariantTest is GroupActionExecutorTestBase {
 
     function invariant_JoinLedgersMatchModel() public view {
         require(
-            executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == handler.ownModel(MEMBER1_ID),
+            executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER1_ID) == handler.ownModel(MEMBER1_ID),
             "member 1 amount matches model"
         );
         require(
-            executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID)
+            executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER2_ID)
                 == handler.ownModel(MEMBER2_ID) + handler.providerModel(MEMBER2_ID),
             "member 2 amount matches model"
         );
         require(
-            executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID)
+            executor.joinedAmountByGroupId(address(token), 2, ACTION_ID, GROUP_ID)
                 == handler.ownModel(MEMBER1_ID) + handler.ownModel(MEMBER2_ID) + handler.providerModel(MEMBER2_ID),
             "group total matches model"
         );
@@ -251,7 +251,7 @@ contract GroupActionInvariantTest is GroupActionExecutorTestBase {
 
     function invariant_ProviderLedgerMatchesModel() public view {
         (uint256[] memory providerIds, uint256[] memory amounts, uint256 total) =
-            executor.providerAmountsByMemberId(address(token), ACTION_ID, 2, MEMBER2_ID, 0, 10, false);
+            executor.providerAmountsByMemberId(address(token), 2, ACTION_ID, MEMBER2_ID, 0, 10, false);
         uint256 invested = handler.providerModel(MEMBER2_ID);
         if (invested == 0) {
             require(total == 0, "no provider entries when uninvested");

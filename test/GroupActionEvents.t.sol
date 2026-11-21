@@ -524,8 +524,8 @@ contract GroupActionEventsTest is
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, scores);
 
-        require(executor.totalFinalScore(address(token), ACTION_ID, 2) == expectedTotal, "ledger total");
-        require(executor.isRoundVerified(address(token), ACTION_ID, 2), "round verified");
+        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == expectedTotal, "ledger total");
+        require(executor.isRoundVerified(address(token), 2, ACTION_ID), "round verified");
     }
 
     function testApplicationVoteRecordedEmitsFromTheExecutor() external {
@@ -596,7 +596,7 @@ contract GroupActionEventsTest is
         _castVotesFrom(PROVIDER_ID, VERIFIER_ID, 60e18);
 
         (uint256[] memory voterIds, uint256[] memory votes, ) =
-            executor.applicationVoters(address(token), ACTION_ID, CREATION_PHASE, 1, 0, 10, false);
+            executor.applicationVoters(address(token), CREATION_PHASE, ACTION_ID, 1, 0, 10, false);
         require(voterIds.length == 1 && voterIds[0] == PROVIDER_ID, "the event names the voter the roster holds");
         require(votes[0] == 160e18, "the roster agrees with the emitted cumulative total");
     }
@@ -709,7 +709,7 @@ contract GroupActionEventsTest is
 
         _atPhase(5);
         _fundExecutor(PROPOSAL_REWARD);
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
 
         uint256 expected1 = Math.mulDiv(PROPOSAL_REWARD, 100e18 * 100, 100e18 * 100 + PROVIDER_QUOTA * 60);

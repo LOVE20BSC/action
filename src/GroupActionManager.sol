@@ -146,7 +146,7 @@ library GroupActionManager {
             IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), stakeAmount);
         }
 
-        _emitGroupActivated(tokenAddress, actionId, groupId, round, stakeAmount, config);
+        _emitGroupActivated(tokenAddress, round, actionId, groupId, stakeAmount, config);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -220,7 +220,7 @@ library GroupActionManager {
         group.config = config;
         self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].record(round, config.description);
 
-        _emitGroupConfigChanged(tokenAddress, actionId, round, groupId, previousConfig, config);
+        _emitGroupConfigChanged(tokenAddress, round, actionId, groupId, previousConfig, config);
     }
 
     function groupState(
@@ -245,8 +245,8 @@ library GroupActionManager {
     function descriptionByRound(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (string memory) {
         return self.descriptionHistoryByGroupId[tokenAddress][actionId][groupId].value(round);
@@ -476,8 +476,8 @@ library GroupActionManager {
 
     function _emitGroupConfigChanged(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 groupId,
         GroupConfig memory previousConfig,
         GroupConfig memory config
@@ -510,9 +510,9 @@ library GroupActionManager {
 
     function _emitGroupActivated(
         address tokenAddress,
+        uint256 round,
         uint256 actionId,
         uint256 groupId,
-        uint256 round,
         uint256 stakeAmount,
         GroupConfig calldata config
     ) private {

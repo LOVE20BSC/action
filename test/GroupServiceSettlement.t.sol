@@ -88,7 +88,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         );
 
         (,, uint256 ownerBurned,,,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(ownerBurned == 360e18, "burn recorded per member");
     }
 
@@ -138,9 +138,9 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(ownerBMint == 180e18 && ownerBBurn == 0, "owner B uncapped at their own votes");
 
         (,, uint256 burnedA,,,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         (,, uint256 burnedB,,,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_OWNER_B_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
         require(burnedA == 180e18 && burnedB == 0, "burns recorded per owner");
         require(token.burnedTotal() == 180e18, "only the capped owner burned");
     }
@@ -217,7 +217,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
             executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
             "divisor read from the source round total"
         );
-        (uint256 projected,,) = executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, VERIFIER_ID);
+        (uint256 projected,,) = executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
         (uint256 claimed,) = _settleService(VERIFIER_ID);
         require(projected == 450e18 && claimed == projected, "verifier half");
     }
@@ -233,7 +233,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _joinService(GROUP_ID);
         _joinService(VERIFIER_ID);
         groupAction.setGroupLedger(
-            actionTokenAddress, GROUP_ACTION_ID, SERVICE_ROUND, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID
+            actionTokenAddress, SERVICE_ROUND, GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID
         );
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(400e18), GROUP_ID);
         _armServiceRewardOn(SERVICE_ACTION_ID, SERVICE_REWARD);
@@ -277,7 +277,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(1, 1), VERIFIER_ID);
         // Divisor 3, two slices of floor(3 * 1 / 2) = 1 each: one wei of the action reward is
         // unallocated at the group level, so the owner weights cover 2/3 of the divisor.
-        groupAction.setActionReward(address(token), GROUP_ACTION_ID, SERVICE_ROUND, 3);
+        groupAction.setActionReward(address(token), SERVICE_ROUND, GROUP_ACTION_ID, 3);
         _armServiceReward(SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
@@ -340,7 +340,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), SERVICE_ROUND)
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
 
         vm.prank(MEMBER1);
         vm.expectRevert(
@@ -348,7 +348,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
                 IActionExecutorErrors.ZeroRewardWeight.selector, address(token), SERVICE_ACTION_ID, MEMBER1_ID
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER1_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
 
         require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 0, "zero denominator");
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
@@ -372,7 +372,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         (uint256 verifierReward, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER1_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
         require(
             verifierReward == 0 && ownerReward == 0 && ownerDistributed == 0 && ownerRemaining == 0 && !claimed,
             "projected zeros without weights"
@@ -387,11 +387,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
                 MEMBER1_ID
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER1_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
 
         // A member who never joined the service at all earns nothing either.
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER2_ID);
+            executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER2_ID);
         require(mintAmount == 0 && burnAmount == 0 && !minted, "outsider sees zeros");
 
         vm.prank(MEMBER2);
@@ -403,7 +403,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
                 MEMBER2_ID
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, MEMBER2_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER2_ID);
     }
 
     function testSettlementRoundWindow() external {
@@ -419,12 +419,12 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(VERIFY_PHASE);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, SERVICE_ROUND, 1));
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
 
         _atPhase(MINT_PHASE);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundBeforeActionCreated.selector, SERVICE_ROUND - 1, 2));
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND - 1, GROUP_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND - 1, SERVICE_ACTION_ID, GROUP_ID);
 
         (uint256 mintAmount,) = _settleService(GROUP_ID);
         require(mintAmount == SERVICE_REWARD / 2, "the owner side keeps the non-verifier share");
@@ -442,7 +442,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         executor.join(address(token), SERVICE_ACTION_ID + 1, GROUP_ID);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _armServiceReward(SERVICE_REWARD);
-        actionTarget.setActionReward(address(token), SERVICE_ACTION_ID + 1, SERVICE_ROUND, SERVICE_REWARD, false);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID + 1, SERVICE_REWARD, false);
         token.mint(address(executor), SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
@@ -451,11 +451,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.BatchLengthMismatch.selector, 2, 1));
-        executor.mintMemberRewards(address(token), actionIds, _ids(SERVICE_ROUND), GROUP_ID);
+        executor.mintMemberRewards(address(token), _ids(SERVICE_ROUND), actionIds, GROUP_ID);
 
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, GROUP_ID));
-        executor.mintMemberRewards(address(token), actionIds, _ids(SERVICE_ROUND), GROUP_ID);
+        executor.mintMemberRewards(address(token), _ids(SERVICE_ROUND), actionIds, GROUP_ID);
 
         // One element that was never created rolls the whole batch back.
         actionIds = _ids(SERVICE_ACTION_ID, SERVICE_ACTION_ID + 2);
@@ -465,17 +465,17 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
                 IActionExecutorErrors.ActionNotCreated.selector, address(token), SERVICE_ACTION_ID + 2
             )
         );
-        executor.mintMemberRewards(address(token), actionIds, rounds, GROUP_ID);
+        executor.mintMemberRewards(address(token), rounds, actionIds, GROUP_ID);
         require(actionTarget.mintRewardCalls() == 0, "no action settled from the failed batch");
 
         // Owner check precedes action existence on the single-settlement entry.
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID + 2, SERVICE_ROUND, MEMBER1_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID + 2, MEMBER1_ID);
 
         vm.prank(GROUP_OWNER);
         (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            executor.mintMemberRewards(address(token), _ids(SERVICE_ACTION_ID, SERVICE_ACTION_ID + 1), rounds, GROUP_ID);
+            executor.mintMemberRewards(address(token), rounds, _ids(SERVICE_ACTION_ID, SERVICE_ACTION_ID + 1), GROUP_ID);
         require(mintAmounts.length == 2 && burnAmounts.length == 2, "pairwise results");
         require(mintAmounts[0] == SERVICE_REWARD / 2 && mintAmounts[1] == SERVICE_REWARD / 2, "both actions paid");
         require(burnAmounts[0] == 0 && burnAmounts[1] == 0, "nothing burned");
@@ -495,7 +495,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
                 SERVICE_ROUND
             )
         );
-        executor.mintMemberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
     }
 
     function testSettlementReadsRecordedResultAfterMinting() external {
@@ -509,14 +509,14 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
             uint256 ownerDistributed,
             uint256 ownerRemaining,
             bool claimed
-        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+        ) = executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(claimed, "claimed flag");
         require(verifierReward == 0 && ownerReward == 450e18, "roles recorded");
         require(ownerBurned == 0, "no burn recorded");
         require(ownerDistributed == 0 && ownerRemaining == 450e18, "owner kept everything without recipients");
 
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(minted && mintAmount == 450e18 && burnAmount == 0, "base ledger recorded");
     }
 
@@ -535,15 +535,15 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(!minted && mintAmount == 90e18 && burnAmount == 360e18, "initial owner cap");
         stake.setTotalGovVotes(address(token), 200e18);
         stake.setGovVotes(address(token), GROUP_ID, 50e18);
         (mintAmount, burnAmount, minted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(!minted && mintAmount == 225e18 && burnAmount == 225e18, "latest votes set the owner cap");
         (, uint256 ownerReward, uint256 pendingBurn,,,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(ownerReward == mintAmount && pendingBurn == burnAmount, "service quote uses the latest votes");
         (uint256 ownerMint, uint256 ownerBurn) = _settleService(GROUP_ID);
         require(ownerMint == mintAmount && ownerBurn == burnAmount, "settlement matches the latest quote");
@@ -554,10 +554,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         // The recorded result survives: no recompute, no re-burn.
         (,, uint256 ownerBurned,,, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(claimed && ownerBurned == 225e18, "recorded burn ignores later votes");
         (mintAmount, burnAmount, minted) =
-            executor.memberReward(address(token), SERVICE_ACTION_ID, SERVICE_ROUND, GROUP_ID);
+            executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(minted && mintAmount == 225e18 && burnAmount == 225e18, "base ledger ignores later votes");
         (uint256 verifierMint, uint256 verifierBurn) = _settleService(VERIFIER_ID);
         require(verifierMint == 450e18 && verifierBurn == 0, "verifier reward ignores the owner cap");

@@ -40,16 +40,16 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         _join(MEMBER1_ID, amount1, 0);
         _join(MEMBER1_ID, amount2, 0);
 
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER1_ID);
         uint256 amount = info.ownAmount + info.providerAmount;
         require(info.joinedRound == 2 && amount == amount1 + amount2 && info.ownAmount == amount1 + amount2, "appends");
 
         _withdraw(MEMBER1_ID, amount2 + 1);
-        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER1_ID);
         amount = info.ownAmount + info.providerAmount;
         require(amount == amount1 + amount2 - amount2 - 1 && info.ownAmount == amount, "partial withdraw");
         require(
-            executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == amount,
+            executor.joinedAmountByGroupId(address(token), 2, ACTION_ID, GROUP_ID) == amount,
             "group total tracks"
         );
         require(joinToken.balanceOf(address(executor)) == amount, "balance conserved");
@@ -61,11 +61,11 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         _atPhase(4);
         _submitScores(_scores(score));
 
-        (uint256 decoded, bool verified) = executor.originScore(address(token), ACTION_ID, 2, MEMBER1_ID);
+        (uint256 decoded, bool verified) = executor.originScore(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(verified && decoded == score, "origin decode");
-        (uint256 finalScore, bool finalVerified) = executor.finalScore(address(token), ACTION_ID, 2, MEMBER1_ID);
+        (uint256 finalScore, bool finalVerified) = executor.finalScore(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(finalVerified && finalScore == 100e18 * score, "final score");
-        require(executor.totalFinalScore(address(token), ACTION_ID, 2) == 100e18 * score, "total accumulates");
+        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == 100e18 * score, "total accumulates");
     }
 
     function testFuzzSettleSplitsMatchFinalScore(uint8 score1Seed, uint8 score2Seed) external {
@@ -81,7 +81,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
 
         _atPhase(5);
         _fundExecutor(PROPOSAL_REWARD);
-        actionTarget.setActionReward(address(token), ACTION_ID, 2, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
 
         if (total == 0) {
@@ -93,7 +93,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
                     2
                 )
             );
-            executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+            executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
             return;
         }
 
@@ -122,7 +122,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
                     )
                 );
             }
-            executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER1_ID);
+            executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
         } else {
             (mint1,) = _settle(2, MEMBER1_ID);
         }
@@ -149,7 +149,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
                     )
                 );
             }
-            executor.mintMemberReward(address(token), ACTION_ID, 2, MEMBER2_ID);
+            executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER2_ID);
         } else {
             (mint2,) = _settle(2, MEMBER2_ID);
         }
@@ -208,25 +208,25 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(MEMBER1, amount);
         _join(MEMBER1_ID, amount, 0);
 
-        require(executor.joinedAmountByMemberId(address(token), ACTION_ID, 2, MEMBER1_ID) == amount, "current");
+        require(executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER1_ID) == amount, "current");
         uint256 ahead = uint256(aheadSeed) % 10 + 3;
         bytes memory expected = abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, ahead, 2);
         vm.expectRevert(expected);
-        executor.joinedAmountByMemberId(address(token), ACTION_ID, ahead, MEMBER1_ID);
+        executor.joinedAmountByMemberId(address(token), ahead, ACTION_ID, MEMBER1_ID);
         vm.expectRevert(expected);
-        executor.joinedAmountByActionId(address(token), ACTION_ID, ahead);
+        executor.joinedAmountByActionId(address(token), ahead, ACTION_ID);
         vm.expectRevert(expected);
-        executor.joinInfo(address(token), ACTION_ID, ahead, MEMBER1_ID);
+        executor.joinInfo(address(token), ahead, ACTION_ID, MEMBER1_ID);
         vm.expectRevert(expected);
-        executor.joinedAmountByGroupId(address(token), ACTION_ID, ahead, GROUP_ID);
+        executor.joinedAmountByGroupId(address(token), ahead, ACTION_ID, GROUP_ID);
         vm.expectRevert(expected);
-        executor.groupIdsByRound(address(token), ACTION_ID, ahead, 0, 10, false);
+        executor.groupIdsByRound(address(token), ahead, ACTION_ID, 0, 10, false);
         vm.expectRevert(expected);
-        executor.memberIdsByGroupId(address(token), ACTION_ID, ahead, GROUP_ID, 0, 10, false);
+        executor.memberIdsByGroupId(address(token), ahead, ACTION_ID, GROUP_ID, 0, 10, false);
         vm.expectRevert(expected);
-        executor.providerAmountsByMemberId(address(token), ACTION_ID, ahead, MEMBER1_ID, 0, 10, false);
+        executor.providerAmountsByMemberId(address(token), ahead, ACTION_ID, MEMBER1_ID, 0, 10, false);
         vm.expectRevert(expected);
-        executor.verificationInfosByRound(address(token), ACTION_ID, ahead, MEMBER1_ID);
+        executor.verificationInfosByRound(address(token), ahead, ACTION_ID, MEMBER1_ID);
         vm.expectRevert(expected);
         executor.totalActivationStakeByRound(address(token), ahead);
         vm.expectRevert(expected);

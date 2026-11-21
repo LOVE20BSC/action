@@ -30,7 +30,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
 
         vm.clearMockedCalls();
         require(token.balanceOf(recipient) == 100e18, "full refund");
-        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "participation cleared");
+        require(executor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 0, "participation cleared");
     }
 
     function testFuzzRefundRejectsTaxAndPreservesAccounting(uint8 seed) external {
@@ -55,7 +55,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(joinToken.balanceOf(recipient) == 0, "refund rolls back");
         require(joinToken.balanceOf(address(executor)) == 100e18, "deposit preserved");
         if (route < 2) {
-            require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 100e18, "participation preserved");
+            require(executor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 100e18, "participation preserved");
         } else {
             (, uint256[] memory amounts,, uint256 total) =
                 executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
@@ -70,7 +70,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InexactJoinTokenTransfer.selector, 100e18, 90e18));
         executor.join(address(token), ACTION_ID, GROUP_ID, MEMBER1_ID, 100e18, 0, new string[](0));
-        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 0, "no unbacked credit");
+        require(executor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 0, "no unbacked credit");
         require(joinToken.balanceOf(MEMBER1) == 100e18, "deposit rolled back");
     }
 
@@ -117,28 +117,28 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 80e18);
         _join(MEMBER2_ID, 80e18, PROVIDER_ID);
 
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(info.joinedRound == 2 && info.groupId == GROUP_ID, "member 1 round and group");
         require(
             info.ownAmount == 150e18 && info.providerAmount == 0 && info.ownAmount + info.providerAmount == 150e18,
             "member 1 amounts"
         );
 
-        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(info.groupId == GROUP_ID && info.ownAmount == 0 && info.providerAmount == 80e18, "member 2 provider only");
         require(info.ownAmount + info.providerAmount == 80e18, "member 2 total");
 
         require(
-            executor.joinedAmountByGroupId(address(token), ACTION_ID, 2, GROUP_ID) == 230e18,
+            executor.joinedAmountByGroupId(address(token), 2, ACTION_ID, GROUP_ID) == 230e18,
             "group total"
         );
-        require(executor.joinedAmountByActionId(address(token), ACTION_ID, 2) == 230e18, "action total");
+        require(executor.joinedAmountByActionId(address(token), 2, ACTION_ID) == 230e18, "action total");
         require(joinToken.balanceOf(MEMBER1) == 0, "own tokens pulled");
         require(joinToken.balanceOf(PROVIDER) == 0, "quota tokens deposited");
         require(actionTarget.registerCalls() == 2, "join state registered once per member");
 
         (uint256[] memory memberIds, uint256 total) =
-            executor.memberIdsByGroupId(address(token), ACTION_ID, 2, GROUP_ID, 0, 10, false);
+            executor.memberIdsByGroupId(address(token), 2, ACTION_ID, GROUP_ID, 0, 10, false);
         require(total == 2 && memberIds.length == 2, "member set size");
         require(memberIds[0] == MEMBER1_ID && memberIds[1] == MEMBER2_ID, "member set order");
     }
@@ -237,7 +237,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
             executor.providerQuotas(address(token), ACTION_ID, GROUP_B_ID, PROVIDER_ID, 0, 10, false);
         require(total == 1 && quotaAmounts[0] == 70e18 && used[0] == 70e18, "current group withdraw capped by availability");
 
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(
             info.joinedRound == 2 && info.ownAmount + info.providerAmount == 70e18,
             "withdraw leaves participation intact"
@@ -294,7 +294,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InsufficientProviderQuota.selector, PROVIDER_ID, 1, 0));
         executor.withdrawProviderQuota(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 1);
 
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(
             info.joinedRound == 2 && info.ownAmount + info.providerAmount == 40e18,
             "withdraw leaves participation intact"
@@ -363,7 +363,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         require(joinToken.balanceOf(MEMBER2) - memberBefore == 20e18, "own part returned");
         require(joinToken.balanceOf(address(executor)) == 150e18, "provider part stays in the contract");
 
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(info.joinedRound == 0 && info.ownAmount + info.providerAmount == 0, "membership cleared");
 
         (uint256[] memory memberIds, uint256[] memory quotaAmounts, uint256[] memory used, uint256 total) =
@@ -373,7 +373,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
 
         _join(MEMBER2_ID, 150e18, PROVIDER_ID);
         require(joinToken.balanceOf(address(executor)) == 150e18, "re-join moves no new tokens");
-        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(info.joinedRound == 2 && info.ownAmount + info.providerAmount == 150e18, "restored quota reused");
         require(actionTarget.registerCalls() == 2, "join state re-registered");
     }
@@ -389,17 +389,17 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _join(MEMBER2_ID, 150e18, PROVIDER_ID);
 
         _withdraw(MEMBER1_ID, 40e18);
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(
             info.joinedRound == 2 && info.ownAmount + info.providerAmount == 60e18, "partial withdraw stays joined"
         );
 
         _withdraw(MEMBER1_ID, 60e18);
-        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER1_ID);
+        info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(info.joinedRound == 0 && info.ownAmount + info.providerAmount == 0, "full own withdraw without provider exits");
 
         _withdraw(MEMBER2_ID, 10e18);
-        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(info.joinedRound == 2 && info.ownAmount + info.providerAmount == 150e18, "provider keeps membership alive");
 
         require(actionTarget.clearCalls() == 1, "cleared once");
@@ -415,7 +415,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         vm.prank(PROVIDER);
         executor.withdrawProviderQuota(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
         require(joinToken.balanceOf(PROVIDER) - before == 50e18, "unused quota paid out");
-        JoinInfo memory info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        JoinInfo memory info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(
             info.joinedRound == 2 && info.ownAmount + info.providerAmount == 100e18, "participation untouched"
         );
@@ -424,7 +424,7 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         before = joinToken.balanceOf(PROVIDER);
         _quotaRemove(PROVIDER_ID, MEMBER2_ID);
         require(joinToken.balanceOf(PROVIDER) - before == 100e18, "revoke returns the used part");
-        info = executor.joinInfo(address(token), ACTION_ID, 2, MEMBER2_ID);
+        info = executor.joinInfo(address(token), 2, ACTION_ID, MEMBER2_ID);
         require(info.joinedRound == 0 && info.ownAmount + info.providerAmount == 0, "revoke without quota exits");
     }
 

@@ -176,7 +176,13 @@ contract MockGroupServiceActionTarget {
         _createdRound[tokenAddress][actionId] = createdRound;
     }
 
-    function setActionReward(address tokenAddress, uint256 actionId, uint256 round, uint256 amount, bool minted)
+    function setActionReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 amount,
+        bool minted
+    )
         external
     {
         _actionReward[tokenAddress][actionId][round] = amount;
@@ -193,18 +199,23 @@ contract MockGroupServiceActionTarget {
         if (currentRound <= createdRound) {
             revert JoinNotOpen(tokenAddress, actionId, currentRound, createdRound);
         }
-        _recordMembership(tokenAddress, actionId, currentRound - 1, memberId, true);
+        _recordMembership(tokenAddress, currentRound - 1, actionId, memberId, true);
     }
 
     function clearJoinState(address tokenAddress, uint256 actionId, uint256 memberId) external {
-        _recordMembership(tokenAddress, actionId, _joinRound(), memberId, false);
+        _recordMembership(tokenAddress, _joinRound(), actionId, memberId, false);
     }
 
     function isJoined(address tokenAddress, uint256 actionId, uint256 memberId) external view returns (bool) {
         return _joined[tokenAddress][actionId][memberId];
     }
 
-    function isJoinedByRound(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId)
+    function isJoinedByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    )
         external
         view
         returns (bool)
@@ -212,10 +223,14 @@ contract MockGroupServiceActionTarget {
         if (round > _joinRound()) {
             return false;
         }
-        return _containsByRound(tokenAddress, actionId, round, memberId);
+        return _containsByRound(tokenAddress, round, actionId, memberId);
     }
 
-    function actionReward(address tokenAddress, uint256 actionId, uint256 round)
+    function actionReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    )
         external
         view
         returns (uint256 amount, bool minted)
@@ -224,7 +239,11 @@ contract MockGroupServiceActionTarget {
         minted = _actionMinted[tokenAddress][actionId][round];
     }
 
-    function mintActionReward(address tokenAddress, uint256 actionId, uint256 round) external returns (uint256) {
+    function mintActionReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    ) external returns (uint256) {
         mintRewardCalls++;
         lastMintTokenAddress = tokenAddress;
         lastMintActionId = actionId;
@@ -247,7 +266,13 @@ contract MockGroupServiceActionTarget {
         return currentRound == 0 ? 0 : currentRound - 1;
     }
 
-    function _recordMembership(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId, bool present)
+    function _recordMembership(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId,
+        bool present
+    )
         internal
     {
         bytes32 key = keccak256(abi.encode(tokenAddress, actionId, memberId));
@@ -259,7 +284,12 @@ contract MockGroupServiceActionTarget {
         _joined[tokenAddress][actionId][memberId] = present;
     }
 
-    function _containsByRound(address tokenAddress, uint256 actionId, uint256 round, uint256 memberId)
+    function _containsByRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    )
         internal
         view
         returns (bool)
@@ -333,8 +363,8 @@ contract MockGroupServiceGroupActionExecutor {
 
     function setGroupLedger(
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256[] calldata groupIds,
         uint256[] calldata scores,
         uint256 verifierId
@@ -354,19 +384,24 @@ contract MockGroupServiceGroupActionExecutor {
             totalScore += scores[i];
         }
         action.totalScore = totalScore;
-        _setActionReward(action, tokenAddress, actionId, round, totalScore, verifierId);
+        _setActionReward(action, tokenAddress, round, actionId, totalScore, verifierId);
     }
 
-    function setActionReward(address tokenAddress, uint256 actionId, uint256 round, uint256 reward) external {
+    function setActionReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 reward
+    ) external {
         VerifiedAction storage action = _verifiedAction[tokenAddress][actionId][round];
-        _setActionReward(action, tokenAddress, actionId, round, reward, action.verifierId);
+        _setActionReward(action, tokenAddress, round, actionId, reward, action.verifierId);
     }
 
     function _setActionReward(
         VerifiedAction storage action,
         address tokenAddress,
-        uint256 actionId,
         uint256 round,
+        uint256 actionId,
         uint256 reward,
         uint256 verifierId
     ) private {
@@ -405,7 +440,12 @@ contract MockGroupServiceGroupActionExecutor {
         return sinceRound != 0 && round >= sinceRound;
     }
 
-    function generatedActionRewardByGroupId(address tokenAddress, uint256 actionId, uint256 round, uint256 groupId)
+    function generatedActionRewardByGroupId(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId
+    )
         public
         view
         returns (uint256)
@@ -424,7 +464,7 @@ contract MockGroupServiceGroupActionExecutor {
         if (_joinedActions[tokenAddress][round][groupId].count() == 0) return 0;
         (uint256[] memory actionIds,) = _generatedActions[tokenAddress][round].values(0, type(uint256).max, false);
         for (uint256 i = 0; i < actionIds.length; ++i) {
-            weight += generatedActionRewardByGroupId(tokenAddress, actionIds[i], round, groupId);
+            weight += generatedActionRewardByGroupId(tokenAddress, round, actionIds[i], groupId);
         }
     }
 
