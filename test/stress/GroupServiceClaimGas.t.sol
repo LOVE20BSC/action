@@ -13,14 +13,11 @@ import {ProposalBody, TargetMode} from "@core/interfaces/ISubmit.sol";
 
 contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
     uint256 private constant MEMBER_ID = 1;
+    uint256 private constant PROVIDER_ID = 2;
     uint256 private constant SUBMIT_ROUND_LIMIT = 1_000;
     uint256 private constant SINGLE_ACTION_CLAIM_BUDGET = 500_000;
-    uint256 private constant ACTIONS_PER_PAGE = 200;
-    uint256 private constant PAGE_GAS_BUDGET = 3_000_000;
-    uint256 private constant UNPREPARED_CLAIM_BUDGET = 16_000_000;
-    uint256 private constant ONE_PAGE_CLAIM_BUDGET = 14_000_000;
-    uint256 private constant PREPARED_CLAIM_BUDGET = 10_000_000;
-    uint256 private constant UNPREPARED_BATCH_MEASUREMENT_BUDGET = 25_000_000;
+    uint256 private constant FULL_ROUND_CLAIM_BUDGET = 16_000_000;
+    uint256 private constant FULL_ROUND_BATCH_MEASUREMENT_BUDGET = 25_000_000;
     uint160 private constant FIRST_RECIPIENT = 0x2000;
 
     GroupActionExecutor private group;
@@ -58,15 +55,15 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         uint256[] memory proposers = _createProposers();
         uint256[] memory firstActions = _createAndVoteOnActions(proposers, SUBMIT_ROUND_LIMIT, false);
         _advancePhase();
-        _joinActions(firstActions);
+        _joinActions(firstActions, MEMBER_ID, member1);
         uint256[] memory secondActions = _createAndVoteOnActions(proposers, SUBMIT_ROUND_LIMIT, false);
         _advancePhase();
-        _joinActions(secondActions);
+        _joinActions(secondActions, MEMBER_ID, member1);
 
         uint256[] memory sourceActionIds = _createAndVoteOnActions(proposers, 1, true);
         uint256 round = phase.currentPhase();
-        uint256[] memory serviceActionIds = _createServiceActions(1);
-        _finishServiceRound(sourceActionIds, serviceActionIds, new uint256[](0));
+        uint256[] memory serviceActionIds = _createServiceActions(1, 0);
+        _finishServiceRound(sourceActionIds, serviceActionIds, new uint256[](0), false);
         (, uint256 participationCount) = group.joinedActionIdsByGroupId(address(sourceToken), MEMBER_ID, round, 0, 0, false);
         require(participationCount == 2 * SUBMIT_ROUND_LIMIT + 1, "historical positions carry forward");
         vm.resumeGasMetering();
@@ -79,27 +76,14 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         uint256[] memory proposers = _createProposers();
         uint256[] memory sourceActionIds = _createAndVoteOnActions(proposers, SUBMIT_ROUND_LIMIT, true);
         uint256 round = phase.currentPhase();
-        uint256[] memory serviceActionIds = _createServiceActions(1);
-        _finishServiceRound(sourceActionIds, serviceActionIds, proposers);
+        uint256[] memory serviceActionIds = _createServiceActions(1, 0);
+        _finishServiceRound(sourceActionIds, serviceActionIds, proposers, false);
         vm.resumeGasMetering();
 
         uint256 serviceActionId = serviceActionIds[0];
         uint256 perRecipient = _recipientReward(round, 1);
         uint256 distributed = perRecipient * _recipientCount();
-        uint256 unpreparedSnapshot = vm.snapshotState();
-        _assertProgress(round, 0);
-        _assertClaim(round, serviceActionId, UNPREPARED_CLAIM_BUDGET, distributed);
-        _assertRecipientBalances(0);
-        require(vm.revertToStateAndDelete(unpreparedSnapshot), "restore unprepared claim");
-
-        uint256 firstPageGas = _preparePage(round, ACTIONS_PER_PAGE);
-        uint256 onePageSnapshot = vm.snapshotState();
-        _assertClaim(round, serviceActionId, ONE_PAGE_CLAIM_BUDGET, distributed);
-        _assertRecipientBalances(0);
-        require(vm.revertToStateAndDelete(onePageSnapshot), "restore partially prepared claim");
-
-        _finishPreparation(round, ACTIONS_PER_PAGE, firstPageGas);
-        _assertClaim(round, serviceActionId, PREPARED_CLAIM_BUDGET, distributed);
+        _assertClaim(round, serviceActionId, FULL_ROUND_CLAIM_BUDGET, distributed);
         _assertRecipientBalances(0);
     }
 
@@ -108,19 +92,78 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         uint256[] memory proposers = _createProposers();
         uint256[] memory sourceActionIds = _createAndVoteOnActions(proposers, SUBMIT_ROUND_LIMIT, true);
         uint256 round = phase.currentPhase();
-        uint256[] memory serviceActionIds = _createServiceActions(2);
-        _finishServiceRound(sourceActionIds, serviceActionIds, proposers);
+        uint256[] memory serviceActionIds = _createServiceActions(2, 0);
+        _finishServiceRound(sourceActionIds, serviceActionIds, proposers, false);
         vm.resumeGasMetering();
 
-        uint256 unpreparedSnapshot = vm.snapshotState();
-        _assertProgress(round, 0);
-        _assertBatchClaim(round, serviceActionIds, UNPREPARED_BATCH_MEASUREMENT_BUDGET);
+        _assertBatchClaim(round, serviceActionIds, FULL_ROUND_BATCH_MEASUREMENT_BUDGET);
         _assertRecipientBalances(0);
-        require(vm.revertToStateAndDelete(unpreparedSnapshot), "restore unprepared batch");
+    }
 
-        _finishPreparation(round, 0, 0);
-        _assertBatchClaim(round, serviceActionIds, PREPARED_CLAIM_BUDGET);
-        _assertRecipientBalances(0);
+    function testOwnerClaimsWithAThousandProviderActions() external {
+        vm.pauseGasMetering();
+        uint256[] memory proposers = _createProposers();
+        uint256[] memory sourceActionIds = _createAndVoteOnActions(proposers, SUBMIT_ROUND_LIMIT, true);
+        uint256 round = phase.currentPhase();
+        uint256[] memory serviceActionIds = _createServiceActions(1, 0.5e18);
+        _finishServiceRound(sourceActionIds, serviceActionIds, proposers, true);
+        vm.resumeGasMetering();
+
+        uint256 ownerBudget = mint.proposalReward(address(token), round) / 2;
+        uint256 marketBudget = ownerBudget / 2;
+        uint256 ownerMarket = marketBudget / 2;
+        uint256 partnershipSlice =
+            (ownerBudget - marketBudget) / SUBMIT_ROUND_LIMIT + ownerMarket / SUBMIT_ROUND_LIMIT;
+        uint256 recipient = partnershipSlice / service.MAX_RECIPIENTS_PER_ACTION();
+        uint256 distributed = marketBudget - ownerMarket + recipient * _recipientCount();
+        _assertOwnerQuote(round, serviceActionIds[0], distributed);
+        _assertClaim(round, serviceActionIds[0], FULL_ROUND_CLAIM_BUDGET, distributed);
+    }
+
+    function testOwnerClaimGasIgnoresOtherGroupsVerifiedActions() external {
+        vm.pauseGasMetering();
+        uint256[] memory proposers = _createProposers();
+        uint256[] memory allActions = _createAndVoteOnActions(proposers, SUBMIT_ROUND_LIMIT, true);
+        uint256 round = phase.currentPhase();
+        uint256 serviceActionId = _createServiceActions(1, 0.5e18)[0];
+        uint256[] memory ownActions = new uint256[](1);
+        ownActions[0] = allActions[0];
+        uint256[] memory otherActions = new uint256[](allActions.length - 1);
+        for (uint256 i; i < otherActions.length; ++i) {
+            otherActions[i] = allActions[i + 1];
+        }
+
+        vm.prank(member1);
+        sourceToken.transfer(member2, otherActions.length);
+        vm.prank(member2);
+        sourceToken.approve(address(group), type(uint256).max);
+        _advancePhase();
+        _joinActions(ownActions, MEMBER_ID, member1);
+        _joinActions(otherActions, PROVIDER_ID, member2);
+        _advancePhase();
+        _verifyActions(ownActions, MEMBER_ID, false);
+        _verifyActions(otherActions, PROVIDER_ID, false);
+        _advancePhase();
+        vm.resumeGasMetering();
+
+        uint256 communityWeight = group.totalGeneratedActionReward(address(sourceToken), round);
+        uint256 ownWeight = group.generatedActionRewardByGroupId(address(sourceToken), round, ownActions[0], MEMBER_ID);
+        require(ownWeight != 0 && communityWeight == ownWeight * SUBMIT_ROUND_LIMIT, "all actions earned rewards");
+        require(group.totalGeneratedActionRewardByGroupId(address(sourceToken), round, MEMBER_ID) == ownWeight, "own list");
+        uint256 ownerBudget = mint.proposalReward(address(token), round) / (2 * SUBMIT_ROUND_LIMIT);
+        _coolClaimContracts();
+        vm.prank(member1);
+        uint256 beforeGas = gasleft();
+        uint256 paid = service.mintGroupOwnerReward{gas: SINGLE_ACTION_CLAIM_BUDGET}(
+            address(token), round, serviceActionId, MEMBER_ID
+        );
+        emit log_named_uint("single group claim gas", beforeGas - gasleft());
+        require(paid == ownerBudget && paid != 0, "owner paid for one verified action");
+    }
+
+    function _assertOwnerQuote(uint256 round, uint256 serviceActionId, uint256 distributed) private view {
+        (uint256 amount, bool minted) = service.groupOwnerReward(address(token), round, serviceActionId, MEMBER_ID);
+        require(amount == mint.proposalReward(address(token), round) / 2 - distributed && !minted, "owner quote");
     }
 
     function _createProposers() private returns (uint256[] memory proposerIds) {
@@ -180,21 +223,25 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         vm.stopPrank();
     }
 
-    function _joinActions(uint256[] memory actionIds) private {
+    function _joinActions(uint256[] memory actionIds, uint256 groupId, address groupOwner) private {
         GroupConfig memory config =
             GroupConfig({description: "Group", maxCapacity: 0, minJoinAmount: 1, maxJoinAmount: 0, maxAccounts: 0});
-        vm.startPrank(member1);
+        vm.startPrank(groupOwner);
         for (uint256 i; i < actionIds.length; ++i) {
-            group.activateGroup(address(sourceToken), actionIds[i], MEMBER_ID, config);
-            group.join(address(sourceToken), actionIds[i], MEMBER_ID, MEMBER_ID, 1, 0, new string[](0));
+            group.activateGroup(address(sourceToken), actionIds[i], groupId, config);
+            group.join(address(sourceToken), actionIds[i], groupId, groupId, 1, 0, new string[](0));
         }
         vm.stopPrank();
     }
 
-    function _createServiceActions(uint256 count) private returns (uint256[] memory serviceActionIds) {
+    function _createServiceActions(uint256 count, uint256 providerIncentiveRatio)
+        private
+        returns (uint256[] memory serviceActionIds)
+    {
         serviceActionIds = new uint256[](count);
-        bytes memory serviceData =
-            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17, 0)));
+        bytes memory serviceData = abi.encodePacked(
+            address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17, providerIncentiveRatio))
+        );
         for (uint256 i; i < count; ++i) {
             uint256 proposerId = i + 1;
             uint256 serviceActionId = _submitActionProposal(proposerId, "Group service", serviceData);
@@ -206,10 +253,12 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
     function _finishServiceRound(
         uint256[] memory sourceActionIds,
         uint256[] memory serviceActionIds,
-        uint256[] memory recipientCandidates
+        uint256[] memory recipientCandidates,
+        bool withProvider
     ) private {
         _advancePhase();
-        _joinActions(sourceActionIds);
+        _joinActions(sourceActionIds, MEMBER_ID, member1);
+        if (withProvider) _joinProviderActors(sourceActionIds);
         vm.startPrank(member1);
         for (uint256 i; i < serviceActionIds.length; ++i) {
             service.join(address(token), serviceActionIds[i], MEMBER_ID);
@@ -218,14 +267,40 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
 
         _advancePhase();
         if (recipientCandidates.length != 0) _setFullRecipientLists(sourceActionIds, recipientCandidates);
-        uint256[] memory scores = new uint256[](1);
+        _verifyActions(sourceActionIds, MEMBER_ID, withProvider);
+        _advancePhase();
+    }
+
+    function _verifyActions(uint256[] memory sourceActionIds, uint256 groupId, bool withProvider) private {
+        uint256[] memory scores = new uint256[](withProvider ? 2 : 1);
         scores[0] = 100;
+        if (withProvider) scores[1] = 100;
         vm.startPrank(member1);
         for (uint256 i; i < sourceActionIds.length; ++i) {
-            group.submitOriginScores(address(sourceToken), sourceActionIds[i], MEMBER_ID, MEMBER_ID, 0, scores);
+            group.submitOriginScores(address(sourceToken), sourceActionIds[i], MEMBER_ID, groupId, 0, scores);
         }
         vm.stopPrank();
-        _advancePhase();
+    }
+
+    function _joinProviderActors(uint256[] memory sourceActionIds) private {
+        vm.prank(member1);
+        sourceToken.transfer(member2, sourceActionIds.length);
+        vm.startPrank(member2);
+        (uint256 actorId,) = memberNFT.mint("ProviderActor");
+        sourceToken.approve(address(group), type(uint256).max);
+        vm.stopPrank();
+
+        uint256[] memory actorIds = new uint256[](1);
+        actorIds[0] = actorId;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+        for (uint256 i = 0; i < sourceActionIds.length; ++i) {
+            uint256 sourceActionId = sourceActionIds[i];
+            vm.prank(member2);
+            group.addProviderQuota(address(sourceToken), sourceActionId, MEMBER_ID, PROVIDER_ID, actorIds, amounts);
+            vm.prank(member2);
+            group.join(address(sourceToken), sourceActionId, MEMBER_ID, actorId, 1, PROVIDER_ID, new string[](0));
+        }
     }
 
     function _setFullRecipientLists(uint256[] memory sourceActionIds, uint256[] memory recipientCandidates) private {
@@ -246,40 +321,6 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
             service.setRecipients(address(sourceToken), sourceActionIds[i], MEMBER_ID, recipients, ratios, remarks);
         }
         vm.stopPrank();
-    }
-
-    function _preparePage(uint256 round, uint256 expectedProcessed) private returns (uint256 gasUsed) {
-        vm.cool(address(group));
-        vm.prank(member2);
-        uint256 beforeGas = gasleft();
-        (uint256 processed, uint256 total) = group.prepareGeneratedActionRewardByGroupId{gas: PAGE_GAS_BUDGET}(
-            address(sourceToken), round, MEMBER_ID, ACTIONS_PER_PAGE
-        );
-        gasUsed = beforeGas - gasleft();
-        require(processed == expectedProcessed && total == SUBMIT_ROUND_LIMIT, "preparation resumes at stored offset");
-        require(gasUsed < PAGE_GAS_BUDGET, "page exceeds the local gas budget");
-    }
-
-    function _finishPreparation(uint256 round, uint256 alreadyProcessed, uint256 maxPageGas) private {
-        for (
-            uint256 processed = alreadyProcessed + ACTIONS_PER_PAGE;
-            processed <= SUBMIT_ROUND_LIMIT;
-            processed += ACTIONS_PER_PAGE
-        ) {
-            uint256 gasUsed = _preparePage(round, processed);
-            if (gasUsed > maxPageGas) maxPageGas = gasUsed;
-        }
-        emit log_named_uint("largest preparation page gas", maxPageGas);
-
-        _assertProgress(round, SUBMIT_ROUND_LIMIT);
-        (uint256 processedCount, uint256 actionCount) =
-            group.prepareGeneratedActionRewardByGroupId(address(sourceToken), round, MEMBER_ID, type(uint256).max);
-        require(processedCount == actionCount && actionCount == SUBMIT_ROUND_LIMIT, "completed preparation is idempotent");
-    }
-
-    function _assertProgress(uint256 round, uint256 expectedProcessed) private view {
-        (uint256 processed, uint256 count) = group.groupRewardPreparation(address(sourceToken), round, MEMBER_ID);
-        require(processed == expectedProcessed && count == SUBMIT_ROUND_LIMIT, "expected full-round cursor");
     }
 
     function _recipientCount() private view returns (uint256) {

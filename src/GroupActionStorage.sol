@@ -39,11 +39,6 @@ library GroupActionStorage {
         address voteAddress;
     }
 
-    struct GroupRewardPreparationState {
-        uint256 processedActionCount;
-        uint256 weight;
-    }
-
     struct ProviderAttribution {
         uint256 providerId;
         uint256 joinedBlock;
@@ -214,14 +209,12 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => uint256[])) actionIdsWithGeneratedActionReward;
         // tokenAddress => actionId => round => proposal reward recorded at verification completion
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) generatedActionReward;
-        // tokenAddress => round => groupId => accumulated shares for a prefix of the generated actions
-        mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardPreparationState))) groupRewardProgress;
         // groupId => memberId => permanent first-join attribution across actions and tokens
         mapping(uint256 => mapping(uint256 => ProviderAttribution)) providerAttribution;
         // tokenAddress => actionId => round => groupId => external Provider scores
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => ProviderScores)))) providerScoresByGroupId;
-        // tokenAddress => round => groupId => actions with positive external Provider scores
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) actionIdsWithProviderScoreByGroupId;
+        // tokenAddress => round => groupId => actions for which the group finished verification with a positive score
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) verifiedActionIdsByGroupId;
         // tokenAddress => round => providerId => source action and group pairs with positive scores
         mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardKey[]))) providerRewardKeys;
     }

@@ -4,7 +4,9 @@ pragma solidity =0.8.37;
 import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 import {MemberOwner} from "./MemberOwner.sol";
+import {ProviderReward} from "./ProviderReward.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
+import {Pagination} from "@libs/Pagination.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
@@ -29,6 +31,12 @@ library GroupActionManager {
     using RoundHistoryString for RoundHistoryString.History;
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
+
+    struct GroupRewardScope {
+        address tokenAddress;
+        uint256 round;
+        uint256 groupId;
+    }
 
     modifier onlyGroupOwner(
         GroupActionStorage.Layout storage self,
@@ -341,6 +349,37 @@ library GroupActionManager {
         uint256 memberId
     ) external view returns (bool) {
         return self.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
+    }
+
+    function actionIdsWithGeneratedActionReward(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return Pagination.paginate(self.actionIdsWithGeneratedActionReward[tokenAddress][round], offset, limit, reverse);
+    }
+
+    function groupRewardWeights(
+        GroupActionStorage.Layout storage self,
+        GroupRewardScope memory scope,
+        bool includeOwnerProviderWeight
+    ) external view returns (uint256 totalWeight, uint256 ownerProviderWeight) {
+        uint256[] storage actionIds = self.verifiedActionIdsByGroupId[scope.tokenAddress][scope.round][scope.groupId];
+        uint256 count = actionIds.length;
+        for (uint256 i = 0; i < count; ++i) {
+            uint256 actionId = actionIds[i];
+            uint256 weight = self.generatedActionRewardByGroupId(scope.tokenAddress, scope.round, actionId, scope.groupId);
+            totalWeight += weight;
+            if (includeOwnerProviderWeight && weight != 0) {
+                uint256 groupScore = self.finalScoreByGroupId[scope.tokenAddress][actionId][scope.round][scope.groupId];
+                uint256 externalScore =
+                    self.providerScoresByGroupId[scope.tokenAddress][actionId][scope.round][scope.groupId].externalProviderScore;
+                ownerProviderWeight += ProviderReward.weight(weight, groupScore - externalScore, groupScore);
+            }
+        }
     }
 
     function _checkVerificationInfo(

@@ -263,16 +263,31 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
         uint256 cappedBudget = expected.budget * (ownerGovRatio / 2) / PRECISION;
         require(cappedBudget < theoreticalBudget, "fixture triggers group cap");
         expected.burn = theoreticalBudget - cappedBudget;
-        expected.sliceA = cappedBudget * weightA / ownerWeight;
-        expected.sliceB = cappedBudget * rewardB / ownerWeight;
-        expected.provider = (expected.sliceA * 3 / 5) / 3;
-        expected.recipientA = (expected.sliceA - expected.provider) / 2;
-        expected.recipientB = expected.sliceB / 4;
-        expected.ownerSelf = cappedBudget - expected.provider - expected.recipientA - expected.recipientB;
+        _expectedDistribution(expected, cappedBudget, weightA, rewardB);
         expected.verifierA = expected.budget * rewardA / (2 * denominator);
         expected.verifierGroupShareA = expected.verifierA * weightA / rewardA;
         expected.verifierB = expected.budget * rewardB / (2 * denominator);
         require(expected.provider != 0 && expected.recipientB != 0 && expected.burn != 0, "fixture has all shares");
+    }
+
+    function _expectedDistribution(Allocation memory expected, uint256 ownerBudget, uint256 weightA, uint256 weightB)
+        private pure
+    {
+        uint256 ownerWeight = weightA + weightB;
+        uint256 marketBudget = ownerBudget * 3 / 5;
+        uint256 ownerProviderWeightA = weightA * PRECISION * 2 / 3;
+        uint256 ownerProviderWeightB = weightB * PRECISION;
+        uint256 scaledWeight = ownerWeight * PRECISION;
+        expected.provider = marketBudget * (weightA * PRECISION / 3) / scaledWeight;
+        uint256 partnershipA =
+            (ownerBudget - marketBudget) * weightA / ownerWeight + marketBudget * ownerProviderWeightA / scaledWeight;
+        expected.sliceA = partnershipA + expected.provider;
+        expected.sliceB = ownerBudget * weightB / ownerWeight;
+        expected.recipientA = partnershipA / 2;
+        expected.recipientB = expected.sliceB / 4;
+        expected.ownerSelf = ownerBudget - marketBudget
+            + marketBudget * (ownerProviderWeightA + ownerProviderWeightB) / scaledWeight
+            - expected.recipientA - expected.recipientB;
     }
 
     function _assertSourcesAndVerifierShares(Allocation memory expected, bool minted) private view {

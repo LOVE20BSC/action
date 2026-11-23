@@ -114,19 +114,6 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return _layout.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
     }
 
-    function actionIdsWithProviderScore(
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId,
-        uint256 offset,
-        uint256 limit,
-        bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return Pagination.paginate(
-            _layout.actionIdsWithProviderScoreByGroupId[tokenAddress][round][groupId], offset, limit, reverse
-        );
-    }
-
     function providerRewardKeys(
         address tokenAddress,
         uint256 round,
@@ -164,28 +151,17 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 groupId
     ) external view returns (uint256) {
-        return GroupActionVerify.totalGeneratedActionRewardByGroupId(_layout, tokenAddress, round, groupId);
+        (uint256 weight,) =
+            GroupActionManager.groupRewardWeights(_layout, GroupActionManager.GroupRewardScope(tokenAddress, round, groupId), false);
+        return weight;
     }
 
-    function groupRewardPreparation(
+    function groupRewardWeights(
         address tokenAddress,
         uint256 round,
         uint256 groupId
-    ) external view returns (uint256 processedActionCount, uint256 totalActionCount) {
-        return GroupActionVerify.groupRewardPreparation(_layout, tokenAddress, round, groupId);
-    }
-
-    function prepareGeneratedActionRewardByGroupId(
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId,
-        uint256 limit
-    ) external returns (uint256 processedActionCount, uint256 totalActionCount) {
-        if (round == 0) revert RoundNotStarted(1, 0);
-        // Load-bearing: The source action list and its group shares must be final before caching a prefix.
-        uint256 mintRound = _mintRound();
-        if (round > mintRound) revert RoundAfterMintWindow(round, mintRound);
-        return GroupActionVerify.prepareGeneratedActionRewardByGroupId(_layout, tokenAddress, round, groupId, limit);
+    ) external view returns (uint256 totalWeight, uint256 ownerProviderWeight) {
+        return GroupActionManager.groupRewardWeights(_layout, GroupActionManager.GroupRewardScope(tokenAddress, round, groupId), true);
     }
 
     function totalGeneratedActionRewardByVerifierId(
@@ -203,7 +179,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return GroupActionVerify.actionIdsWithGeneratedActionReward(_layout, tokenAddress, round, offset, limit, reverse);
+        return GroupActionManager.actionIdsWithGeneratedActionReward(_layout, tokenAddress, round, offset, limit, reverse);
     }
 
     function onProposalCreated(

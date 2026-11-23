@@ -166,7 +166,7 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
     }
 
     function testAlreadyMintedZeroProviderShareStillReverts() external {
-        _prepareSingleGroup(4, 4, 3, PRECISION, 2, 1);
+        _prepareSingleGroup(4, 4, 3, PRECISION, 1, 1);
         _atPhase(MINT_PHASE);
         vm.prank(GROUP_OWNER);
         require(

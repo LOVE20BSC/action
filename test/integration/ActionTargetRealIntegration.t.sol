@@ -7,7 +7,6 @@ import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
 import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
 import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
-import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 import {IMemberRewardExecutor, MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
 import {MockExecutor} from "../mocks/ActionTargetMocks.sol";
@@ -301,15 +300,14 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         vm.prank(member2);
         group.submitOriginScores(address(token), sourceActionId, 2, 1, 0, scores);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, round, round - 1)
-        );
-        group.prepareGeneratedActionRewardByGroupId(address(token), round, 1, 1);
-
         uint256 pool = mint.proposalReward(address(token), round);
         uint256 totalVotes = MEMBER1_VOTES + MEMBER2_VOTES + BELOW_THRESHOLD_VOTES;
         uint256 sourceReward = pool * MEMBER1_VOTES / totalVotes;
         require(sourceReward > 0 && service.totalGroupActionReward(address(token), round) == sourceReward, "round total");
+        require(
+            group.totalGeneratedActionRewardByGroupId(address(token), round, 1) == sourceReward,
+            "group weight is available after verification"
+        );
         require(
             group.totalGeneratedActionRewardByVerifierId(address(token), round, 2) == sourceReward,
             "elected verifier's action total"

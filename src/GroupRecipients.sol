@@ -2,13 +2,13 @@
 pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
+import {ProviderReward} from "./ProviderReward.sol";
 import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 import {IGroupRecipientsEvents, IGroupRecipientsErrors} from "./interfaces/IGroupRecipients.sol";
 import {
     IGroupServiceExecutorErrors,
     IGroupServiceExecutorEvents,
-    MemberRewardSummary,
-    ServiceRewardDetails
+    MemberRewardSummary
 } from "./interfaces/IGroupServiceExecutor.sol";
 import {MemberRewardStatus} from "./interfaces/IMemberRewardExecutor.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
@@ -48,30 +48,37 @@ library GroupRecipients {
         GroupServiceStorage.MemberRewardKey memory key,
         GroupServiceStorage.PrimaryRole role
     ) external view returns (GroupServiceStorage.Settlement memory) {
-        return _settlement(self, protocol, key, role);
+        return _settlement(self, protocol, key, role, true);
     }
 
     function _settlement(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.PrimaryRole role
+        GroupServiceStorage.PrimaryRole role,
+        bool includeOwnerProviderWeight
     ) private view returns (GroupServiceStorage.Settlement memory settlementInfo) {
+        IGroupActionExecutor source = IGroupActionExecutor(protocol.groupActionExecutorAddress);
         settlementInfo.actionTokenAddress = self.actionTokenAddressByActionId[key.tokenAddress][key.actionId];
-        settlementInfo.denominator = IGroupActionExecutor(protocol.groupActionExecutorAddress)
-            .totalGeneratedActionReward(settlementInfo.actionTokenAddress, key.round);
+        settlementInfo.denominator = source.totalGeneratedActionReward(settlementInfo.actionTokenAddress, key.round);
         if (settlementInfo.denominator == 0) {
             settlementInfo.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
             return settlementInfo;
         }
 
+        settlementInfo.providerIncentiveRatio = self.providerIncentiveRatioByActionId[key.tokenAddress][key.actionId];
         if (role != GroupServiceStorage.PrimaryRole.Owner) {
-            settlementInfo.verifierWeight = IGroupActionExecutor(protocol.groupActionExecutorAddress)
+            settlementInfo.verifierWeight = source
                 .totalGeneratedActionRewardByVerifierId(settlementInfo.actionTokenAddress, key.round, key.memberId);
         }
         if (role != GroupServiceStorage.PrimaryRole.Verifier) {
-            settlementInfo.ownerWeight = IGroupActionExecutor(protocol.groupActionExecutorAddress)
-                .totalGeneratedActionRewardByGroupId(settlementInfo.actionTokenAddress, key.round, key.memberId);
+            if (includeOwnerProviderWeight && settlementInfo.providerIncentiveRatio != 0) {
+                (settlementInfo.ownerWeight, settlementInfo.ownerProviderWeight) =
+                    source.groupRewardWeights(settlementInfo.actionTokenAddress, key.round, key.memberId);
+            } else {
+                settlementInfo.ownerWeight =
+                    source.totalGeneratedActionRewardByGroupId(settlementInfo.actionTokenAddress, key.round, key.memberId);
+            }
         }
         if (settlementInfo.verifierWeight == 0 && settlementInfo.ownerWeight == 0) {
             settlementInfo.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
@@ -79,7 +86,6 @@ library GroupRecipients {
         }
 
         settlementInfo.publicVerifierRatio = self.publicVerifierRatioByActionId[key.tokenAddress][key.actionId];
-        settlementInfo.providerIncentiveRatio = self.providerIncentiveRatioByActionId[key.tokenAddress][key.actionId];
         settlementInfo.govRatioMultiplier = self.govRatioMultiplierByActionId[key.tokenAddress][key.actionId];
         (settlementInfo.serviceReward, settlementInfo.actionMinted) =
             IActionTarget(protocol.actionTargetAddress).actionReward(key.tokenAddress, key.round, key.actionId);
@@ -206,7 +212,7 @@ library GroupRecipients {
         if (share.memberId == share.groupId || !_isSettleableRound(self, share, mintRound)) return (0, isMinted);
 
         GroupServiceStorage.Settlement memory settlementInfo =
-            _settlement(self, protocol, _settlementKey(share), GroupServiceStorage.PrimaryRole.Owner);
+            _settlement(self, protocol, _settlementKey(share), GroupServiceStorage.PrimaryRole.Owner, false);
         amount = _shareAmount(self, protocol, settlementInfo, share, provider);
     }
 
@@ -250,33 +256,16 @@ library GroupRecipients {
         uint256 sourceActionId
     ) external view returns (Distribution memory info) {
         GroupServiceStorage.Settlement memory settlementInfo =
-            _settlement(self, protocol, key, GroupServiceStorage.PrimaryRole.Owner);
-        uint256 slice = _ownerSlice(
-            protocol,
-            settlementInfo.actionTokenAddress,
-            key.round,
-            sourceActionId,
-            key.memberId,
-            settlementInfo.ownerReward,
-            settlementInfo.ownerWeight
-        );
-        uint256 reserve = _providerMarketAmount(
-            protocol.groupActionExecutorAddress,
-            settlementInfo.providerIncentiveRatio,
-            settlementInfo.actionTokenAddress,
-            key.round,
-            sourceActionId,
-            key.memberId,
-            0,
-            slice
-        );
+            _settlement(self, protocol, key, GroupServiceStorage.PrimaryRole.Owner, false);
+        (uint256 partnershipBudget, uint256 reserve) =
+            _actionDistributionBudgets(protocol.groupActionExecutorAddress, key, settlementInfo, sourceActionId);
         info = _distribution(
             self,
             settlementInfo.actionTokenAddress,
             key.round,
             sourceActionId,
             key.memberId,
-            slice - reserve
+            partnershipBudget
         );
         info.providerReserve = reserve;
     }
@@ -367,7 +356,7 @@ library GroupRecipients {
         }
 
         GroupServiceStorage.Settlement memory settlementInfo =
-            _settlement(self, protocol, _settlementKey(share), GroupServiceStorage.PrimaryRole.Owner);
+            _settlement(self, protocol, _settlementKey(share), GroupServiceStorage.PrimaryRole.Owner, false);
         if (required) _checkSettlementPool(settlementInfo, share.tokenAddress, share.round, share.serviceActionId, share.groupId);
         amount = _shareAmount(self, protocol, settlementInfo, share, provider);
         if (amount == 0 && !settlementInfo.actionMinted) {
@@ -557,28 +546,11 @@ library GroupRecipients {
         GroupServiceStorage.Share memory share,
         bool provider
     ) private view returns (uint256) {
-        // Load-bearing: Passing member ID 0 as a Provider would quote the group reserve.
-        if (share.memberId == 0 || share.memberId == share.groupId) return 0;
-        uint256 slice = _ownerSlice(
-            protocol,
-            settlementInfo.actionTokenAddress,
-            share.round,
-            share.sourceActionId,
-            share.groupId,
-            settlementInfo.ownerReward,
-            settlementInfo.ownerWeight
+        if (share.memberId == 0 || share.memberId == share.groupId || settlementInfo.ownerReward == 0) return 0;
+        if (provider) return _providerAmount(protocol.groupActionExecutorAddress, settlementInfo, share);
+        (uint256 partnershipBudget,) = _actionDistributionBudgets(
+            protocol.groupActionExecutorAddress, _settlementKey(share), settlementInfo, share.sourceActionId
         );
-        uint256 marketAmount = _providerMarketAmount(
-            protocol.groupActionExecutorAddress,
-            settlementInfo.providerIncentiveRatio,
-            settlementInfo.actionTokenAddress,
-            share.round,
-            share.sourceActionId,
-            share.groupId,
-            provider ? share.memberId : 0,
-            slice
-        );
-        if (provider) return marketAmount;
         return recipientAmount(
             self,
             settlementInfo.actionTokenAddress,
@@ -586,42 +558,68 @@ library GroupRecipients {
             share.sourceActionId,
             share.groupId,
             share.memberId,
-            slice - marketAmount
+            partnershipBudget
         );
     }
 
-    function _ownerSlice(
-        GroupServiceStorage.Protocol memory protocol,
-        address sourceTokenAddress,
-        uint256 round,
-        uint256 sourceActionId,
-        uint256 groupId,
-        uint256 ownerReward,
-        uint256 ownerWeight
+    function _providerAmount(
+        address groupActionExecutorAddress,
+        GroupServiceStorage.Settlement memory settlementInfo,
+        GroupServiceStorage.Share memory share
     ) private view returns (uint256) {
-        if (ownerReward == 0 || ownerWeight == 0) return 0;
-        uint256 groupReward = GroupServiceStorage.groupReward(
-            protocol.groupActionExecutorAddress, sourceTokenAddress, round, sourceActionId, groupId
+        uint256 marketBudget = _marketBudget(settlementInfo);
+        if (marketBudget == 0) return 0;
+        IGroupActionExecutor source = IGroupActionExecutor(groupActionExecutorAddress);
+        uint256 groupWeight = source.generatedActionRewardByGroupId(
+            settlementInfo.actionTokenAddress, share.round, share.sourceActionId, share.groupId
         );
-        if (groupReward == 0) return 0;
-        return Math.mulDiv(ownerReward, groupReward, ownerWeight);
+        if (groupWeight == 0) return 0;
+        (uint256 score, uint256 groupScore) = source.providerScore(
+            settlementInfo.actionTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
+        );
+        return ProviderReward.amount(marketBudget, ProviderReward.weight(groupWeight, score, groupScore), settlementInfo.ownerWeight);
+    }
+
+    function _actionDistributionBudgets(
+        address groupActionExecutorAddress,
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlementInfo,
+        uint256 sourceActionId
+    ) private view returns (uint256 partnershipBudget, uint256 providerReserve) {
+        if (settlementInfo.ownerReward == 0) return (0, 0);
+        IGroupActionExecutor source = IGroupActionExecutor(groupActionExecutorAddress);
+        uint256 groupWeight = source.generatedActionRewardByGroupId(
+            settlementInfo.actionTokenAddress, key.round, sourceActionId, key.memberId
+        );
+        if (groupWeight == 0) return (0, 0);
+        uint256 marketBudget = _marketBudget(settlementInfo);
+        if (marketBudget == 0) {
+            return (Math.mulDiv(settlementInfo.ownerReward, groupWeight, settlementInfo.ownerWeight), 0);
+        }
+
+        (uint256 externalScore, uint256 groupScore) =
+            source.externalProviderScore(settlementInfo.actionTokenAddress, key.round, sourceActionId, key.memberId);
+        if (externalScore == 0) {
+            return (Math.mulDiv(settlementInfo.ownerReward, groupWeight, settlementInfo.ownerWeight), 0);
+        }
+
+        partnershipBudget = Math.mulDiv(settlementInfo.ownerReward - marketBudget, groupWeight, settlementInfo.ownerWeight);
+        partnershipBudget += ProviderReward.amount(
+            marketBudget, ProviderReward.weight(groupWeight, groupScore - externalScore, groupScore), settlementInfo.ownerWeight
+        );
+        providerReserve = ProviderReward.amount(
+            marketBudget, ProviderReward.weight(groupWeight, externalScore, groupScore), settlementInfo.ownerWeight
+        );
+    }
+
+    function _marketBudget(GroupServiceStorage.Settlement memory settlementInfo) private pure returns (uint256) {
+        return Math.mulDiv(settlementInfo.ownerReward, settlementInfo.providerIncentiveRatio, GroupServiceStorage.PRECISION);
     }
 
     struct RecipientTable {
         uint256[] recipientIds;
         uint256[] ratios;
         string[] remarks;
-    }
-
-    struct ProviderReserveRequest {
-        address groupActionExecutorAddress;
-        address sourceTokenAddress;
-        uint256 round;
-        uint256 groupId;
-        uint256 ownerReward;
-        uint256 ownerWeight;
-        uint256 providerIncentiveRatio;
-        uint256 pageSize;
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -828,148 +826,6 @@ library GroupRecipients {
         distributionInfo.ownerAmount = groupReward - distributionInfo.totalRecipientAmount;
     }
 
-    function _providerMarketAmount(
-        address groupActionExecutorAddress,
-        uint256 providerIncentiveRatio,
-        address sourceTokenAddress,
-        uint256 round,
-        uint256 sourceActionId,
-        uint256 groupId,
-        uint256 providerId,
-        uint256 slice
-    ) private view returns (uint256) {
-        if (slice == 0 || providerIncentiveRatio == 0) return 0;
-        IGroupActionExecutor source = IGroupActionExecutor(groupActionExecutorAddress);
-        (uint256 score, uint256 groupFinalScore) = providerId == 0
-            ? source.externalProviderScore(sourceTokenAddress, round, sourceActionId, groupId)
-            : source.providerScore(sourceTokenAddress, round, sourceActionId, groupId, providerId);
-        if (groupFinalScore == 0 || score == 0) return 0;
-        uint256 market = Math.mulDiv(slice, providerIncentiveRatio, GroupServiceStorage.PRECISION);
-        return Math.mulDiv(market, score, groupFinalScore);
-    }
-
-    function prepareProviderReserve(
-        GroupServiceStorage.Layout storage self,
-        address groupActionExecutorAddress,
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlementInfo,
-        uint256 limit
-    ) external returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
-        if (
-            settlementInfo.providerIncentiveRatio == 0 || settlementInfo.ownerReward == 0
-                || settlementInfo.ownerWeight == 0
-        ) {
-            return (0, 0, 0);
-        }
-
-        GroupServiceStorage.ProviderReservePreparation storage preparation =
-            self.providerReservePreparation[key.tokenAddress][key.actionId][key.round][key.memberId][settlementInfo.ownerReward];
-        if (
-            preparation.ownerWeight == settlementInfo.ownerWeight
-                && preparation.processedActionCount == preparation.totalActionCount
-        )
-        {
-            return (preparation.processedActionCount, preparation.totalActionCount, preparation.providerReserve);
-        }
-
-        ProviderReserveRequest memory request = ProviderReserveRequest({
-            groupActionExecutorAddress: groupActionExecutorAddress,
-            sourceTokenAddress: settlementInfo.actionTokenAddress,
-            round: key.round,
-            groupId: key.memberId,
-            ownerReward: settlementInfo.ownerReward,
-            ownerWeight: settlementInfo.ownerWeight,
-            providerIncentiveRatio: settlementInfo.providerIncentiveRatio,
-            pageSize: Math.min(limit, GroupServiceStorage.MAX_PROVIDER_RESERVE_PREPARATION_PAGE_SIZE)
-        });
-        return _prepareProviderReservePage(preparation, request);
-    }
-
-    function _prepareProviderReservePage(
-        GroupServiceStorage.ProviderReservePreparation storage preparation,
-        ProviderReserveRequest memory request
-    ) private returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
-        IGroupActionExecutor groupAction = IGroupActionExecutor(request.groupActionExecutorAddress);
-        uint256 start = preparation.processedActionCount;
-        uint256[] memory actionIds;
-        (actionIds, totalActionCount) = groupAction.actionIdsWithProviderScore(
-            request.sourceTokenAddress, request.round, request.groupId, start, request.pageSize, false
-        );
-
-        if (preparation.ownerWeight != request.ownerWeight || preparation.totalActionCount != totalActionCount) {
-            start = 0;
-            preparation.ownerWeight = request.ownerWeight;
-            preparation.processedActionCount = 0;
-            preparation.totalActionCount = totalActionCount;
-            preparation.providerReserve = 0;
-            (actionIds, totalActionCount) = groupAction.actionIdsWithProviderScore(
-                request.sourceTokenAddress, request.round, request.groupId, 0, request.pageSize, false
-            );
-            preparation.totalActionCount = totalActionCount;
-        }
-
-        for (uint256 i = 0; i < actionIds.length; ++i) {
-            preparation.providerReserve += _providerReserveForAction(groupAction, request, actionIds[i]);
-        }
-
-        processedActionCount = start + actionIds.length;
-        preparation.processedActionCount = processedActionCount;
-        providerReserve = preparation.providerReserve;
-    }
-
-    function _providerReserveForAction(
-        IGroupActionExecutor groupAction,
-        ProviderReserveRequest memory request,
-        uint256 sourceActionId
-    ) private view returns (uint256 reserve) {
-        uint256 groupReward = groupAction.generatedActionRewardByGroupId(
-            request.sourceTokenAddress, request.round, sourceActionId, request.groupId
-        );
-        uint256 slice = Math.mulDiv(request.ownerReward, groupReward, request.ownerWeight);
-        reserve = _providerMarketAmount(
-            request.groupActionExecutorAddress,
-            request.providerIncentiveRatio,
-            request.sourceTokenAddress,
-            request.round,
-            sourceActionId,
-            request.groupId,
-            0,
-            slice
-        );
-    }
-
-    function providerReservePreparation(
-        GroupServiceStorage.Layout storage self,
-        GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlementInfo
-    )
-        external
-        view
-        returns (uint256 processedActionCount, uint256 totalActionCount, uint256 reserve)
-    {
-        if (settlementInfo.providerIncentiveRatio == 0 || settlementInfo.ownerWeight == 0) return (0, 0, 0);
-
-        IGroupActionExecutor groupAction = IGroupActionExecutor(protocol.groupActionExecutorAddress);
-        (, totalActionCount) =
-            groupAction.actionIdsWithProviderScore(
-                settlementInfo.actionTokenAddress, key.round, key.memberId, 0, 0, false
-            );
-        if (totalActionCount <= GroupServiceStorage.MAX_PROVIDER_RESERVE_PREPARATION_PAGE_SIZE) {
-            reserve = _projectedProviderReserve(self, protocol, key, settlementInfo);
-            return (totalActionCount, totalActionCount, reserve);
-        }
-        if (!settlementInfo.actionMinted) return (0, totalActionCount, 0);
-        if (settlementInfo.ownerReward == 0) return (totalActionCount, totalActionCount, 0);
-
-        GroupServiceStorage.ProviderReservePreparation storage preparation =
-            self.providerReservePreparation[key.tokenAddress][key.actionId][key.round][key.memberId][settlementInfo.ownerReward];
-        if (preparation.ownerWeight != settlementInfo.ownerWeight || preparation.totalActionCount != totalActionCount) {
-            return (0, totalActionCount, 0);
-        }
-        return (preparation.processedActionCount, totalActionCount, preparation.providerReserve);
-    }
-
     function recipientAmount(
         GroupServiceStorage.Layout storage self,
         address sourceTokenAddress,
@@ -1001,68 +857,25 @@ library GroupRecipients {
         return 0;
     }
 
-    function projectedDistribution(
+    function ownerRewardAfterDistribution(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.MemberRewardKey memory key,
         GroupServiceStorage.Settlement memory settlementInfo
-    ) external view returns (uint256 distributed) {
-        if (settlementInfo.ownerReward == 0 || settlementInfo.ownerWeight == 0) {
-            return 0;
+    ) external view returns (uint256 ownerAmount) {
+        if (settlementInfo.ownerReward == 0) return 0;
+
+        uint256 marketBudget = _marketBudget(settlementInfo);
+        ownerAmount = settlementInfo.ownerReward - marketBudget;
+        if (marketBudget != 0) {
+            ownerAmount += ProviderReward.amount(marketBudget, settlementInfo.ownerProviderWeight, settlementInfo.ownerWeight);
         }
 
         (uint256[] memory sourceActionIds,) =
             self.actionIdsWithRecipients[settlementInfo.actionTokenAddress][key.memberId]
                 .valuesByRound(key.round, 0, type(uint256).max, false);
         for (uint256 i = 0; i < sourceActionIds.length; i++) {
-            distributed += _projectedForAction(self, protocol, key, settlementInfo, sourceActionIds[i]);
-        }
-        distributed += _projectedProviderReserve(self, protocol, key, settlementInfo);
-    }
-
-    function _projectedProviderReserve(
-        GroupServiceStorage.Layout storage self,
-        GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlementInfo
-    ) private view returns (uint256 total) {
-        if (settlementInfo.providerIncentiveRatio == 0) return 0;
-        GroupServiceStorage.ProviderReservePreparation storage preparation =
-            self.providerReservePreparation[key.tokenAddress][key.actionId][key.round][key.memberId][settlementInfo.ownerReward];
-        if (
-            preparation.ownerWeight == settlementInfo.ownerWeight
-                && preparation.processedActionCount == preparation.totalActionCount
-        )
-        {
-            return preparation.providerReserve;
-        }
-
-        (uint256[] memory actionIds,) = IGroupActionExecutor(protocol.groupActionExecutorAddress)
-            .actionIdsWithProviderScore(
-                settlementInfo.actionTokenAddress, key.round, key.memberId, 0, type(uint256).max, false
-            );
-        for (uint256 i = 0; i < actionIds.length; i++) {
-            uint256 slice =
-                ownerSlice(
-                    protocol,
-                    settlementInfo.actionTokenAddress,
-                    key.round,
-                    actionIds[i],
-                    key.memberId,
-                    settlementInfo.ownerReward,
-                    settlementInfo.ownerWeight
-                );
-            uint256 reserve = _providerMarketAmount(
-                protocol.groupActionExecutorAddress,
-                settlementInfo.providerIncentiveRatio,
-                settlementInfo.actionTokenAddress,
-                key.round,
-                actionIds[i],
-                key.memberId,
-                0,
-                slice
-            );
-            total += reserve;
+            ownerAmount -= _projectedForAction(self, protocol, key, settlementInfo, sourceActionIds[i]);
         }
     }
 
@@ -1072,52 +885,15 @@ library GroupRecipients {
         GroupServiceStorage.MemberRewardKey memory key,
         GroupServiceStorage.Settlement memory settlementInfo,
         uint256 sourceActionId
-    ) internal view returns (uint256 distributed) {
-        uint256 slice = ownerSlice(
-            protocol,
-            settlementInfo.actionTokenAddress,
-            key.round,
-            sourceActionId,
-            key.memberId,
-            settlementInfo.ownerReward,
-            settlementInfo.ownerWeight
-        );
-        if (slice == 0) {
-            return 0;
-        }
-        uint256 reserve = _providerMarketAmount(
-            protocol.groupActionExecutorAddress,
-            settlementInfo.providerIncentiveRatio,
-            settlementInfo.actionTokenAddress,
-            key.round,
-            sourceActionId,
-            key.memberId,
-            0,
-            slice
-        );
+    ) private view returns (uint256 distributed) {
+        (uint256 partnershipBudget,) =
+            _actionDistributionBudgets(protocol.groupActionExecutorAddress, key, settlementInfo, sourceActionId);
+        if (partnershipBudget == 0) return 0;
         (, distributed) = _calculateRecipientAmounts(
-            slice - reserve,
+            partnershipBudget,
             self.recipientIdsHistory[settlementInfo.actionTokenAddress][sourceActionId][key.memberId].values(key.round),
             self.ratiosHistory[settlementInfo.actionTokenAddress][sourceActionId][key.memberId].values(key.round)
         );
-    }
-
-    function ownerSlice(
-        GroupServiceStorage.Protocol memory protocol,
-        address sourceTokenAddress,
-        uint256 round,
-        uint256 sourceActionId,
-        uint256 groupId,
-        uint256 ownerReward,
-        uint256 ownerWeight
-    ) internal view returns (uint256) {
-        uint256 groupReward = GroupServiceStorage.groupReward(
-            protocol.groupActionExecutorAddress, sourceTokenAddress, round, sourceActionId, groupId
-        );
-        if (groupReward == 0) {
-            return 0;
-        }
-        return Math.mulDiv(ownerReward, groupReward, ownerWeight);
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)

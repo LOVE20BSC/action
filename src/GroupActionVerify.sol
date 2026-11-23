@@ -3,7 +3,7 @@ pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
-import {IGroupActionExecutorErrors, IGroupActionExecutorEvents} from "./interfaces/IGroupActionExecutor.sol";
+import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {
     GroupRewardKey,
@@ -331,101 +331,6 @@ library GroupActionVerify {
             || self.withdrawnApplicationActionIds[tokenAddress][verifierId][round].count() != 0;
     }
 
-    function actionIdsWithGeneratedActionReward(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 offset,
-        uint256 limit,
-        bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return Pagination.paginate(self.actionIdsWithGeneratedActionReward[tokenAddress][round], offset, limit, reverse);
-    }
-
-    function groupRewardPreparation(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256 processedActionCount, uint256 totalActionCount) {
-        return (
-            self.groupRewardProgress[tokenAddress][round][groupId].processedActionCount,
-            _groupGeneratedActionCount(self, tokenAddress, round, groupId)
-        );
-    }
-
-    function totalGeneratedActionRewardByGroupId(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId
-    ) external view returns (uint256) {
-        uint256 totalActionCount = _groupGeneratedActionCount(self, tokenAddress, round, groupId);
-        if (totalActionCount == 0) return 0;
-
-        GroupActionStorage.GroupRewardPreparationState storage progress =
-            self.groupRewardProgress[tokenAddress][round][groupId];
-        return progress.weight + _sumGroupRewards(
-            self, tokenAddress, round, groupId, progress.processedActionCount, totalActionCount
-        );
-    }
-
-    function prepareGeneratedActionRewardByGroupId(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId,
-        uint256 limit
-    ) external returns (uint256 processedActionCount, uint256 totalActionCount) {
-        totalActionCount = _groupGeneratedActionCount(self, tokenAddress, round, groupId);
-        GroupActionStorage.GroupRewardPreparationState storage progress =
-            self.groupRewardProgress[tokenAddress][round][groupId];
-        uint256 start = progress.processedActionCount;
-        uint256 pageSize = Math.min(limit, totalActionCount - start);
-        if (pageSize == 0) return (start, totalActionCount);
-
-        processedActionCount = start + pageSize;
-        uint256 weightAdded = _sumGroupRewards(self, tokenAddress, round, groupId, start, processedActionCount);
-        uint256 totalWeight = progress.weight + weightAdded;
-        progress.weight = totalWeight;
-        progress.processedActionCount = processedActionCount;
-
-        emit IGroupActionExecutorEvents.GroupRewardPreparationAdvanced({
-            tokenAddress: tokenAddress,
-            groupId: groupId,
-            round: round,
-            startIndex: start,
-            processedActionCount: processedActionCount,
-            totalActionCount: totalActionCount,
-            weightAdded: weightAdded,
-            totalWeight: totalWeight
-        });
-    }
-
-    function _groupGeneratedActionCount(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId
-    ) private view returns (uint256) {
-        if (self.joinedActionIdsByGroupId[tokenAddress][groupId].countByRound(round) == 0) return 0;
-        return self.actionIdsWithGeneratedActionReward[tokenAddress][round].length;
-    }
-
-    function _sumGroupRewards(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId,
-        uint256 start,
-        uint256 end
-    ) private view returns (uint256 weight) {
-        uint256[] storage actionIds = self.actionIdsWithGeneratedActionReward[tokenAddress][round];
-        for (uint256 i = start; i < end; ++i) {
-            weight += self.generatedActionRewardByGroupId(tokenAddress, round, actionIds[i], groupId);
-        }
-    }
-
     function verifierStake(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
@@ -707,20 +612,20 @@ library GroupActionVerify {
             _memberIds(self, submission.tokenAddress, round, submission.actionId, submission.groupId, verifiedCount, originScores.length);
         (uint256 batchTotal, uint256 batchExternalProviderScore) =
             _scoreMembers(self, submission, round, memberIds, originScores);
-        self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] += batchTotal;
+        uint256 groupScore =
+            self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] + batchTotal;
+        self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] = groupScore;
         self.totalFinalScore[submission.tokenAddress][submission.actionId][round] += batchTotal;
         if (batchExternalProviderScore != 0) {
-            GroupActionStorage.ProviderScores storage scores =
-                self.providerScoresByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId];
-            if (scores.externalProviderScore == 0) {
-                self.actionIdsWithProviderScoreByGroupId[submission.tokenAddress][round][submission.groupId]
-                    .push(submission.actionId);
-            }
-            scores.externalProviderScore += batchExternalProviderScore;
+            self.providerScoresByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId]
+                .externalProviderScore += batchExternalProviderScore;
         }
         uint256 newVerifiedCount = verifiedCount + originScores.length;
         self.verifiedMemberCountByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] = newVerifiedCount;
-        return _markGroupVerified(self, submission.tokenAddress, round, submission.actionId, newVerifiedCount, memberCount);
+        groupVerified = _markGroupVerified(self, submission.tokenAddress, round, submission.actionId, newVerifiedCount, memberCount);
+        if (groupVerified && groupScore != 0) {
+            self.verifiedActionIdsByGroupId[submission.tokenAddress][round][submission.groupId].push(submission.actionId);
+        }
     }
 
     function _scoreMembers(

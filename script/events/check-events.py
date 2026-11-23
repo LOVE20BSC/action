@@ -45,7 +45,6 @@ FAMILIES = {
         "round_after": ("memberId",),
     },
     "action.round": {"root": ("tokenAddress",), "round_after": ("actionId",)},
-    "action.reward-preparation": {"root": ("tokenAddress",), "round_after": ("groupId",)},
     "action.quota": {"root": ("tokenAddress",), "round_after": ()},
     "action.verification": {
         "root": ("tokenAddress",),

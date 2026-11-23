@@ -159,15 +159,6 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 groupId
     ) external view returns (uint256 score, uint256 groupFinalScore);
 
-    function actionIdsWithProviderScore(
-        address tokenAddress,
-        uint256 round,
-        uint256 groupId,
-        uint256 offset,
-        uint256 limit,
-        bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
-
     function providerRewardKeys(
         address tokenAddress,
         uint256 round,

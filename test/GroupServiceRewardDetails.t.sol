@@ -14,7 +14,6 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
             _setGroupLedger(sourceActionId, _ids(GROUP_ID), _amounts(100), MEMBER1_ID);
             groupAction.setMarketScores(address(token), SERVICE_ROUND, sourceActionId, GROUP_ID, 50, MEMBER1_ID, 50);
         }
-        groupAction.setPreparedGroupReward(address(token), SERVICE_ROUND, GROUP_ID, 100 * sourceActionCount);
         _armServiceReward(1000);
         _atPhase(MINT_PHASE);
 

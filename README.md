@@ -31,11 +31,11 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 
 按 `memberId` 查奖励时，链群行动用 `memberReward` 就能查到完整的个人奖励。需要额外信息时才加明细入口，单类用 `rewardDetail`，多类用 `xxxRewardDetail`。LP 的 `rewardDetail` 返回铸造量、销毁量和状态，待结算时返回预估量，结算后返回实际量。
 
-[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回单个外部 Provider 的分数和全群总分，`externalProviderScore` 返回所有外部 Provider 的合计分数和全群总分。前者用于计算个人份额，后者用于计算整群的 Provider 预留。`actionIdsWithProviderScore` 分页返回有外部 Provider 分数的来源行动。
+[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回单个外部 Provider 的分数和全群总分，`externalProviderScore` 返回所有外部 Provider 的合计分数和全群总分。前者用于计算个人份额，后者用于计算某项来源行动的 Provider 份额合计。
 
 [`IGroupServiceExecutor`](src/interfaces/IGroupServiceExecutor.sol) 的 `serviceRewardDetail` 按 `memberId` 查看群主、验证者、合伙人和 Provider 四类激励。`ownerBudgetBeforeCap` 是治理权上限前的群主预算，`ownerBudget` 是上限后的预算，两者之差是应销毁的超额。`rewardDistribution` 按来源行动和链群给出合伙人编号、比例和金额，以及合伙人合计、群主自留和 Provider 预留。`groupOwnerBurn` 按链群预算查询待销毁和已销毁金额。
 
-当一轮有超过 64 项带外部 Provider 分数的来源行动时，先完成 GroupAction 群主权重准备，再调用 `prepareProviderReserve`，每页最多准备 64 项市场预留。准备首个有效页面会触发一次实际服务预算铸造。准备完成前，群主相关查询与群主或合并铸造会回滚 `ProviderReservePreparationRequired`，返回当前游标。Provider 和合伙人的单笔铸造仍直接按对应份额计算。
+群主直接查询或领取分账后的奖励。权重按该链群当轮已验证的行动计算。合约先按整轮预算切出 Provider 激励，再按验证成果计算外部 Provider 份额和归属 owner 的部分。Provider 的取整尾差留在合约。
 
 | 角色 | 查金额与铸造状态 | 单项铸造 | 按身份分页与分批 |
 | --- | --- | --- | --- |

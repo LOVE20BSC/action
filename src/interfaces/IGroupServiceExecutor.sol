@@ -64,16 +64,6 @@ interface IGroupServiceExecutorEvents {
         uint256 indexed groupId,
         uint256 amount
     );
-    event ProviderReservePreparationAdvanced(
-        address indexed serviceTokenAddress,
-        uint256 indexed serviceActionId,
-        uint256 round,
-        uint256 indexed groupId,
-        uint256 ownerReward,
-        uint256 processedActionCount,
-        uint256 totalActionCount,
-        uint256 providerReserve
-    );
     event ServiceRewardsDistributed(
         address indexed serviceTokenAddress,
         uint256 indexed serviceActionId,
@@ -152,14 +142,6 @@ interface IGroupServiceExecutorErrors {
         uint256 providerId
     );
     error ZeroOwnerRewardRemaining(uint256 groupId);
-    error ProviderReservePreparationRequired(
-        address serviceTokenAddress,
-        uint256 serviceActionId,
-        uint256 round,
-        uint256 groupId,
-        uint256 processedActionCount,
-        uint256 totalActionCount
-    );
     error TooManyRewardKeys(
         uint256 actual,
         uint256 limit
@@ -203,26 +185,6 @@ interface IGroupServiceExecutor is
         uint256 serviceActionId,
         uint256 groupId
     ) external view returns (uint256 amount, bool isMinted);
-
-    function prepareProviderReserve(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 groupId,
-        uint256 limit
-    ) external returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve);
-
-    function providerReservePreparation(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 groupId
-    ) external view returns (
-        uint256 ownerWeight,
-        uint256 processedActionCount,
-        uint256 totalActionCount,
-        uint256 providerReserve
-    );
 
     function verifierReward(
         address serviceTokenAddress,

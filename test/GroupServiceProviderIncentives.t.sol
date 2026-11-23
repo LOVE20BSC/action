@@ -280,7 +280,7 @@ contract GroupServiceProviderIncentivesTest is GroupServiceTestBase {
 
         (,,, uint256 recipientTotal, uint256 ownerAmount, uint256 providerReserve) =
             executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
-        require(recipientTotal == 0 && providerReserve == 7 && ownerAmount == 4, "reserve rounds from aggregate external weight");
+        require(recipientTotal == 0 && providerReserve == 7 && ownerAmount == 3, "both sides round down");
 
         (uint256 firstAmount, bool firstMinted) = executor.providerReward(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
@@ -304,14 +304,66 @@ contract GroupServiceProviderIncentivesTest is GroupServiceTestBase {
         );
         vm.prank(GROUP_OWNER);
         require(
-            executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 4,
-            "owner receives unreserved remainder"
+            executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 3,
+            "owner receives its market share"
         );
         vm.prank(VERIFIER);
         require(
             executor.mintVerifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID) == 11,
             "verifier receives role reward"
         );
-        require(token.balanceOf(address(executor)) == 1, "provider rounding remainder stays in service");
+        require(token.balanceOf(address(executor)) == 2, "provider rounding remainder stays in service");
+    }
+
+    function testOwnerCanQuoteAndMintAcrossSixtyFiveProviderActions() external {
+        uint256 secondServiceActionId = SERVICE_ACTION_ID + 1;
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0.5e18, 0.5e18);
+        _createServiceAction(secondServiceActionId, 0, 0.5e18, 0.2e18);
+        _armServiceReward(2000);
+        _armServiceRewardOn(secondServiceActionId, 2000);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, 1000, false);
+
+        for (uint256 i = 0; i < 65; ++i) {
+            uint256 sourceActionId = GROUP_ACTION_ID + i;
+            _setGroupLedger(sourceActionId, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+            groupAction.setMarketScores(
+                address(token), SERVICE_ROUND, sourceActionId, GROUP_ID, 50, MEMBER1_ID, 50
+            );
+        }
+        _atPhase(MINT_PHASE);
+
+        (uint256 ownerQuote, bool minted) =
+            executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(ownerQuote == 375 && !minted, "owner market share uses the whole quoted budget");
+        require(actionTarget.mintRewardCalls() == 0, "quoting leaves the budget unminted");
+
+        vm.prank(GROUP_OWNER);
+        uint256 first = executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(first == 750, "combined mint uses the actual budget");
+        vm.prank(GROUP_OWNER);
+        uint256 second = executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, secondServiceActionId, GROUP_ID);
+        require(second == 900, "second service uses its own ratio");
+        require(token.balanceOf(GROUP_OWNER) == first + second, "both owner rewards paid");
+        require(actionTarget.mintRewardCalls() == 2, "each service budget minted once");
+    }
+
+    function testRoundMarketRoundingLeavesDustAfterOwnerProviderAndRecipientsClaim() external {
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0.5e18, 0.5e18);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 100, MEMBER1_ID, 100);
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID_B, GROUP_ID, 100, MEMBER1_ID, 100);
+        _armServiceReward(12);
+        _atPhase(VERIFY_PHASE);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER2_ID), _ratios(1e18));
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID_B, _ids(MEMBER2_ID), _ratios(1e18));
+        _atPhase(MINT_PHASE);
+
+        (uint256 ownerPaid,) = _settleService(GROUP_ID);
+        (uint256 providerPaid,) = _settleService(MEMBER1_ID);
+        (uint256 recipientPaid,) = _settleService(MEMBER2_ID);
+        (uint256 verifierPaid,) = _settleService(VERIFIER_ID);
+        require(ownerPaid == 1 && providerPaid == 2 && recipientPaid == 2 && verifierPaid == 6, "rounded payouts");
+        require(token.balanceOf(address(executor)) == 1, "unassigned market remainder");
     }
 }

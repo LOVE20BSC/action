@@ -7,26 +7,14 @@ import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
 import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
 import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
-import {IGroupActionExecutorEvents} from "../../src/interfaces/IGroupActionExecutor.sol";
 import {MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 
-contract RevertingPreparation {
-    error PreparationRolledBack(uint256 processedActionCount, uint256 totalActionCount);
-
-    function prepareAndRevert(GroupActionExecutor group, address tokenAddress, uint256 round) external {
-        (uint256 processedActionCount, uint256 totalActionCount) =
-            group.prepareGeneratedActionRewardByGroupId(tokenAddress, round, 1, 2);
-        revert PreparationRolledBack(processedActionCount, totalActionCount);
-    }
-}
-
-contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGroupActionExecutorEvents {
+contract GroupServiceOwnerSettlementTest is ActionTargetIntegrationFixture {
     error RecipientTransferFailed();
 
     uint256 private constant OWNER_ID = 1;
     uint256 private constant VERIFIER_ID = 2;
-    uint256 private constant ACTION_COUNT = 3;
     uint256 private constant OWNER_SCORE_A = 24;
     uint256 private constant OWNER_SCORE_C = 39;
 
@@ -38,7 +26,6 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     uint256 private actionC;
     uint256 private serviceActionId;
     uint256 private secondServiceActionId;
-    uint256 private firstPageWeight;
     uint256 private expectedWeight;
     uint256 private ownerReward;
     uint256 private secondOwnerReward;
@@ -71,6 +58,10 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         _advancePhase();
         _setRecipient();
         _score(actionC, OWNER_ID, OWNER_SCORE_C);
+        require(
+            group.totalGeneratedActionRewardByGroupId(address(token), round, OWNER_ID) == 0,
+            "action weight awaits verification of every group"
+        );
         _score(actionC, VERIFIER_ID, 100 - OWNER_SCORE_C);
         _score(actionB, VERIFIER_ID, 100);
         _score(actionA, OWNER_ID, OWNER_SCORE_A);
@@ -79,22 +70,8 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         _calculateExpectedRewards();
     }
 
-    function testRevertedPageResumesFromCommittedCursorAcrossCallers() external {
-        _assertProgress(0);
-        _expectProgress(0, 1, firstPageWeight, firstPageWeight);
-        _prepare(member1, 1, 1);
-
-        RevertingPreparation reverting = new RevertingPreparation();
-        vm.expectRevert(abi.encodeWithSelector(RevertingPreparation.PreparationRolledBack.selector, 3, ACTION_COUNT));
-        reverting.prepareAndRevert(group, address(token), round);
-        _assertProgress(1);
-
-        (bool success,) = address(group).call{gas: 900}(
-            abi.encodeCall(group.prepareGeneratedActionRewardByGroupId, (address(token), round, OWNER_ID, 2))
-        );
-        require(!success, "gas-limited preparation failed");
-        _assertProgress(1);
-
+    function testHistoricalGroupWeightSurvivesExitingBothActions() external {
+        _assertGroupWeight();
         vm.startPrank(member1);
         group.exit(address(token), actionA, OWNER_ID);
         group.exit(address(token), actionC, OWNER_ID);
@@ -103,22 +80,8 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
             group.joinedActionIdsByGroupId(address(token), OWNER_ID, group.currentJoinRound(), 0, 0, false);
         require(currentCount == 0, "later join round has no participation");
 
-        _expectProgress(1, 2, 0, firstPageWeight);
-        _prepare(member2, 1, 2);
-        _expectProgress(2, 3, expectedWeight - firstPageWeight, expectedWeight);
-        _prepare(member1, type(uint256).max, 3);
-    }
-
-    function testPreparationNoOpsDoNotEmitProgress() external {
-        vm.recordLogs();
-        _prepare(member2, 0, 0);
-        require(vm.getRecordedLogs().length == 0, "zero limit emitted no event");
-
-        _expectProgress(0, 3, expectedWeight, expectedWeight);
-        _prepare(member2, type(uint256).max, 3);
-        vm.recordLogs();
-        _prepare(member1, 1, 3);
-        require(vm.getRecordedLogs().length == 0, "completed preparation emitted no event");
+        _assertGroupWeight();
+        _claim(serviceActionId, ownerReward - recipientReward);
     }
 
     function testRecipientCanClaimBeforeTheOwnerUsingVerifiedSourceRewards() external {
@@ -144,8 +107,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         require(token.totalSupply() == supply + serviceBudget, "proposal minted once");
     }
 
-    function testPartialClaimRevertsWithRecipientTransferAndPaysOnceOnRetry() external {
-        _prepare(member2, 1, 1);
+    function testClaimRevertsWithRecipientTransferAndPaysOnceOnRetry() external {
         _assertServiceReward(serviceActionId, ownerReward - recipientReward, false);
         uint256 ownerBalance = token.balanceOf(member1);
         uint256 recipientBalance = token.balanceOf(member2);
@@ -165,7 +127,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         require(token.balanceOf(member2) == recipientBalance, "recipient transfer rolled back");
         _assertRecipientReward(serviceActionId, recipientReward, false);
         _assertServiceReward(serviceActionId, ownerReward - recipientReward, false);
-        _assertProgress(1);
+        _assertGroupWeight();
 
         require(_claimRecipient(serviceActionId) == recipientReward, "retry paid the recipient");
         _claim(serviceActionId, ownerReward - recipientReward);
@@ -178,24 +140,20 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         service.mintMemberReward(address(token), round, serviceActionId, OWNER_ID);
         require(token.balanceOf(member1) == ownerBalance + ownerReward - recipientReward, "owner paid once");
         require(token.balanceOf(member2) == recipientBalance + recipientReward, "recipient paid once");
-        _assertProgress(1);
     }
 
-    function testTwoServicesSharePreparationAcrossPhases() external {
+    function testTwoServicesUseTheSameVerifiedWeightAcrossPhases() external {
         _assertServiceReward(serviceActionId, ownerReward - recipientReward, false);
         _assertServiceReward(secondServiceActionId, secondOwnerReward - secondRecipientReward, false);
-        _prepare(member2, 1, 1);
         _claim(serviceActionId, ownerReward - recipientReward);
-        _assertProgress(1);
 
         _advancePhase();
-        _prepare(member1, 2, 3);
         _assertServiceReward(serviceActionId, ownerReward - recipientReward, true);
         _assertServiceReward(secondServiceActionId, secondOwnerReward - secondRecipientReward, false);
         _claim(secondServiceActionId, secondOwnerReward - secondRecipientReward);
         _assertRecipientReward(secondServiceActionId, secondRecipientReward, false);
         require(_claimRecipient(secondServiceActionId) == secondRecipientReward, "second service pays its own share");
-        _assertProgress(3);
+        _assertGroupWeight();
     }
 
     function _createActions() private {
@@ -277,8 +235,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         (uint256 firstBudget,) = actionTarget.actionReward(address(token), round, serviceActionId);
         (uint256 secondBudget,) = actionTarget.actionReward(address(token), round, secondServiceActionId);
         uint256 sliceA = rewardA * OWNER_SCORE_A / 100;
-        firstPageWeight = rewardC * OWNER_SCORE_C / 100;
-        expectedWeight = sliceA + firstPageWeight;
+        expectedWeight = sliceA + rewardC * OWNER_SCORE_C / 100;
         require(
             expectedWeight + 1 == (rewardA * OWNER_SCORE_A + rewardC * OWNER_SCORE_C) / 100,
             "fixture distinguishes per-action rounding"
@@ -291,37 +248,13 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         require(recipientReward > 0 && secondOwnerReward > 0, "fixture pays both services and the recipient");
     }
 
-    function _expectProgress(uint256 startIndex, uint256 processedActionCount, uint256 weightAdded, uint256 totalWeight)
-        private
-    {
-        vm.expectEmit(true, true, true, true, address(group));
-        emit GroupRewardPreparationAdvanced({
-            tokenAddress: address(token),
-            groupId: OWNER_ID,
-            round: round,
-            startIndex: startIndex,
-            processedActionCount: processedActionCount,
-            totalActionCount: ACTION_COUNT,
-            weightAdded: weightAdded,
-            totalWeight: totalWeight
-        });
-    }
-
-    function _prepare(address caller, uint256 limit, uint256 cursor) private {
-        vm.prank(caller);
-        (uint256 processed, uint256 count) =
-            group.prepareGeneratedActionRewardByGroupId(address(token), round, OWNER_ID, limit);
-        require(processed == cursor && count == ACTION_COUNT, "preparation returned expected cursor");
-        _assertProgress(cursor);
-    }
-
-    function _assertProgress(uint256 cursor) private view {
-        (uint256 processed, uint256 count) = group.groupRewardPreparation(address(token), round, OWNER_ID);
-        require(processed == cursor && count == ACTION_COUNT, "stored cursor and source count");
+    function _assertGroupWeight() private view {
         require(
             group.totalGeneratedActionRewardByGroupId(address(token), round, OWNER_ID) == expectedWeight,
-            "all individually rounded slices counted once"
+            "only this group's verified shares counted once"
         );
+        (uint256 weight, uint256 ownerProviderWeight) = group.groupRewardWeights(address(token), round, OWNER_ID);
+        require(weight == expectedWeight && ownerProviderWeight == weight * 1e18, "all scores attributed to owner");
     }
 
     function _assertServiceReward(uint256 actionId, uint256 expected, bool alreadyClaimed) private view {

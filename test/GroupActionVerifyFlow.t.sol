@@ -358,6 +358,10 @@ contract GroupActionVerifyFlowTest is GroupActionExecutorTestBase {
             executor.totalGeneratedActionReward(address(token), 2) == PROPOSAL_REWARD, "round reward counted once"
         );
         require(
+            executor.totalGeneratedActionRewardByGroupId(address(token), 2, GROUP_ID) == PROPOSAL_REWARD,
+            "group action counted once after a multi-batch verification"
+        );
+        require(
             executor.totalGeneratedActionRewardByVerifierId(address(token), 2, VERIFIER_ID) == PROPOSAL_REWARD,
             "verifier reward counted once"
         );

@@ -5,6 +5,7 @@ import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
 import {Pagination} from "@libs/Pagination.sol";
 import {GroupRewardKey} from "../../src/interfaces/IGroupActionVerify.sol";
+import {ProviderReward} from "../../src/ProviderReward.sol";
 
 import {IPhase} from "@core/interfaces/IPhase.sol";
 
@@ -329,7 +330,6 @@ contract MockGroupServiceGroupActionExecutor {
     mapping(address => mapping(uint256 => uint256)) internal _roundReward;
     mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _verifierWeight;
     mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))) internal _joinedActions;
-    mapping(address => mapping(uint256 => Uint256Set.Storage)) internal _generatedActions;
     bool internal _groupSliceReadsBlocked;
     struct MarketScores {
         uint256 externalProviderScore;
@@ -337,10 +337,7 @@ contract MockGroupServiceGroupActionExecutor {
     }
 
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => MarketScores)))) internal _markets;
-    mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))) internal _marketActions;
     mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardKey[]))) internal _providerKeys;
-    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _preparedGroupReward;
-    mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _hasPreparedGroupReward;
     // tokenAddress => total staked
     mapping(address => mapping(uint256 => uint256)) internal _totalStaked;
     // tokenAddress => memberId => total staked
@@ -396,7 +393,7 @@ contract MockGroupServiceGroupActionExecutor {
             totalScore += scores[i];
         }
         action.totalScore = totalScore;
-        _setActionReward(action, tokenAddress, round, actionId, totalScore, verifierId);
+        _setActionReward(action, tokenAddress, round, totalScore, verifierId);
     }
 
     function setActionReward(
@@ -406,14 +403,13 @@ contract MockGroupServiceGroupActionExecutor {
         uint256 reward
     ) external {
         VerifiedAction storage action = _verifiedAction[tokenAddress][actionId][round];
-        _setActionReward(action, tokenAddress, round, actionId, reward, action.verifierId);
+        _setActionReward(action, tokenAddress, round, reward, action.verifierId);
     }
 
     function _setActionReward(
         VerifiedAction storage action,
         address tokenAddress,
         uint256 round,
-        uint256 actionId,
         uint256 reward,
         uint256 verifierId
     ) private {
@@ -422,20 +418,10 @@ contract MockGroupServiceGroupActionExecutor {
         _verifierWeight[tokenAddress][round][verifierId] += reward;
         action.reward = reward;
         action.verifierId = verifierId;
-        if (reward != 0) {
-            _generatedActions[tokenAddress][round].add(actionId);
-        } else {
-            _generatedActions[tokenAddress][round].remove(actionId);
-        }
     }
 
     function setGroupSliceReadsBlocked(bool blocked) external {
         _groupSliceReadsBlocked = blocked;
-    }
-
-    function setPreparedGroupReward(address tokenAddress, uint256 round, uint256 groupId, uint256 reward) external {
-        _preparedGroupReward[tokenAddress][round][groupId] = reward;
-        _hasPreparedGroupReward[tokenAddress][round][groupId] = true;
     }
 
     function setMarketScores(
@@ -448,7 +434,6 @@ contract MockGroupServiceGroupActionExecutor {
             _providerKeys[tokenAddress][round][providerId].push(GroupRewardKey(actionId, groupId));
         }
         scores.scoreByProviderId[providerId] = individualScore;
-        _marketActions[tokenAddress][round][groupId].add(actionId);
     }
 
     function providerScore(address tokenAddress, uint256 round, uint256 actionId, uint256 groupId, uint256 providerId)
@@ -463,12 +448,6 @@ contract MockGroupServiceGroupActionExecutor {
     {
         score = _markets[tokenAddress][actionId][round][groupId].externalProviderScore;
         groupFinalScore = _verifiedAction[tokenAddress][actionId][round].scoreByGroupId[groupId];
-    }
-
-    function actionIdsWithProviderScore(address tokenAddress, uint256 round, uint256 groupId, uint256 offset, uint256 limit, bool reverse)
-        external view returns (uint256[] memory, uint256)
-    {
-        return _marketActions[tokenAddress][round][groupId].values(offset, limit, reverse);
     }
 
     function providerRewardKeys(address tokenAddress, uint256 round, uint256 providerId, uint256 offset, uint256 limit, bool reverse)
@@ -521,13 +500,28 @@ contract MockGroupServiceGroupActionExecutor {
         view
         returns (uint256 weight)
     {
-        if (_hasPreparedGroupReward[tokenAddress][round][groupId]) {
-            return _preparedGroupReward[tokenAddress][round][groupId];
-        }
-        if (_joinedActions[tokenAddress][round][groupId].count() == 0) return 0;
-        (uint256[] memory actionIds,) = _generatedActions[tokenAddress][round].values(0, type(uint256).max, false);
+        (weight,) = _groupRewardWeights(tokenAddress, round, groupId, false);
+    }
+
+    function groupRewardWeights(address tokenAddress, uint256 round, uint256 groupId)
+        external view returns (uint256 totalWeight, uint256 ownerProviderWeight)
+    {
+        return _groupRewardWeights(tokenAddress, round, groupId, true);
+    }
+
+    function _groupRewardWeights(address tokenAddress, uint256 round, uint256 groupId, bool includeOwnerProviderWeight)
+        private view returns (uint256 totalWeight, uint256 ownerProviderWeight)
+    {
+        uint256[] storage actionIds = _joinedActions[tokenAddress][round][groupId].items;
         for (uint256 i = 0; i < actionIds.length; ++i) {
-            weight += generatedActionRewardByGroupId(tokenAddress, round, actionIds[i], groupId);
+            uint256 actionId = actionIds[i];
+            uint256 weight = generatedActionRewardByGroupId(tokenAddress, round, actionId, groupId);
+            totalWeight += weight;
+            if (includeOwnerProviderWeight && weight != 0) {
+                uint256 score = _verifiedAction[tokenAddress][actionId][round].scoreByGroupId[groupId];
+                uint256 externalScore = _markets[tokenAddress][actionId][round][groupId].externalProviderScore;
+                ownerProviderWeight += ProviderReward.weight(weight, score - externalScore, score);
+            }
         }
     }
 

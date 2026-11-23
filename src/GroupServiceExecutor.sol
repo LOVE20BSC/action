@@ -370,93 +370,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         // forge-lint: disable-next-line(boolean-cst)
         if (amount != 0) return (amount, true);
         GroupServiceStorage.Settlement memory settlement = _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
-        _checkProviderReservePrepared(key, settlement);
-        amount = settlement.ownerReward - _projectedDistribution(key, settlement);
+        amount = _ownerRewardAfterDistribution(key, settlement);
         isMinted = _ownerBurnCompletesRole(key, settlement, amount);
-    }
-
-    function prepareProviderReserve(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 groupId,
-        uint256 limit
-    ) external nonReentrant returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
-        _checkMintWindow(
-            serviceTokenAddress,
-            round,
-            serviceActionId,
-            groupId,
-            _layout.createdRoundByActionId[serviceTokenAddress][serviceActionId],
-            false
-        );
-        GroupServiceStorage.MemberRewardKey memory key =
-            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId);
-        GroupServiceStorage.Settlement memory settlement =
-            _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
-        _checkSettlementPool(settlement, serviceTokenAddress, round, serviceActionId, groupId);
-        (processedActionCount, totalActionCount, providerReserve) = _providerReservePreparation(key, settlement);
-        if (processedActionCount == totalActionCount || limit == 0) {
-            return (processedActionCount, totalActionCount, providerReserve);
-        }
-
-        if (!settlement.actionMinted) {
-            _mintServiceRewardIfNeeded(settlement, serviceTokenAddress, round, serviceActionId, groupId);
-            settlement.actionMinted = true;
-        }
-        if (settlement.ownerReward == 0) {
-            return _providerReservePreparation(key, settlement);
-        }
-
-        return _advanceProviderReserve(key, settlement, limit, processedActionCount);
-    }
-
-    function _advanceProviderReserve(
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlement,
-        uint256 limit,
-        uint256 previousProcessedActionCount
-    ) private returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
-        (processedActionCount, totalActionCount, providerReserve) = GroupRecipients.prepareProviderReserve(
-            _layout,
-            GROUP_ACTION_EXECUTOR_ADDRESS,
-            key,
-            settlement,
-            limit
-        );
-        if (processedActionCount > previousProcessedActionCount) {
-            emit ProviderReservePreparationAdvanced({
-                serviceTokenAddress: key.tokenAddress,
-                serviceActionId: key.actionId,
-                round: key.round,
-                groupId: key.memberId,
-                ownerReward: settlement.ownerReward,
-                processedActionCount: processedActionCount,
-                totalActionCount: totalActionCount,
-                providerReserve: providerReserve
-            });
-        }
-    }
-
-    function providerReservePreparation(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 groupId
-    ) external view returns (
-        uint256 ownerWeight,
-        uint256 processedActionCount,
-        uint256 totalActionCount,
-        uint256 providerReserve
-    ) {
-        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) return (0, 0, 0, 0);
-        GroupServiceStorage.Settlement memory settlement =
-            _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
-        (processedActionCount, totalActionCount, providerReserve) =
-            _providerReservePreparation(
-                GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId), settlement
-            );
-        return (settlement.ownerWeight, processedActionCount, totalActionCount, providerReserve);
     }
 
     function verifierReward(
@@ -690,7 +605,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function _memberDetails(GroupServiceStorage.MemberRewardKey memory key) private view returns (ServiceRewardDetails memory details) {
         if (!_isSettleableRound(key.tokenAddress, key.round, key.actionId)) return details;
         GroupServiceStorage.Settlement memory settlement = _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, GroupServiceStorage.PrimaryRole.Both);
-        _checkProviderReservePrepared(key, settlement);
         GroupServiceStorage.PrimaryAmounts memory pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
         details.ownerBudget = settlement.ownerReward;
         details.ownerBudgetBeforeCap = settlement.ownerReward + settlement.ownerBurned;
@@ -712,48 +626,19 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return hasSettled ? MemberRewardStatus.Settled : MemberRewardStatus.Unavailable;
     }
 
-    function _projectedDistribution(
+    function _ownerRewardAfterDistribution(
         GroupServiceStorage.MemberRewardKey memory key,
         GroupServiceStorage.Settlement memory settlement
     ) private view returns (uint256) {
         if (settlement.ownerReward == 0) {
             return 0;
         }
-        return GroupRecipients.projectedDistribution(
+        return GroupRecipients.ownerRewardAfterDistribution(
             _layout,
             _protocol(),
             key,
             settlement
         );
-    }
-
-    function _providerReservePreparation(
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlement
-    ) private view returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
-        return GroupRecipients.providerReservePreparation(
-            _layout,
-            _protocol(),
-            key,
-            settlement
-        );
-    }
-
-    function _checkProviderReservePrepared(
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlement
-    ) private view {
-        (uint256 processedActionCount, uint256 totalActionCount, ) = _providerReservePreparation(key, settlement);
-        if (processedActionCount < totalActionCount) {
-            revert ProviderReservePreparationRequired(
-                key.tokenAddress,
-                key.actionId,
-                key.round,
-                key.memberId,
-                processedActionCount,
-                totalActionCount
-            );
-        }
     }
 
     function _settlement(
@@ -908,7 +793,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     ) private view returns (GroupServiceStorage.PrimaryAmounts memory pending) {
         if (role != GroupServiceStorage.PrimaryRole.Owner && _verifierPaid(key) == 0) pending.verifier = settlement.verifierReward;
         if (role != GroupServiceStorage.PrimaryRole.Verifier && _ownerPaid(key) == 0) {
-            pending.owner = settlement.ownerReward - _projectedDistribution(key, settlement);
+            pending.owner = _ownerRewardAfterDistribution(key, settlement);
             pending.burn = _pendingOwnerBurn(key.tokenAddress, key.round, key.actionId, key.memberId, settlement.ownerBurned);
         }
     }
@@ -941,7 +826,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         );
         settlement = _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, role);
         _checkSettlementPool(settlement, key.tokenAddress, key.round, key.actionId, key.memberId);
-        if (role != GroupServiceStorage.PrimaryRole.Verifier) _checkProviderReservePrepared(key, settlement);
         pending = _pendingPrimary(key, settlement, role);
         if (
             pending.owner + pending.verifier + pending.burn == 0 && !settlement.actionMinted
@@ -1006,7 +890,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
         result.settlement =
             _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, GroupServiceStorage.PrimaryRole.Both);
-        _checkProviderReservePrepared(key, result.settlement);
         GroupServiceStorage.PrimaryAmounts memory pending =
             _pendingPrimary(key, result.settlement, GroupServiceStorage.PrimaryRole.Both);
         if (pending.owner + pending.verifier + pending.burn != 0) {
@@ -1037,7 +920,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         );
         GroupServiceStorage.MemberRewardKey memory key = GroupServiceStorage.MemberRewardKey(tokenAddress, round, actionId, memberId);
         GroupServiceStorage.Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId, GroupServiceStorage.PrimaryRole.Both);
-        _checkProviderReservePrepared(key, settlement);
         GroupServiceStorage.PrimaryAmounts memory pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
         if (
             pending.owner + pending.verifier + pending.burn == 0 && !settlement.actionMinted

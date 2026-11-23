@@ -7,7 +7,7 @@ import {IGroupActionJoinErrors} from "../src/interfaces/IGroupActionJoin.sol";
 import {MockGroupActionToken} from "./mocks/GroupActionExecutorMocks.sol";
 
 contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
-    function testPositiveProviderScoreRegistersRewardKeyAndCandidateAction() external {
+    function testPositiveProviderScoreRegistersRewardKey() external {
         _prepareRound();
         _atPhase(4);
         actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
@@ -21,9 +21,6 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         (GroupRewardKey[] memory keys, uint256 providerKeyCount) =
             executor.providerRewardKeys(address(token), 2, PROVIDER_ID, 0, 1, false);
         require(providerKeyCount == 1 && keys[0].sourceActionId == ACTION_ID, "positive Provider score adds a key");
-        (uint256[] memory actions, uint256 totalActionCount) =
-            executor.actionIdsWithProviderScore(address(token), 2, GROUP_ID, 0, 1, false);
-        require(totalActionCount == 1 && actions.length == 1 && actions[0] == ACTION_ID, "positive score adds action");
     }
 
     function testProviderRewardKeyIsRegisteredOnceAcrossPositiveBatches() external {
