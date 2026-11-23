@@ -236,7 +236,11 @@ library GroupRecipients {
             if (minted) summary.mintedAmount += amount;
             else summary.pendingAmount += amount;
         }
-        summary.status = _status(summary.pendingAmount != 0, summary.mintedAmount != 0);
+        if (summary.pendingAmount != 0) {
+            summary.status = MemberRewardStatus.Pending;
+        } else if (summary.mintedAmount != 0) {
+            summary.status = MemberRewardStatus.Settled;
+        }
     }
 
     function distributionForAction(
@@ -256,7 +260,7 @@ library GroupRecipients {
             settlementInfo.ownerReward,
             settlementInfo.ownerWeight
         );
-        (uint256 reserve,) = marketAmounts(
+        uint256 reserve = _providerMarketAmount(
             protocol.groupActionExecutorAddress,
             settlementInfo.providerIncentiveRatio,
             settlementInfo.actionTokenAddress,
@@ -553,7 +557,8 @@ library GroupRecipients {
         GroupServiceStorage.Share memory share,
         bool provider
     ) private view returns (uint256) {
-        if (share.memberId == share.groupId) return 0;
+        // Load-bearing: Passing member ID 0 as a Provider would quote the group reserve.
+        if (share.memberId == 0 || share.memberId == share.groupId) return 0;
         uint256 slice = _ownerSlice(
             protocol,
             settlementInfo.actionTokenAddress,
@@ -563,7 +568,7 @@ library GroupRecipients {
             settlementInfo.ownerReward,
             settlementInfo.ownerWeight
         );
-        (uint256 reserve, uint256 providerAmount) = marketAmounts(
+        uint256 marketAmount = _providerMarketAmount(
             protocol.groupActionExecutorAddress,
             settlementInfo.providerIncentiveRatio,
             settlementInfo.actionTokenAddress,
@@ -573,7 +578,7 @@ library GroupRecipients {
             provider ? share.memberId : 0,
             slice
         );
-        if (provider) return providerAmount;
+        if (provider) return marketAmount;
         return recipientAmount(
             self,
             settlementInfo.actionTokenAddress,
@@ -581,7 +586,7 @@ library GroupRecipients {
             share.sourceActionId,
             share.groupId,
             share.memberId,
-            slice - reserve
+            slice - marketAmount
         );
     }
 
@@ -600,11 +605,6 @@ library GroupRecipients {
         );
         if (groupReward == 0) return 0;
         return Math.mulDiv(ownerReward, groupReward, ownerWeight);
-    }
-
-    function _status(bool hasPending, bool hasSettled) private pure returns (MemberRewardStatus) {
-        if (hasPending) return hasSettled ? MemberRewardStatus.Partial : MemberRewardStatus.Pending;
-        return hasSettled ? MemberRewardStatus.Settled : MemberRewardStatus.Unavailable;
     }
 
     struct RecipientTable {
@@ -828,7 +828,7 @@ library GroupRecipients {
         distributionInfo.ownerAmount = groupReward - distributionInfo.totalRecipientAmount;
     }
 
-    function marketAmounts(
+    function _providerMarketAmount(
         address groupActionExecutorAddress,
         uint256 providerIncentiveRatio,
         address sourceTokenAddress,
@@ -837,15 +837,15 @@ library GroupRecipients {
         uint256 groupId,
         uint256 providerId,
         uint256 slice
-    ) internal view returns (uint256 reserve, uint256 amount) {
-        if (slice == 0) return (0, 0);
+    ) private view returns (uint256) {
+        if (slice == 0 || providerIncentiveRatio == 0) return 0;
         IGroupActionExecutor source = IGroupActionExecutor(groupActionExecutorAddress);
-        if (providerIncentiveRatio == 0) return (0, 0);
-        (uint256 groupScore, uint256 externalScore, uint256 providerScore) =
-            source.providerWeights(sourceTokenAddress, round, sourceActionId, groupId, providerId);
-        if (groupScore == 0 || externalScore == 0) return (0, 0);
+        (uint256 score, uint256 groupFinalScore) = providerId == 0
+            ? source.externalProviderScore(sourceTokenAddress, round, sourceActionId, groupId)
+            : source.providerScore(sourceTokenAddress, round, sourceActionId, groupId, providerId);
+        if (groupFinalScore == 0 || score == 0) return 0;
         uint256 market = Math.mulDiv(slice, providerIncentiveRatio, GroupServiceStorage.PRECISION);
-        return (Math.mulDiv(market, externalScore, groupScore), Math.mulDiv(market, providerScore, groupScore));
+        return Math.mulDiv(market, score, groupFinalScore);
     }
 
     function prepareProviderReserve(
@@ -892,7 +892,7 @@ library GroupRecipients {
         IGroupActionExecutor groupAction = IGroupActionExecutor(request.groupActionExecutorAddress);
         uint256 start = preparation.processedActionCount;
         uint256[] memory actionIds;
-        (actionIds, totalActionCount) = groupAction.actionIdsWithProviderWeight(
+        (actionIds, totalActionCount) = groupAction.actionIdsWithProviderScore(
             request.sourceTokenAddress, request.round, request.groupId, start, request.pageSize, false
         );
 
@@ -902,7 +902,7 @@ library GroupRecipients {
             preparation.processedActionCount = 0;
             preparation.totalActionCount = totalActionCount;
             preparation.providerReserve = 0;
-            (actionIds, totalActionCount) = groupAction.actionIdsWithProviderWeight(
+            (actionIds, totalActionCount) = groupAction.actionIdsWithProviderScore(
                 request.sourceTokenAddress, request.round, request.groupId, 0, request.pageSize, false
             );
             preparation.totalActionCount = totalActionCount;
@@ -926,7 +926,7 @@ library GroupRecipients {
             request.sourceTokenAddress, request.round, sourceActionId, request.groupId
         );
         uint256 slice = Math.mulDiv(request.ownerReward, groupReward, request.ownerWeight);
-        (reserve,) = marketAmounts(
+        reserve = _providerMarketAmount(
             request.groupActionExecutorAddress,
             request.providerIncentiveRatio,
             request.sourceTokenAddress,
@@ -952,7 +952,7 @@ library GroupRecipients {
 
         IGroupActionExecutor groupAction = IGroupActionExecutor(protocol.groupActionExecutorAddress);
         (, totalActionCount) =
-            groupAction.actionIdsWithProviderWeight(
+            groupAction.actionIdsWithProviderScore(
                 settlementInfo.actionTokenAddress, key.round, key.memberId, 0, 0, false
             );
         if (totalActionCount <= GroupServiceStorage.MAX_PROVIDER_RESERVE_PREPARATION_PAGE_SIZE) {
@@ -1038,7 +1038,7 @@ library GroupRecipients {
         }
 
         (uint256[] memory actionIds,) = IGroupActionExecutor(protocol.groupActionExecutorAddress)
-            .actionIdsWithProviderWeight(
+            .actionIdsWithProviderScore(
                 settlementInfo.actionTokenAddress, key.round, key.memberId, 0, type(uint256).max, false
             );
         for (uint256 i = 0; i < actionIds.length; i++) {
@@ -1052,7 +1052,7 @@ library GroupRecipients {
                     settlementInfo.ownerReward,
                     settlementInfo.ownerWeight
                 );
-            (uint256 reserve,) = marketAmounts(
+            uint256 reserve = _providerMarketAmount(
                 protocol.groupActionExecutorAddress,
                 settlementInfo.providerIncentiveRatio,
                 settlementInfo.actionTokenAddress,
@@ -1085,7 +1085,7 @@ library GroupRecipients {
         if (slice == 0) {
             return 0;
         }
-        (uint256 reserve,) = marketAmounts(
+        uint256 reserve = _providerMarketAmount(
             protocol.groupActionExecutorAddress,
             settlementInfo.providerIncentiveRatio,
             settlementInfo.actionTokenAddress,

@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionExecutor} from "./IActionExecutor.sol";
-import {IMemberRewardExecutor} from "./IMemberRewardExecutor.sol";
+import {IMemberRewardExecutor, MemberRewardStatus} from "./IMemberRewardExecutor.sol";
 
 struct LpCreationParams {
     address joinTokenAddress;
@@ -116,10 +116,10 @@ interface ILpExecutor is IActionExecutor, IMemberRewardExecutor, ILpExecutorErro
         uint256 memberId
     ) external view returns (uint256 ratio, bool minted);
 
-    function lpRewardBurn(
+    function rewardDetail(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
         uint256 memberId
-    ) external view returns (uint256 pendingAmount, uint256 burnedAmount);
+    ) external view returns (uint256 mintAmount, uint256 burnAmount, MemberRewardStatus status);
 }

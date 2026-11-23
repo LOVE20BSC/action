@@ -7,7 +7,7 @@ import {IGroupActionJoinErrors} from "../src/interfaces/IGroupActionJoin.sol";
 import {MockGroupActionToken} from "./mocks/GroupActionExecutorMocks.sol";
 
 contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
-    function testPositiveProviderWeightRegistersRewardKeyAndCandidateAction() external {
+    function testPositiveProviderScoreRegistersRewardKeyAndCandidateAction() external {
         _prepareRound();
         _atPhase(4);
         actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
@@ -16,17 +16,14 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _ids(50));
 
-        (uint256 groupScore, uint256 externalScore, uint256 providerScore) =
-            executor.providerWeights(address(token), 2, ACTION_ID, GROUP_ID, PROVIDER_ID);
-        require(groupScore == 17500e18, "all verified scores contribute to the group weight");
-        require(externalScore == 7500e18 && providerScore == 7500e18, "Provider weight comes from verified scores");
+        _assertProviderScores(7500e18, 7500e18, 17500e18);
 
         (GroupRewardKey[] memory keys, uint256 providerKeyCount) =
             executor.providerRewardKeys(address(token), 2, PROVIDER_ID, 0, 1, false);
         require(providerKeyCount == 1 && keys[0].sourceActionId == ACTION_ID, "positive Provider score adds a key");
         (uint256[] memory actions, uint256 totalActionCount) =
-            executor.actionIdsWithProviderWeight(address(token), 2, GROUP_ID, 0, 1, false);
-        require(totalActionCount == 1 && actions.length == 1 && actions[0] == ACTION_ID, "positive weight adds action");
+            executor.actionIdsWithProviderScore(address(token), 2, GROUP_ID, 0, 1, false);
+        require(totalActionCount == 1 && actions.length == 1 && actions[0] == ACTION_ID, "positive score adds action");
     }
 
     function testProviderRewardKeyIsRegisteredOnceAcrossPositiveBatches() external {
@@ -43,7 +40,7 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         require(count == 0, "members must first be verified");
         _submitScores(_ids(100));
         (, count) = executor.providerRewardKeys(address(token), 2, PROVIDER_ID, 0, 0, false);
-        require(count == 1, "first positive weight adds key");
+        require(count == 1, "first positive score adds key");
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _ids(50));
 
@@ -55,7 +52,7 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         require(total == 1 && keys.length == 0, "out-of-range page preserves count");
     }
 
-    function testVerificationCountsWholeScoreUnderFirstProvider() external {
+    function testScoreQueriesExposeWholeScoreUnderFirstProviderAfterVerification() external {
         _prepareRound();
         _fundJoinTokenFor(MEMBER2, 25e18);
         _join(MEMBER2_ID, 25e18, 0);
@@ -63,17 +60,12 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, _ids(100));
-        (uint256 groupScore,,) = executor.providerWeights(address(token), 2, ACTION_ID, GROUP_ID, PROVIDER_ID);
-        require(groupScore == 0, "incomplete verification");
+        _assertProviderScores(0, 0, 0);
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 1, _ids(20));
-        uint256 externalScore;
-        uint256 providerScore;
-        (groupScore, externalScore, providerScore) =
-            executor.providerWeights(address(token), 2, ACTION_ID, GROUP_ID, PROVIDER_ID);
-        require(groupScore == 13500e18 && externalScore == 3500e18 && providerScore == 3500e18, "verified weights");
-        (,, uint256 ownerScore) = executor.providerWeights(address(token), 2, ACTION_ID, GROUP_ID, GROUP_ID);
-        require(ownerScore == 0, "owner provider score");
+        _assertProviderScores(3500e18, 3500e18, 13500e18);
+        (uint256 ownerScore, uint256 groupScore) = executor.providerScore(address(token), 2, ACTION_ID, GROUP_ID, GROUP_ID);
+        require(ownerScore == 0 && groupScore == 13500e18, "owner only contributes to group score");
     }
 
     function testFirstSuccessfulJoinKeepsItsProviderAfterExit() external {
@@ -160,5 +152,12 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
     {
         (uint256 providerId, uint256 joinedBlock) = executor.providerAttribution(groupId, memberId);
         require(providerId == expectedProvider && joinedBlock == expectedBlock, "first join attribution");
+    }
+
+    function _assertProviderScores(uint256 provider, uint256 externalTotal, uint256 groupTotal) private view {
+        (uint256 score, uint256 groupScore) = executor.providerScore(address(token), 2, ACTION_ID, GROUP_ID, PROVIDER_ID);
+        require(score == provider && groupScore == groupTotal, "individual score and group final score");
+        (score, groupScore) = executor.externalProviderScore(address(token), 2, ACTION_ID, GROUP_ID);
+        require(score == externalTotal && groupScore == groupTotal, "external score and group final score");
     }
 }

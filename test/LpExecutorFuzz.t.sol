@@ -187,10 +187,9 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
     }
 
     function _assertPendingSplit(uint256 expectedMint, uint256 expectedBurn) private view {
-        (uint256 pendingMint, uint256 paid, MemberRewardStatus status) =
-            lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
-        (uint256 pendingBurn, uint256 burned) = lpExecutor.lpRewardBurn(address(token), 2, SECOND_ACTION_ID, 1);
-        require(paid == 0 && burned == 0 && status == MemberRewardStatus.Pending, "reward awaits settlement");
+        (uint256 pendingMint, uint256 pendingBurn, MemberRewardStatus status) =
+            lpExecutor.rewardDetail(address(token), 2, SECOND_ACTION_ID, 1);
+        require(status == MemberRewardStatus.Pending, "reward awaits settlement");
         require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending matches the reference");
     }
 

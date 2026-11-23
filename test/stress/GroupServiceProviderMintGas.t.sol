@@ -92,14 +92,19 @@ contract GroupServiceProviderMintGasTest is ActionTargetIntegrationFixture {
         _configureRecipient();
         vm.roll(block.number + BLOCKS_PER_PHASE);
 
-        (uint256 groupScore, uint256 externalScore, uint256 targetScore) =
-            group.providerWeights(address(token), round, sourceAction, OWNER_ID, TARGET_PROVIDER_ID);
-        require(groupScore == 100_000 && externalScore == 52_000 && targetScore == 20_000, "weights held constant");
+        {
+            (uint256 targetScore, uint256 groupScore) =
+                group.providerScore(address(token), round, sourceAction, OWNER_ID, TARGET_PROVIDER_ID);
+            (uint256 externalScore, uint256 externalGroupScore) =
+                group.externalProviderScore(address(token), round, sourceAction, OWNER_ID);
+            require(groupScore == 100_000 && externalGroupScore == groupScore, "group score held constant");
+            require(externalScore == 52_000 && targetScore == 20_000, "Provider scores held constant");
+        }
         if (distinctProviders) {
             for (uint256 i; i < count; ++i) {
-                (,, uint256 score) =
-                    group.providerWeights(address(token), round, sourceAction, OWNER_ID, extraProviders[i]);
-                require(score == 2_000, "each extra Provider has weight");
+                (uint256 score,) =
+                    group.providerScore(address(token), round, sourceAction, OWNER_ID, extraProviders[i]);
+                require(score == 2_000, "each extra Provider has a score");
             }
         }
         (uint256 budget,) = actionTarget.actionReward(address(token), round, serviceAction);

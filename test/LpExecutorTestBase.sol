@@ -212,7 +212,7 @@ abstract contract LpExecutorTestBase {
     {
         vm.prank(_memberAddress(memberId));
         mintAmount = lpExecutor.mintMemberReward(address(token), round, actionId, memberId);
-        (, burnAmount) = lpExecutor.lpRewardBurn(address(token), round, actionId, memberId);
+        (, burnAmount,) = lpExecutor.rewardDetail(address(token), round, actionId, memberId);
     }
 
     function _mintMemberReward(uint256 round, uint256 memberId)

@@ -95,6 +95,40 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
         require(pending == 0 && minted == 166 && status == MemberRewardStatus.Settled, "member total settled");
     }
 
+    function testServiceRewardTracksOwnerBudgetBeforeAndAfterGovCap() external {
+        _createServiceAction(SERVICE_ACTION_ID, 1e18, 0.5e18);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        _armServiceReward(1000);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, 800, false);
+        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100);
+        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 20);
+        _atPhase(VERIFY_PHASE);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        _atPhase(MINT_PHASE);
+
+        ServiceRewardDetails memory quote =
+            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(quote.ownerBudgetBeforeCap == 400 && quote.ownerBudget == 160, "quoted budgets");
+        _assertSummary(quote.owner, MemberRewardSummary(80, 0, MemberRewardStatus.Pending));
+        {
+            (uint256 pendingBurn, uint256 burned) =
+                executor.groupOwnerBurn(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+            require(pendingBurn == 240 && burned == 0, "quoted budget difference is pending burn");
+        }
+
+        vm.prank(GROUP_OWNER);
+        require(executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 100);
+
+        ServiceRewardDetails memory actual =
+            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(actual.ownerBudgetBeforeCap == 500 && actual.ownerBudget == 200, "actual budgets");
+        _assertSummary(actual.owner, MemberRewardSummary(0, 100, MemberRewardStatus.Settled));
+        (uint256 pendingBurnAfterMint, uint256 burnedAfterMint) =
+            executor.groupOwnerBurn(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(pendingBurnAfterMint == 0 && burnedAfterMint == 300, "actual budget difference is burned");
+        require(token.balanceOf(GROUP_OWNER) == 100 && token.burnedTotal() == 300, "actual payout and burn");
+    }
+
     function _assertDetails(
         MemberRewardSummary memory verifier,
         MemberRewardSummary memory owner,
@@ -103,12 +137,13 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
         uint256 expectedOwnerBudget
     ) private view {
         ServiceRewardDetails memory details =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         _assertSummary(details.verifier, verifier);
         _assertSummary(details.owner, owner);
         _assertSummary(details.recipient, recipient);
         _assertSummary(details.provider, provider);
         require(details.ownerBudget == expectedOwnerBudget, "owner budget separated from self reward");
+        require(details.ownerBudgetBeforeCap == expectedOwnerBudget, "uncapped budgets agree");
     }
 
     function _assertSummary(MemberRewardSummary memory actual, MemberRewardSummary memory expected) private pure {

@@ -145,7 +145,7 @@ contract LpExecutorHandler {
 
         vm.prank(_memberAddress(memberId));
         uint256 mintAmount = LpExecutor(lpExecutor).mintMemberReward(token, 2, ACTION_ID, memberId);
-        (, uint256 burnAmount) = LpExecutor(lpExecutor).lpRewardBurn(token, 2, ACTION_ID, memberId);
+        (, uint256 burnAmount,) = LpExecutor(lpExecutor).rewardDetail(token, 2, ACTION_ID, memberId);
         mintedModel[memberId] = true;
         mintedAmountModel[memberId] = mintAmount;
         burnedAmountModel[memberId] = burnAmount;
@@ -236,7 +236,7 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
             (uint256 pending, uint256 mintAmount, MemberRewardStatus status) =
                 lpExecutor.memberReward(address(token), 2, ACTION_ID, memberId);
             if (handler.mintedModel(memberId)) {
-                (, uint256 burnAmount) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, memberId);
+                (, uint256 burnAmount,) = lpExecutor.rewardDetail(address(token), 2, ACTION_ID, memberId);
                 require(pending == 0 && status == MemberRewardStatus.Settled, "complete settlement matches model");
                 require(
                     mintAmount == handler.mintedAmountModel(memberId)

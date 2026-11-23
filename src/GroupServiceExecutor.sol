@@ -511,7 +511,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return amounts.verifier;
     }
 
-    function serviceRewardByMemberId(
+    function serviceRewardDetail(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
@@ -693,9 +693,10 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         _checkProviderReservePrepared(key, settlement);
         GroupServiceStorage.PrimaryAmounts memory pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
         details.ownerBudget = settlement.ownerReward;
+        details.ownerBudgetBeforeCap = settlement.ownerReward + settlement.ownerBurned;
         uint256 ownerPaid = _ownerPaid(key);
         details.owner = MemberRewardSummary(pending.owner, ownerPaid,
-            _status(pending.owner != 0 || pending.burn != 0, ownerPaid != 0 || _ownerBurnCompletesRole(key, settlement, pending.owner)));
+            _status(pending.owner != 0 || pending.burn != 0, ownerPaid != 0 || settlement.ownerBurned != 0));
         uint256 verifierPaid = _verifierPaid(key);
         details.verifier = MemberRewardSummary(pending.verifier, verifierPaid, _status(pending.verifier != 0, verifierPaid != 0));
         (details.recipient, details.provider) = GroupRecipients.shareSummaries(
@@ -707,7 +708,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         bool hasPending,
         bool hasSettled
     ) private pure returns (MemberRewardStatus) {
-        if (hasPending) return hasSettled ? MemberRewardStatus.Partial : MemberRewardStatus.Pending;
+        if (hasPending) return MemberRewardStatus.Pending;
         return hasSettled ? MemberRewardStatus.Settled : MemberRewardStatus.Unavailable;
     }
 

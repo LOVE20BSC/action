@@ -323,7 +323,7 @@ abstract contract GroupServiceTestBase {
     function _primaryAccounting(address serviceToken, uint256 round, uint256 actionId, uint256 memberId)
         internal view returns (uint256 verifier, uint256 budget, uint256 burn, uint256 distributed, uint256 owner, bool settled)
     {
-        ServiceRewardDetails memory details = executor.serviceRewardByMemberId(serviceToken, round, actionId, memberId);
+        ServiceRewardDetails memory details = executor.serviceRewardDetail(serviceToken, round, actionId, memberId);
         (uint256 pendingBurn, uint256 burned) = executor.groupOwnerBurn(serviceToken, round, actionId, memberId);
         verifier = details.verifier.pendingAmount + details.verifier.mintedAmount;
         budget = details.ownerBudget;

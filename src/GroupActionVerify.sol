@@ -705,16 +705,18 @@ library GroupActionVerify {
     ) internal returns (bool groupVerified) {
         (uint256[] memory memberIds, ) =
             _memberIds(self, submission.tokenAddress, round, submission.actionId, submission.groupId, verifiedCount, originScores.length);
-        (uint256 batchTotal, uint256 externalTotal) = _scoreMembers(self, submission, round, memberIds, originScores);
+        (uint256 batchTotal, uint256 batchExternalProviderScore) =
+            _scoreMembers(self, submission, round, memberIds, originScores);
         self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] += batchTotal;
         self.totalFinalScore[submission.tokenAddress][submission.actionId][round] += batchTotal;
-        if (externalTotal != 0) {
+        if (batchExternalProviderScore != 0) {
             GroupActionStorage.ProviderScores storage scores =
-                self.providerScores[submission.tokenAddress][submission.actionId][round][submission.groupId];
-            if (scores.total == 0) {
-                self.actionIdsWithProviderWeight[submission.tokenAddress][round][submission.groupId].push(submission.actionId);
+                self.providerScoresByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId];
+            if (scores.externalProviderScore == 0) {
+                self.actionIdsWithProviderScoreByGroupId[submission.tokenAddress][round][submission.groupId]
+                    .push(submission.actionId);
             }
-            scores.total += externalTotal;
+            scores.externalProviderScore += batchExternalProviderScore;
         }
         uint256 newVerifiedCount = verifiedCount + originScores.length;
         self.verifiedMemberCountByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] = newVerifiedCount;
@@ -727,12 +729,12 @@ library GroupActionVerify {
         uint256 round,
         uint256[] memory memberIds,
         uint256[] calldata originScores
-    ) private returns (uint256 batchTotal, uint256 externalTotal) {
+    ) private returns (uint256 batchTotal, uint256 batchExternalProviderScore) {
         for (uint256 i = 0; i < originScores.length; i++) {
-            uint256 weighted = _scoreMember(self, submission.tokenAddress, round, submission.actionId, memberIds[i], originScores[i]);
-            batchTotal += weighted;
-            if (weighted != 0) {
-                externalTotal += _recordProviderScore(self, submission, round, memberIds[i], weighted);
+            uint256 score = _scoreMember(self, submission.tokenAddress, round, submission.actionId, memberIds[i], originScores[i]);
+            batchTotal += score;
+            if (score != 0) {
+                batchExternalProviderScore += _recordProviderScore(self, submission, round, memberIds[i], score);
             }
         }
     }
@@ -747,14 +749,14 @@ library GroupActionVerify {
         uint256 providerId = self.providerAttribution[submission.groupId][memberId].providerId;
         if (providerId == 0 || providerId == submission.groupId) return 0;
         GroupActionStorage.ProviderScores storage scores =
-            self.providerScores[submission.tokenAddress][submission.actionId][round][submission.groupId];
-        uint256 previousScore = scores.byProviderId[providerId];
+            self.providerScoresByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId];
+        uint256 previousScore = scores.scoreByProviderId[providerId];
         if (previousScore == 0) {
             self.providerRewardKeys[submission.tokenAddress][round][providerId].push(
                 GroupRewardKey({sourceActionId: submission.actionId, groupId: submission.groupId})
             );
         }
-        scores.byProviderId[providerId] = previousScore + score;
+        scores.scoreByProviderId[providerId] = previousScore + score;
         return score;
     }
 

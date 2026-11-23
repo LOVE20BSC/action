@@ -383,31 +383,34 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 pendingAmount, uint256 mintedAmount, MemberRewardStatus status) {
-        if (_memberMinted[tokenAddress][actionId][round][memberId]) {
-            return (0, _mintedRewardByMemberId[tokenAddress][actionId][round][memberId], MemberRewardStatus.Settled);
-        }
-
-        if (_isSettleableRound(tokenAddress, round, actionId)) {
-            uint256 pendingBurn;
-            (pendingAmount, pendingBurn) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
-            if (pendingAmount != 0 || pendingBurn != 0) {
-                status = MemberRewardStatus.Pending;
-            }
+        uint256 amount;
+        (amount,, status) = rewardDetail(tokenAddress, round, actionId, memberId);
+        if (status == MemberRewardStatus.Settled) {
+            mintedAmount = amount;
+        } else {
+            pendingAmount = amount;
         }
     }
 
-    function lpRewardBurn(
+    function rewardDetail(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
         uint256 memberId
-    ) external view returns (uint256 pendingAmount, uint256 burnedAmount) {
+    ) public view returns (uint256 mintAmount, uint256 burnAmount, MemberRewardStatus status) {
         if (_memberMinted[tokenAddress][actionId][round][memberId]) {
-            return (0, _burnedRewardByMemberId[tokenAddress][actionId][round][memberId]);
+            return (
+                _mintedRewardByMemberId[tokenAddress][actionId][round][memberId],
+                _burnedRewardByMemberId[tokenAddress][actionId][round][memberId],
+                MemberRewardStatus.Settled
+            );
         }
 
         if (_isSettleableRound(tokenAddress, round, actionId)) {
-            (, pendingAmount) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
+            (mintAmount, burnAmount) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
+            if (mintAmount != 0 || burnAmount != 0) {
+                status = MemberRewardStatus.Pending;
+            }
         }
     }
 

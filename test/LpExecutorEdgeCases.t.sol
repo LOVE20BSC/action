@@ -191,10 +191,9 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _mintMemberReward(2, 1);
 
         _setActionReward(2, 999e18, true);
-        (uint256 pending, uint256 mintAmount, MemberRewardStatus status) =
-            lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        (, uint256 burnAmount) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
-        require(pending == 0 && mintAmount == 200e18 && status == MemberRewardStatus.Settled, "settled payment is stable");
+        (uint256 mintAmount, uint256 burnAmount, MemberRewardStatus status) =
+            lpExecutor.rewardDetail(address(token), 2, ACTION_ID, 1);
+        require(mintAmount == 200e18 && status == MemberRewardStatus.Settled, "settled payment is stable");
         require(burnAmount == 800e18, "settled burn is stable");
     }
 

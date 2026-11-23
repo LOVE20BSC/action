@@ -4,7 +4,7 @@ pragma solidity =0.8.37;
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {GroupRewardKey} from "../src/interfaces/IGroupActionVerify.sol";
-import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {IGroupServiceExecutorErrors, MemberRewardSummary} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 
 contract GroupServiceProviderIncentivesTest is GroupServiceTestBase {
@@ -157,11 +157,34 @@ contract GroupServiceProviderIncentivesTest is GroupServiceTestBase {
         _assertMemberReward(16, 0, MemberRewardStatus.Pending);
         vm.prank(MEMBER1);
         require(executor.mintProviderReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID) == 6, "paid provider slice");
-        _assertMemberReward(10, 6, MemberRewardStatus.Partial);
+        _assertMemberReward(10, 6, MemberRewardStatus.Pending);
         vm.prank(MEMBER1);
         require(executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID) == 10, "only remainder paid");
         _assertMemberReward(0, 16, MemberRewardStatus.Settled);
         require(token.balanceOf(MEMBER1) == 16, "no duplicate payment");
+    }
+
+    function testProviderRoleRemainsPendingWhileAnotherSourceShareIsUnminted() external {
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0.5e18, 0.2e18);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        _armServiceReward(400);
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 30, MEMBER1_ID, 30);
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID_B, GROUP_ID, 50, MEMBER1_ID, 50);
+        _atPhase(MINT_PHASE);
+
+        vm.prank(MEMBER1);
+        require(
+            executor.mintProviderReward(
+                address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
+            ) == 6,
+            "first Provider share paid"
+        );
+
+        MemberRewardSummary memory provider =
+            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID).provider;
+        require(provider.pendingAmount == 10 && provider.mintedAmount == 6, "Provider role amounts");
+        require(provider.status == MemberRewardStatus.Pending, "Provider role has another payable share");
     }
 
     function _assertMemberReward(uint256 pending, uint256 paid, MemberRewardStatus status) private view {

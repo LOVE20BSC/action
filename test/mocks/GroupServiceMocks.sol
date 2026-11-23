@@ -332,8 +332,8 @@ contract MockGroupServiceGroupActionExecutor {
     mapping(address => mapping(uint256 => Uint256Set.Storage)) internal _generatedActions;
     bool internal _groupSliceReadsBlocked;
     struct MarketScores {
-        uint256 externalScore;
-        mapping(uint256 => uint256) providerScore;
+        uint256 externalProviderScore;
+        mapping(uint256 => uint256) scoreByProviderId;
     }
 
     mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => MarketScores)))) internal _markets;
@@ -440,25 +440,32 @@ contract MockGroupServiceGroupActionExecutor {
 
     function setMarketScores(
         address tokenAddress, uint256 round, uint256 actionId, uint256 groupId,
-        uint256 externalScore, uint256 providerId, uint256 providerScore
+        uint256 externalScore, uint256 providerId, uint256 individualScore
     ) external {
         MarketScores storage scores = _markets[tokenAddress][actionId][round][groupId];
-        scores.externalScore = externalScore;
-        if (scores.providerScore[providerId] == 0 && providerScore != 0) {
+        scores.externalProviderScore = externalScore;
+        if (scores.scoreByProviderId[providerId] == 0 && individualScore != 0) {
             _providerKeys[tokenAddress][round][providerId].push(GroupRewardKey(actionId, groupId));
         }
-        scores.providerScore[providerId] = providerScore;
+        scores.scoreByProviderId[providerId] = individualScore;
         _marketActions[tokenAddress][round][groupId].add(actionId);
     }
 
-    function providerWeights(address tokenAddress, uint256 round, uint256 actionId, uint256 groupId, uint256 providerId)
-        external view returns (uint256, uint256, uint256)
+    function providerScore(address tokenAddress, uint256 round, uint256 actionId, uint256 groupId, uint256 providerId)
+        external view returns (uint256 score, uint256 groupFinalScore)
     {
-        MarketScores storage scores = _markets[tokenAddress][actionId][round][groupId];
-        return (_verifiedAction[tokenAddress][actionId][round].scoreByGroupId[groupId], scores.externalScore, scores.providerScore[providerId]);
+        score = _markets[tokenAddress][actionId][round][groupId].scoreByProviderId[providerId];
+        groupFinalScore = _verifiedAction[tokenAddress][actionId][round].scoreByGroupId[groupId];
     }
 
-    function actionIdsWithProviderWeight(address tokenAddress, uint256 round, uint256 groupId, uint256 offset, uint256 limit, bool reverse)
+    function externalProviderScore(address tokenAddress, uint256 round, uint256 actionId, uint256 groupId)
+        external view returns (uint256 score, uint256 groupFinalScore)
+    {
+        score = _markets[tokenAddress][actionId][round][groupId].externalProviderScore;
+        groupFinalScore = _verifiedAction[tokenAddress][actionId][round].scoreByGroupId[groupId];
+    }
+
+    function actionIdsWithProviderScore(address tokenAddress, uint256 round, uint256 groupId, uint256 offset, uint256 limit, bool reverse)
         external view returns (uint256[] memory, uint256)
     {
         return _marketActions[tokenAddress][round][groupId].values(offset, limit, reverse);

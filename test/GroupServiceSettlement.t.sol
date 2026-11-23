@@ -4,6 +4,7 @@ pragma solidity =0.8.37;
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupServiceExecutorErrors, IGroupServiceExecutorEvents} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {IActionTargetEvents} from "../src/interfaces/IActionTarget.sol";
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {GroupServiceTestBase, GroupServiceVm} from "./GroupServiceTestBase.sol";
 
 contract GroupServiceSettlementTest is GroupServiceTestBase {
@@ -237,10 +238,17 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         stake.setGovVotes(address(token), GROUP_ID, 0);
         _atPhase(MINT_PHASE);
 
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Pending, "owner burn is pending");
+
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
         require(mintAmount == 0, "owner reward fully capped away");
         require(burnAmount == 450e18, "theoretical owner reward burned");
         require(token.burnedTotal() == 450e18, "burn executed");
+
+        (pending, minted, status) = executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Settled, "owner burn settled");
     }
 
     function testSettlementSumsVerifierWeightAcrossActions() external {

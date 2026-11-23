@@ -6,7 +6,6 @@ import {IActionExecutorEvents} from "./IActionExecutor.sol";
 enum MemberRewardStatus {
     Unavailable,
     Pending,
-    Partial,
     Settled
 }
 

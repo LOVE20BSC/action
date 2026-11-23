@@ -25,6 +25,7 @@ struct ServiceRewardDetails {
     MemberRewardSummary recipient;
     MemberRewardSummary provider;
     uint256 ownerBudget;
+    uint256 ownerBudgetBeforeCap;
 }
 
 interface IGroupServiceExecutorEvents {
@@ -341,7 +342,7 @@ interface IGroupServiceExecutor is
             uint256 providerReserve
         );
 
-    function serviceRewardByMemberId(
+    function serviceRewardDetail(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,

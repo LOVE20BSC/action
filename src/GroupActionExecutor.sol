@@ -79,21 +79,42 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         return _layout.generatedActionRewardByGroupId(tokenAddress, round, actionId, groupId);
     }
 
-    function providerWeights(
+    function providerScore(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId
-    ) external view returns (uint256 groupScore, uint256 externalScore, uint256 providerScore) {
-        if (_layout.generatedActionReward[tokenAddress][actionId][round] == 0) return (0, 0, 0);
-        GroupActionStorage.ProviderScores storage scores = _layout.providerScores[tokenAddress][actionId][round][groupId];
-        groupScore = _layout.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
-        externalScore = scores.total;
-        providerScore = scores.byProviderId[providerId];
+    ) external view returns (uint256 score, uint256 groupFinalScore) {
+        groupFinalScore = _groupFinalScoreForReward(tokenAddress, round, actionId, groupId);
+        if (groupFinalScore != 0) {
+            score = _layout.providerScoresByGroupId[tokenAddress][actionId][round][groupId].scoreByProviderId[providerId];
+        }
     }
 
-    function actionIdsWithProviderWeight(
+    function externalProviderScore(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId
+    ) external view returns (uint256 score, uint256 groupFinalScore) {
+        groupFinalScore = _groupFinalScoreForReward(tokenAddress, round, actionId, groupId);
+        if (groupFinalScore != 0) {
+            score = _layout.providerScoresByGroupId[tokenAddress][actionId][round][groupId].externalProviderScore;
+        }
+    }
+
+    function _groupFinalScoreForReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId
+    ) private view returns (uint256) {
+        if (_layout.generatedActionReward[tokenAddress][actionId][round] == 0) return 0;
+        return _layout.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
+    }
+
+    function actionIdsWithProviderScore(
         address tokenAddress,
         uint256 round,
         uint256 groupId,
@@ -102,7 +123,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
         return Pagination.paginate(
-            _layout.actionIdsWithProviderWeight[tokenAddress][round][groupId], offset, limit, reverse
+            _layout.actionIdsWithProviderScoreByGroupId[tokenAddress][round][groupId], offset, limit, reverse
         );
     }
 

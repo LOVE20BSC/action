@@ -50,8 +50,8 @@ library GroupActionStorage {
     }
 
     struct ProviderScores {
-        uint256 total;
-        mapping(uint256 => uint256) byProviderId;
+        uint256 externalProviderScore;
+        mapping(uint256 => uint256) scoreByProviderId;
     }
 
     struct Layout {
@@ -219,10 +219,10 @@ library GroupActionStorage {
         // groupId => memberId => permanent first-join attribution across actions and tokens
         mapping(uint256 => mapping(uint256 => ProviderAttribution)) providerAttribution;
         // tokenAddress => actionId => round => groupId => external Provider scores
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => ProviderScores)))) providerScores;
-        // tokenAddress => round => groupId => actions with positive external Provider weight
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) actionIdsWithProviderWeight;
-        // tokenAddress => round => providerId => source action and group pairs with positive weight
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => ProviderScores)))) providerScoresByGroupId;
+        // tokenAddress => round => groupId => actions with positive external Provider scores
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) actionIdsWithProviderScoreByGroupId;
+        // tokenAddress => round => providerId => source action and group pairs with positive scores
         mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardKey[]))) providerRewardKeys;
     }
 

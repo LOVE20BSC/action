@@ -144,15 +144,22 @@ interface IGroupActionVerifyErrors {
 }
 
 interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGroupActionVerifyErrors {
-    function providerWeights(
+    function providerScore(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId
-    ) external view returns (uint256 groupScore, uint256 externalScore, uint256 providerScore);
+    ) external view returns (uint256 score, uint256 groupFinalScore);
 
-    function actionIdsWithProviderWeight(
+    function externalProviderScore(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId
+    ) external view returns (uint256 score, uint256 groupFinalScore);
+
+    function actionIdsWithProviderScore(
         address tokenAddress,
         uint256 round,
         uint256 groupId,
@@ -218,14 +225,12 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 actionId
     ) external view returns (bool);
 
-    /// @notice The current leader while voting is open, or the sole elected verifier after it closes.
     function verifier(
         address tokenAddress,
         uint256 round,
         uint256 actionId
     ) external view returns (uint256 verifierId, uint256 applicationId, uint256 voteAmount);
 
-    /// @notice Final elected rounds only; the still-open voting round is excluded.
     function verifierElectedRounds(
         address tokenAddress,
         uint256 actionId,
@@ -250,7 +255,6 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 verifierId
     ) external;
 
-    /// @notice Collateral stays intact until withdrawal, when the derived punishment is burned.
     function verifierStake(
         address tokenAddress,
         uint256 actionId,
@@ -284,8 +288,6 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
             uint256 totalCount
         );
 
-    /// @notice Unwithdrawn applications at round end plus voted applications withdrawn in that round.
-    /// @dev Descriptions are round snapshots; lifecycle and punishment fields show current facts.
     function verifierApplicationsByRound(
         address tokenAddress,
         uint256 round,

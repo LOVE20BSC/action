@@ -223,14 +223,12 @@ contract LpExecutorRealIntegrationTest {
         _assertJoinLedger(round, proposalId);
 
         _advanceToPhaseStart(round + 2);
-        (uint256 cappedMint,, MemberRewardStatus status) =
-            lpExecutor.memberReward(address(token), round, proposalId, 1);
-        (uint256 cappedBurn,) = lpExecutor.lpRewardBurn(address(token), round, proposalId, 1);
+        (uint256 cappedMint, uint256 cappedBurn, MemberRewardStatus status) =
+            lpExecutor.rewardDetail(address(token), round, proposalId, 1);
         require(status == MemberRewardStatus.Pending && cappedBurn != 0, "reward has pending overflow");
         vm.prank(member1);
         stake.increasePromisedWaitingPhases(address(token), 1, PROMISED_WAITING_PHASES * 3);
-        (uint256 toppedUpMint,,) = lpExecutor.memberReward(address(token), round, proposalId, 1);
-        (uint256 toppedUpBurn,) = lpExecutor.lpRewardBurn(address(token), round, proposalId, 1);
+        (uint256 toppedUpMint, uint256 toppedUpBurn,) = lpExecutor.rewardDetail(address(token), round, proposalId, 1);
         require(toppedUpMint > cappedMint && toppedUpBurn < cappedBurn, "current governance reduces overflow");
         require(toppedUpMint + toppedUpBurn == cappedMint + cappedBurn, "historical theoretical reward stays fixed");
         require(
@@ -270,10 +268,9 @@ contract LpExecutorRealIntegrationTest {
         require(mint.totalRewardMinted(address(token)) == expectedReward, "mint ledger matches the action reward");
 
         {
-            (uint256 pending, uint256 recordedMint, MemberRewardStatus status) =
-                lpExecutor.memberReward(address(token), round, proposalId, 1);
-            (uint256 pendingBurn, uint256 recordedBurn) = lpExecutor.lpRewardBurn(address(token), round, proposalId, 1);
-            require(status == MemberRewardStatus.Settled && pending == 0 && pendingBurn == 0, "settlement complete");
+            (uint256 recordedMint, uint256 recordedBurn, MemberRewardStatus status) =
+                lpExecutor.rewardDetail(address(token), round, proposalId, 1);
+            require(status == MemberRewardStatus.Settled, "settlement complete");
             require(recordedMint == mintAmount && recordedBurn == expectedBurn, "settlement recorded");
         }
         (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), round, proposalId, 1);
