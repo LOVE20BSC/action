@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {LpExecutor} from "../src/LpExecutor.sol";
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {MockERC20, MockLpActionTarget, MockLpPhase} from "./mocks/LpExecutorMocks.sol";
 import {LpExecutorTestBase, LpExecutorVm} from "./LpExecutorTestBase.sol";
 
@@ -143,8 +144,8 @@ contract LpExecutorHandler {
         if (PROPOSAL_REWARD * effectiveLpRatio / 1e18 == 0) return;
 
         vm.prank(_memberAddress(memberId));
-        (uint256 mintAmount, uint256 burnAmount) =
-            LpExecutor(lpExecutor).mintMemberReward(token, 2, ACTION_ID, memberId);
+        uint256 mintAmount = LpExecutor(lpExecutor).mintMemberReward(token, 2, ACTION_ID, memberId);
+        (, uint256 burnAmount) = LpExecutor(lpExecutor).lpRewardBurn(token, 2, ACTION_ID, memberId);
         mintedModel[memberId] = true;
         mintedAmountModel[memberId] = mintAmount;
         burnedAmountModel[memberId] = burnAmount;
@@ -232,17 +233,18 @@ contract LpExecutorInvariantTest is LpExecutorTestBase {
 
     function invariant_MintRecordsMatchModel() public view {
         for (uint256 memberId = 1; memberId <= 2; memberId++) {
-            (uint256 mintAmount, uint256 burnAmount, bool minted) =
+            (uint256 pending, uint256 mintAmount, MemberRewardStatus status) =
                 lpExecutor.memberReward(address(token), 2, ACTION_ID, memberId);
             if (handler.mintedModel(memberId)) {
-                require(minted, "minted flag matches model");
+                (, uint256 burnAmount) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, memberId);
+                require(pending == 0 && status == MemberRewardStatus.Settled, "complete settlement matches model");
                 require(
                     mintAmount == handler.mintedAmountModel(memberId)
                         && burnAmount == handler.burnedAmountModel(memberId),
                     "recorded amounts match model"
                 );
             } else if (!handler.mintPhase()) {
-                require(minted == false, "not minted before the mint phase");
+                require(status == MemberRewardStatus.Unavailable, "unavailable before the mint phase");
             }
         }
     }

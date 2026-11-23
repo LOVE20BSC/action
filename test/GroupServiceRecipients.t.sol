@@ -316,19 +316,22 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         // reward is 450e18. Action A slices 270e18 (MEMBER1 takes half) and
         // action B 180e18 (MEMBER2 takes a quarter).
         _atPhase(MINT_PHASE);
-        (,,, uint256 projectedDistributed, uint256 projectedRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        (,,, uint256 projectedReserved, uint256 projectedRemaining, bool claimed) =
+            _primaryAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(!claimed, "projection runs before the mint");
-        require(projectedDistributed == 180e18, "projected distributed equals both slices");
+        require(projectedReserved == 180e18, "reserved rewards equal both shares");
         require(projectedRemaining == 270e18, "projected remainder kept by the owner");
 
         (uint256 mintAmount,) = _settleService(GROUP_ID);
-        require(mintAmount == 450e18, "owner theoretical reward");
+        require(mintAmount == 270e18, "owner receives only the projected remainder");
+        require(token.balanceOf(MEMBER1) == 0 && token.balanceOf(MEMBER2) == 0, "recipients can claim separately");
+        _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
+        _claimRecipient(GROUP_ACTION_ID_B, MEMBER2_ID);
         require(token.balanceOf(MEMBER1) == 135e18, "first recipient paid");
         require(token.balanceOf(MEMBER2) == 45e18, "second recipient paid");
         require(token.balanceOf(GROUP_OWNER) == 270e18, "owner remainder paid");
         require(
-            token.balanceOf(MEMBER1) + token.balanceOf(MEMBER2) == projectedDistributed,
+            token.balanceOf(MEMBER1) + token.balanceOf(MEMBER2) == projectedReserved,
             "executed distribution equals the projection"
         );
         require(token.balanceOf(GROUP_OWNER) == projectedRemaining, "executed remainder equals the projection");
@@ -346,7 +349,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         // The projection skips the zero-reward action exactly like the payout.
         (,,, uint256 projectedDistributed, uint256 projectedRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+            _primaryAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(!claimed, "projection runs before the mint");
         require(projectedDistributed == 225e18, "projection skips the zero-reward action");
         require(projectedRemaining == 225e18, "projected remainder kept by the owner");
@@ -354,7 +357,12 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         // Divisor and owner weight are both 60e18: the owner theoretical reward
         // is 450e18, and every wei flows through action A.
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        require(mintAmount == 450e18 && burnAmount == 0, "owner paid on the earning action only");
+        require(mintAmount == 225e18 && burnAmount == 0, "owner paid on the earning action only");
+        _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
+        vm.expectRevert(
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.ZeroRecipientReward.selector, GROUP_ACTION_ID_B, GROUP_ID, MEMBER2_ID)
+        );
+        _claimRecipient(GROUP_ACTION_ID_B, MEMBER2_ID);
         require(token.balanceOf(MEMBER1) == 225e18, "recipient of the earning action paid");
         require(token.balanceOf(MEMBER2) == 0, "zero-reward action contributes no slice");
 
@@ -373,38 +381,24 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _atPhase(MINT_PHASE);
 
         // Projections before settlement follow the same math.
-        (uint256[] memory recipientIds,, uint256[] memory amounts, uint256 ownerAmount) =
+        (uint256[] memory recipientIds,, uint256[] memory amounts,, uint256 ownerAmount,) =
             executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
         require(
             recipientIds[0] == MEMBER1_ID && amounts[0] == 135e18 && ownerAmount == 135e18, "slice split per action"
         );
-        require(
-            executor.rewardByRecipientId(
-                address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
-            ) == 135e18,
-            "single recipient projection"
-        );
-        require(
-            executor.rewardByRecipientId(
-                address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, GROUP_ID
-            ) == 135e18,
-            "owner remainder projection"
-        );
-        require(
-            executor.rewardByRecipientId(
-                address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER2_ID
-            ) == 0,
-            "non recipient projects zero"
-        );
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 135e18, false);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER2_ID, 0, false);
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        require(mintAmount == 450e18 && burnAmount == 0, "owner theoretical reward");
+        require(mintAmount == 270e18 && burnAmount == 0, "owner receives the remainder");
+        _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
+        _claimRecipient(GROUP_ACTION_ID_B, MEMBER2_ID);
         require(token.balanceOf(MEMBER1) == 135e18, "first recipient paid");
         require(token.balanceOf(MEMBER2) == 45e18, "second recipient paid");
         require(token.balanceOf(GROUP_OWNER) == 270e18, "owner keeps the remainder");
 
         (,,, uint256 ownerDistributed, uint256 ownerRemaining,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+            _primaryAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(ownerDistributed == 180e18 && ownerRemaining == 270e18, "recorded split matches the transfers");
 
         // The verifier share is paid directly and never redistributed.
@@ -445,28 +439,38 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _atPhase(MINT_PHASE);
 
         // Both proposals project the same split from that one configuration.
-        (uint256[] memory idsA,, uint256[] memory amountsA, uint256 ownerA) =
+        (uint256[] memory idsA,, uint256[] memory amountsA,, uint256 ownerA,) =
             executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
-        (uint256[] memory idsB,, uint256[] memory amountsB, uint256 ownerB) =
+        (uint256[] memory idsB,, uint256[] memory amountsB,, uint256 ownerB,) =
             executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ACTION_ID, GROUP_ID);
         require(idsA.length == 1 && idsA[0] == MEMBER1_ID, "first proposal sees the recipient");
         require(idsB.length == 1 && idsB[0] == MEMBER1_ID, "second proposal reuses the same recipient");
         require(amountsA[0] == 225e18 && amountsA[0] == amountsB[0], "both project the same slice");
         require(ownerA == 225e18 && ownerA == ownerB, "both project the same remainder");
 
-        // Settling the second proposal's owner pays through the shared configuration.
+        // Each proposal uses the shared configuration and has a separate claim.
         (uint256 mintAmountB, uint256 burnAmountB) = _settleServiceOn(SERVICE_ACTION_ID_B, GROUP_ID);
-        require(mintAmountB == 450e18 && burnAmountB == 0, "second proposal settles its own reward");
+        require(mintAmountB == 225e18 && burnAmountB == 0, "second proposal settles the owner remainder");
+        _claimRecipientOn(SERVICE_ACTION_ID_B, GROUP_ACTION_ID, MEMBER1_ID);
         require(token.balanceOf(MEMBER1) == 225e18, "shared recipient paid from the second proposal");
         require(token.balanceOf(GROUP_OWNER) == 225e18, "owner keeps the shared remainder");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGroupServiceExecutorErrors.RecipientRewardAlreadyMinted.selector,
+                address(token), SERVICE_ACTION_ID_B, SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
+            )
+        );
+        _claimRecipientOn(SERVICE_ACTION_ID_B, GROUP_ACTION_ID, MEMBER1_ID);
 
         (,,, uint256 ownerDistributedB, uint256 ownerRemainingB,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ID);
+            _primaryAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ID);
         require(ownerDistributedB == 225e18 && ownerRemainingB == 225e18, "recorded split matches the transfers");
 
-        // Settling the first proposal pays through the very same configuration.
+        _assertRecipientRewardOn(SERVICE_ACTION_ID_B, GROUP_ACTION_ID, MEMBER1_ID, 225e18, true);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 225e18, false);
+        _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
         (uint256 mintAmountA, uint256 burnAmountA) = _settleService(GROUP_ID);
-        require(mintAmountA == 450e18 && burnAmountA == 0, "first proposal settles its own reward");
+        require(mintAmountA == 225e18 && burnAmountA == 0, "first proposal settles the owner remainder");
         require(token.balanceOf(MEMBER1) == 450e18, "shared recipient paid from both proposals");
         require(token.balanceOf(GROUP_OWNER) == 450e18, "owner keeps both remainders");
 
@@ -478,18 +482,55 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         );
     }
 
-    function testDistributionFollowsTheCurrentRecipientOwner() external {
+    function testHistoricalRecipientRewardFollowsTheCurrentNFTHolder() external {
         _prepareRecipientsScenario();
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION));
-        _atPhase(MINT_PHASE);
+        _atPhase(MINT_PHASE + 10);
 
-        // The recipient NFT moves before settlement: the new holder is paid.
         memberNFT.setOwner(MEMBER1_ID, MEMBER2);
-        _settleService(GROUP_ID);
+        vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, MEMBER1_ID));
+        _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
+
+        vm.prank(MEMBER2);
+        uint256 paid = executor.mintRecipientReward(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
+        );
+        require(paid == 450e18, "historical entitlement paid");
         require(token.balanceOf(MEMBER1) == 0, "old holder not paid");
         require(token.balanceOf(MEMBER2) == 450e18, "new holder paid");
         require(token.balanceOf(GROUP_OWNER) == 0, "owner keeps nothing at full allocation");
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 450e18, true);
+    }
+
+    function testRecipientCannotClaimBeforeTheMintWindow() external {
+        _prepareRecipientsScenario();
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 0, false);
+        vm.expectRevert(
+            abi.encodeWithSelector(IActionExecutorErrors.RoundAfterMintWindow.selector, SERVICE_ROUND, SERVICE_ROUND - 1)
+        );
+        _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
+
+        _atPhase(MINT_PHASE);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 225e18, false);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER2_ID, 0, false);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, 0, false);
+        require(_claimRecipient(GROUP_ACTION_ID, MEMBER1_ID) == 225e18, "share becomes payable in the mint window");
+    }
+
+    function testRecipientCanMintWhenNeitherIdentityRegisteredForService() external {
+        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
+        _atPhase(JOIN_PHASE);
+        _qualifyGroupOwner(GROUP_ID);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
+        _armServiceReward(SERVICE_REWARD);
+        _atPhase(VERIFY_PHASE);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
+        _atPhase(MINT_PHASE);
+
+        require(_claimRecipient(GROUP_ACTION_ID, MEMBER1_ID) == 225e18, "unregistered recipient mints");
+        require(token.balanceOf(MEMBER1) == 225e18, "unregistered recipient paid");
     }
 
     function testRecipientActionsLimitRejectsTheActionOverTheLimit() external {
@@ -597,6 +638,19 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(total == 1, "sibling token has its own quota");
         (, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 0, false);
         require(total == GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP, "primary token keeps its full set");
+    }
+
+    function _assertRecipientRewardOn(
+        uint256 serviceActionId,
+        uint256 sourceActionId,
+        uint256 recipientId,
+        uint256 expectedAmount,
+        bool expectedMinted
+    ) private view {
+        (uint256 amount, bool isMinted) = executor.recipientReward(
+            address(token), SERVICE_ROUND, serviceActionId, sourceActionId, GROUP_ID, recipientId
+        );
+        require(amount == expectedAmount && isMinted == expectedMinted, "recipient amount and state match");
     }
 
     function _fillRecipientActions(uint256 groupId, uint256 count, uint256 firstActionId) internal {

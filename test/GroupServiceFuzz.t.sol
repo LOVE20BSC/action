@@ -49,10 +49,11 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         );
 
         _assertOwnerSettlement(
-            GROUP_ID, serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalGovVotes
+            GROUP_ID, serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalGovVotes,
+            recipientRatio
         );
         _assertOwnerSettlement(
-            GROUP_OWNER_B_ID, serviceReward, denominator, rewardB, ratio, govMultiplier, validVotes, totalGovVotes
+            GROUP_OWNER_B_ID, serviceReward, denominator, rewardB, ratio, govMultiplier, validVotes, totalGovVotes, 0
         );
         _assertVerifierSettlement(VERIFIER_ID, rewardA + rewardB, serviceReward, denominator, ratio);
         _assertVerifierSettlement(MEMBER1_ID, rewardA, serviceReward, denominator, ratio);
@@ -69,7 +70,7 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         // The recorded owner split always keeps the owner budget intact: the
         // distributed and remaining halves sum back to the reference reward.
         (,, uint256 ownerBurned, uint256 ownerDistributed, uint256 ownerRemaining,) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+            _primaryAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         (uint256 expectedOwner,) =
             _expectedOwner(serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalGovVotes);
         require(
@@ -115,21 +116,24 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         );
         _atPhase(MINT_PHASE);
 
-        (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        // The owner weight equals the divisor, so the owner side keeps exactly the
-        // non-verifier share of the service reward and nothing is burned.
-        require(mintAmount == serviceReward / 2 && burnAmount == 0, "owner receives the theoretical reward");
+        uint256 ownerBudget = serviceReward / 2;
+        uint256 distributed = _assertRecipientClaim(MEMBER1_ID, ownerBudget * ratioA / PRECISION)
+            + _assertRecipientClaim(MEMBER2_ID, ownerBudget * ratioB / PRECISION)
+            + _assertRecipientClaim(GROUP_OWNER_B_ID, ownerBudget * ratioC / PRECISION);
+        uint256 remaining = ownerBudget - distributed;
 
-        uint256 distributed = token.balanceOf(MEMBER1) + token.balanceOf(MEMBER2) + token.balanceOf(GROUP_OWNER_B);
-        uint256 remaining = token.balanceOf(GROUP_OWNER);
-        require(distributed + remaining == mintAmount, "distributed plus remaining equals the owner reward");
+        if (remaining != 0) {
+            (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
+            require(mintAmount == remaining && burnAmount == 0, "owner receives the remainder");
+        }
+        require(token.balanceOf(GROUP_OWNER) == remaining, "owner balance reflects its own share");
         require(
             token.balanceOf(address(executor)) + distributed + remaining == serviceReward,
             "the executor is drained exactly"
         );
 
         // The projection agrees with the executed split.
-        (uint256[] memory recipientIds,, uint256[] memory amounts, uint256 ownerAmount) =
+        (uint256[] memory recipientIds,, uint256[] memory amounts,, uint256 ownerAmount,) =
             executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
         uint256 projected;
         for (uint256 i = 0; i < amounts.length; i++) {
@@ -181,13 +185,28 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
         uint256 ratio,
         uint256 govMultiplier,
         uint256 validVotes,
-        uint256 totalGovVotes
+        uint256 totalGovVotes,
+        uint256 recipientRatio
     ) internal {
-        (uint256 expectedMint, uint256 expectedBurned) = _expectedOwner(
+        (uint256 ownerBudget, uint256 expectedBurned) = _expectedOwner(
             serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalGovVotes
         );
+        // For the owner with a recipient, the configured source action contributes half the owner's weight.
+        uint256 recipientAmount = _assertRecipientClaim(MEMBER2_ID, (ownerBudget / 2) * recipientRatio / PRECISION);
         (uint256 mintAmount, uint256 burnAmount) = _settleService(memberId);
-        require(mintAmount == expectedMint && burnAmount == expectedBurned, "owner settlement matches the reference");
+        uint256 expectedMemberBurn = recipientAmount == 0 ? expectedBurned : 0;
+        require(mintAmount == ownerBudget - recipientAmount && burnAmount == expectedMemberBurn, "owner settlement matches the reference");
+    }
+
+    function _assertRecipientClaim(uint256 recipientId, uint256 expectedAmount) internal returns (uint256) {
+        if (expectedAmount == 0) {
+            return 0;
+        }
+        address holder = _memberAddress(recipientId);
+        uint256 balance = token.balanceOf(holder);
+        uint256 amount = _claimRecipient(GROUP_ACTION_ID, recipientId);
+        require(amount == expectedAmount && token.balanceOf(holder) == balance + amount, "recipient share paid as projected");
+        return amount;
     }
 
     function _assertVerifierSettlement(

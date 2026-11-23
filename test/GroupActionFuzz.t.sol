@@ -124,7 +124,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
             }
             executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
         } else {
-            (mint1,) = _settle(2, MEMBER1_ID);
+            mint1 = _settle(2, MEMBER1_ID);
         }
 
         uint256 mint2;
@@ -151,7 +151,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
             }
             executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER2_ID);
         } else {
-            (mint2,) = _settle(2, MEMBER2_ID);
+            mint2 = _settle(2, MEMBER2_ID);
         }
         require(mint1 == expected1 && mint2 == expected2, "split formula");
         require(mint1 + mint2 <= PROPOSAL_REWARD, "budget bound");

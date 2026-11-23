@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
+import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {IGroupActionJoinEvents, IGroupActionJoinErrors, JoinInfo} from "./interfaces/IGroupActionJoin.sol";
@@ -10,7 +11,9 @@ import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IMemberNFT} from "@core/interfaces/IMemberNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IActionExecutorErrors, IActionExecutorEvents} from "./interfaces/IActionExecutor.sol";
+import {MemberRewardStatus} from "./interfaces/IMemberRewardExecutor.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
@@ -25,6 +28,20 @@ library GroupActionJoin {
     using RoundHistoryString for RoundHistoryString.History;
     using SafeERC20 for IERC20;
     using Uint256Set for Uint256Set.Storage;
+
+    struct MemberRewardKey {
+        address tokenAddress;
+        uint256 round;
+        uint256 actionId;
+        uint256 memberId;
+    }
+
+    struct MemberRewardBatch {
+        address tokenAddress;
+        uint256 memberId;
+        uint256[] rounds;
+        uint256[] actionIds;
+    }
 
     modifier onlyMemberOwner(
         GroupActionStorage.Layout storage self,
@@ -88,6 +105,12 @@ library GroupActionJoin {
         }
         _applyVerificationInfos(self, tokenAddress, round, actionId, memberId, verificationValues, joinedGroupId == 0);
         _increaseAmount(self, tokenAddress, round, actionId, groupId, memberId, amount, providerId);
+
+        GroupActionStorage.ProviderAttribution storage attribution = self.providerAttribution[groupId][memberId];
+        if (attribution.providerId == 0) {
+            attribution.providerId = providerId == 0 ? groupId : providerId;
+            attribution.joinedBlock = block.number;
+        }
 
         if (providerId == 0) {
             _pullJoinToken(self, tokenAddress, actionId, amount);
@@ -639,6 +662,122 @@ library GroupActionJoin {
         bool reverse
     ) external view returns (uint256[] memory memberIds, uint256 totalCount) {
         return self.joinedMemberIdsByGroupId[groupId].values(offset, limit, reverse);
+    }
+
+    function memberReward(
+        GroupActionStorage.Layout storage self,
+        address actionTargetAddress,
+        address phaseAddress,
+        MemberRewardKey memory key
+    ) external view returns (uint256 pendingAmount, uint256 mintedAmount, MemberRewardStatus status) {
+        if (self.memberMinted[key.tokenAddress][key.actionId][key.round][key.memberId]) {
+            return (0, self.memberMintedReward[key.tokenAddress][key.actionId][key.round][key.memberId], MemberRewardStatus.Settled);
+        }
+        {
+            uint256 createdRound = self.createdRoundByActionId[key.tokenAddress][key.actionId];
+            if (createdRound == 0 || key.round < createdRound || key.round > GroupActionRoundAxis.mintRound(phaseAddress)) {
+                return (0, 0, MemberRewardStatus.Unavailable);
+            }
+        }
+        uint256 totalScore = self.totalFinalScore[key.tokenAddress][key.actionId][key.round];
+        if (totalScore == 0 || !self.roundVerified[key.tokenAddress][key.actionId][key.round]) {
+            return (0, 0, MemberRewardStatus.Unavailable);
+        }
+        (uint256 score, ) = self.finalScoreAt(key.tokenAddress, key.round, key.actionId, key.memberId);
+        if (score == 0) return (0, 0, MemberRewardStatus.Unavailable);
+
+        (uint256 proposalReward, ) = IActionTarget(actionTargetAddress).actionReward(key.tokenAddress, key.round, key.actionId);
+        pendingAmount = Math.mulDiv(proposalReward, score, totalScore);
+        status = pendingAmount == 0 ? MemberRewardStatus.Unavailable : MemberRewardStatus.Pending;
+    }
+
+    // The executor verifies the current owner and round and holds the reentrancy guard.
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintMemberReward(
+        GroupActionStorage.Layout storage self,
+        address actionTargetAddress,
+        MemberRewardKey memory key
+    ) external returns (uint256 mintAmount) {
+        return _mintMemberReward(self, actionTargetAddress, key);
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function mintMemberRewards(
+        GroupActionStorage.Layout storage self,
+        GroupActionStorage.Protocol memory protocol,
+        MemberRewardBatch memory batch
+    ) external returns (uint256[] memory mintAmounts) {
+        uint256 length = batch.actionIds.length;
+        mintAmounts = new uint256[](length);
+        for (uint256 i = 0; i < length; ++i) {
+            uint256 round = batch.rounds[i];
+            uint256 actionId = batch.actionIds[i];
+            _checkMemberMintWindow(
+                self, batch.tokenAddress, round, actionId, batch.memberId, protocol.phaseAddress
+            );
+            mintAmounts[i] = _mintMemberReward(
+                self,
+                protocol.actionTargetAddress,
+                MemberRewardKey(batch.tokenAddress, round, actionId, batch.memberId)
+            );
+        }
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _checkMemberMintWindow(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId,
+        address phaseAddress
+    ) private view {
+        uint256 createdRound = self.createdRoundByActionId[tokenAddress][actionId];
+        if (createdRound == 0) revert IActionExecutorErrors.ActionNotCreated(tokenAddress, actionId);
+        if (round < createdRound) revert IActionExecutorErrors.RoundBeforeActionCreated(round, createdRound);
+        uint256 mintRound = GroupActionRoundAxis.mintRound(phaseAddress);
+        if (mintRound == 0) revert IActionExecutorErrors.RoundNotStarted(1, 0);
+        if (round > mintRound) revert IActionExecutorErrors.RoundAfterMintWindow(round, mintRound);
+        if (self.memberMinted[tokenAddress][actionId][round][memberId]) {
+            revert IActionExecutorErrors.RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
+        }
+    }
+
+    function _mintMemberReward(
+        GroupActionStorage.Layout storage self,
+        address actionTargetAddress,
+        MemberRewardKey memory key
+    ) private returns (uint256 mintAmount) {
+        uint256 totalScore = self.totalFinalScore[key.tokenAddress][key.actionId][key.round];
+        if (totalScore == 0 || !self.roundVerified[key.tokenAddress][key.actionId][key.round]) {
+            revert IActionExecutorErrors.MemberRewardPoolEmpty(key.tokenAddress, key.round);
+        }
+        (uint256 score, ) = self.finalScoreAt(key.tokenAddress, key.round, key.actionId, key.memberId);
+        if (score == 0) revert IActionExecutorErrors.ZeroFinalScore(key.tokenAddress, key.actionId, key.memberId);
+
+        IActionTarget actionTarget = IActionTarget(actionTargetAddress);
+        (uint256 proposalReward, bool actionMinted) = actionTarget.actionReward(key.tokenAddress, key.round, key.actionId);
+        if (proposalReward != 0 && !actionMinted) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            proposalReward = actionTarget.mintActionReward(key.tokenAddress, key.round, key.actionId);
+        }
+        if (proposalReward == 0) revert IActionExecutorErrors.MemberRewardPoolEmpty(key.tokenAddress, key.round);
+
+        mintAmount = Math.mulDiv(proposalReward, score, totalScore);
+        if (mintAmount == 0) revert IActionExecutorErrors.MemberRewardRoundedToZero(key.tokenAddress, key.round, key.memberId);
+
+        self.memberMinted[key.tokenAddress][key.actionId][key.round][key.memberId] = true;
+        self.memberMintedReward[key.tokenAddress][key.actionId][key.round][key.memberId] = mintAmount;
+        IERC20(key.tokenAddress).safeTransfer(msg.sender, mintAmount);
+
+        emit IActionExecutorEvents.MemberRewardMinted({
+            tokenAddress: key.tokenAddress,
+            actionId: key.actionId,
+            memberId: key.memberId,
+            round: key.round,
+            mintAmount: mintAmount,
+            burnAmount: 0
+        });
     }
 
     function _decreaseProviderAmount(

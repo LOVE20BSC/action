@@ -34,4 +34,7 @@ VerifierStakeRefunded action.verification
 ApplicationVoteRecorded action.verification
 RecipientsChanged action.recipients
 RecipientPaid action.service
+ProviderPaid action.service
+ServiceOwnerRewardBurned action.service
 ServiceRewardsDistributed action.service
+ProviderReservePreparationAdvanced action.service

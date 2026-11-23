@@ -4,6 +4,7 @@ pragma solidity =0.8.37;
 import {GroupActionExecutor} from "../src/GroupActionExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupActionExecutorErrors} from "../src/interfaces/IGroupActionExecutor.sol";
+import {IMemberRewardExecutor, MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {GroupActionExecutorTestBase} from "./GroupActionExecutorTestBase.sol";
 
@@ -50,9 +51,10 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         uint256 expected2 = Math.mulDiv(PROPOSAL_REWARD, memberFinal2, totalFinal);
         require(expected1 + expected2 == PROPOSAL_REWARD - 1, "dust sanity");
 
-        (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
-            executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
-        require(viewAmount == expected1 && viewBurn == 0 && !viewMinted, "member reward preview");
+        IMemberRewardExecutor rewards = IMemberRewardExecutor(address(executor));
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            rewards.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
+        require(pending == expected1 && minted == 0 && status == MemberRewardStatus.Pending, "member reward preview");
 
         require(
             executor.generatedActionRewardByGroupId(address(token), 2, ACTION_ID, GROUP_ID) == PROPOSAL_REWARD,
@@ -60,19 +62,19 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
 
         uint256 balanceBefore = token.balanceOf(MEMBER1);
-        (uint256 mint1, uint256 burn1) = _settle(2, MEMBER1_ID);
-        require(mint1 == expected1 && burn1 == 0, "member 1 minted");
+        uint256 mint1 = _settle(2, MEMBER1_ID);
+        require(mint1 == expected1, "member 1 minted");
         require(token.balanceOf(MEMBER1) - balanceBefore == expected1, "member 1 paid");
 
         balanceBefore = token.balanceOf(MEMBER2);
-        (uint256 mint2, uint256 burn2) = _settle(2, MEMBER2_ID);
-        require(mint2 == expected2 && burn2 == 0, "member 2 minted");
+        uint256 mint2 = _settle(2, MEMBER2_ID);
+        require(mint2 == expected2, "member 2 minted");
         require(token.balanceOf(MEMBER2) - balanceBefore == expected2, "member 2 paid");
 
         require(actionTarget.mintRewardCalls() == 1, "single reward pull");
         require(actionTarget.registerCalls() == 2, "join state registered");
-        (viewAmount, viewBurn, viewMinted) = executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
-        require(viewAmount == expected1 && viewBurn == 0 && viewMinted, "minted flag recorded");
+        (pending, minted, status) = rewards.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
+        require(pending == 0 && minted == expected1 && status == MemberRewardStatus.Settled, "settlement recorded");
     }
 
     function testUnverifiedRoundBlocksSettle() external {
@@ -94,9 +96,9 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
         executor.mintMemberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
 
-        (uint256 viewAmount, uint256 viewBurn, bool viewMinted) =
-            executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
-        require(viewAmount == 0 && viewBurn == 0 && !viewMinted, "unsettled round stays pending");
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            IMemberRewardExecutor(address(executor)).memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Unavailable, "unverified reward unavailable");
     }
 
     function testPartialVerificationBlocksSettle() external {
@@ -144,9 +146,9 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         uint256[] memory rounds = new uint256[](1);
         rounds[0] = 2;
         vm.prank(MEMBER1);
-        (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            executor.mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
-        require(mintAmounts[0] == expected1 && burnAmounts[0] == 0, "batch mint amount");
+        uint256[] memory mintAmounts = IMemberRewardExecutor(address(executor))
+            .mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
+        require(mintAmounts.length == 1 && mintAmounts[0] == expected1, "batch mint amount");
         require(token.balanceOf(MEMBER1) == expected1, "batch mint paid");
 
         uint256[] memory mismatched = new uint256[](2);
@@ -191,9 +193,53 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         );
         executor.mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
 
-        (,, bool minted) = executor.memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
-        require(!minted, "earlier element rolled back");
+        (,, MemberRewardStatus status) =
+            IMemberRewardExecutor(address(executor)).memberReward(address(token), 2, ACTION_ID, MEMBER1_ID);
+        require(status == MemberRewardStatus.Pending, "earlier element rolled back");
         require(actionTarget.mintRewardCalls() == 0, "no action reward pulled");
+    }
+
+    function testBatchSettlementPaysTwoVerifiedActionsAtomically() external {
+        uint256 secondActionId = ACTION_ID + 1;
+        _createAction(secondActionId);
+        _fundTokenFor(VERIFIER, VERIFIER_STAKE);
+        vm.prank(VERIFIER);
+        executor.submitVerifierApplication(address(token), secondActionId, VERIFIER_ID, "verifier");
+        vote.setVotesNumByProposalId(address(token), CREATION_PHASE, secondActionId, 1000e18);
+        _castVotesForActionAt(secondActionId, MEMBER1_ID, VERIFIER_ID, 100e18, CREATION_PHASE);
+
+        _prepareRound();
+        _activateGroupOn(address(token), secondActionId, GROUP_ID);
+        _fundJoinTokenFor(MEMBER1, 100e18);
+        _joinOn(address(token), secondActionId, GROUP_ID, MEMBER1_ID, 100e18);
+
+        _atPhase(4);
+        _submitScores(_scores(100, 60));
+        vm.prank(VERIFIER);
+        executor.submitOriginScores(address(token), secondActionId, VERIFIER_ID, GROUP_ID, 0, _scores(100));
+        _atPhase(5);
+        _fundExecutor(PROPOSAL_REWARD * 2);
+        actionTarget.setActionReward(address(token), 2, ACTION_ID, PROPOSAL_REWARD, false);
+        actionTarget.setActionReward(address(token), 2, secondActionId, PROPOSAL_REWARD, false);
+        actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
+
+        uint256[] memory actionIds = new uint256[](2);
+        actionIds[0] = ACTION_ID;
+        actionIds[1] = secondActionId;
+        uint256[] memory rounds = new uint256[](2);
+        rounds[0] = 2;
+        rounds[1] = 2;
+        uint256 expectedFirst = Math.mulDiv(
+            PROPOSAL_REWARD, 100e18 * 100, 100e18 * 100 + PROVIDER_QUOTA * 60
+        );
+        uint256 expectedSecond = PROPOSAL_REWARD;
+
+        vm.prank(MEMBER1);
+        uint256[] memory amounts = executor.mintMemberRewards(address(token), rounds, actionIds, MEMBER1_ID);
+        require(amounts.length == 2, "one result per action");
+        require(amounts[0] == expectedFirst && amounts[1] == expectedSecond, "results follow input order");
+        require(token.balanceOf(MEMBER1) == expectedFirst + expectedSecond, "both rewards are paid");
+        require(actionTarget.mintRewardCalls() == 2, "each action budget is minted once");
     }
 
     function testJoinedAmountQueryGuards() external {
@@ -388,8 +434,8 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _fundExecutor(PROPOSAL_REWARD);
         actionTarget.setActionReward(address(token), 5, ACTION_ID, PROPOSAL_REWARD, false);
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
-        (uint256 mintAmount, uint256 burnAmount) = _settle(5, MEMBER1_ID);
-        require(mintAmount == PROPOSAL_REWARD && burnAmount == 0, "round 5 settles on its own weights");
+        uint256 mintAmount = _settle(5, MEMBER1_ID);
+        require(mintAmount == PROPOSAL_REWARD, "round 5 settles on its own weights");
     }
 
     function _scores(uint256 a) internal pure returns (uint256[] memory out) {

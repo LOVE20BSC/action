@@ -38,64 +38,20 @@ contract GroupServiceJoinTest is GroupServiceTestBase, IGroupServiceExecutorEven
         require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, VERIFIER_ID), "verifier joined");
     }
 
-    function testJoinReadsTheApplicationAtTheJoinedRound() external {
+    function testAnyoneCanRegisterAndRegistrationPersists() external {
         _atPhase(CREATION_PHASE);
         _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
 
-        // The application starts standing at round JOIN_PHASE + 1, i.e. the round joined at phase JOIN_PHASE + 2.
-        groupAction.setVerifierApplication(address(token), VERIFIER_ID, JOIN_PHASE + 1);
-
-        // Phase JOIN_PHASE + 1 joins round JOIN_PHASE, one round before the application exists.
-        _atPhase(JOIN_PHASE + 1);
-        vm.prank(VERIFIER);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE, VERIFIER_ID
-            )
-        );
-        executor.join(address(token), SERVICE_ACTION_ID, VERIFIER_ID);
-
-        _atPhase(JOIN_PHASE + 2);
-        _joinService(VERIFIER_ID);
-        require(
-            actionTarget.isJoined(address(token), SERVICE_ACTION_ID, VERIFIER_ID),
-            "joined at the application's first round"
-        );
-    }
-
-    function testJoinRequiresEitherBranch() external {
-        _atPhase(CREATION_PHASE);
-        _createServiceAction(SERVICE_ACTION_ID, 0, PRECISION / 2);
         _atPhase(JOIN_PHASE);
-
-        // No active groups and no application at all.
-        vm.prank(GROUP_OWNER);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE - 1, GROUP_ID
-            )
+        _joinService(MEMBER1_ID);
+        require(actionTarget.isJoined(address(token), SERVICE_ACTION_ID, MEMBER1_ID), "member registered");
+        _atPhase(JOIN_PHASE + 1);
+        require(
+            actionTarget.isJoinedByRound(address(token), SERVICE_ROUND + 1, SERVICE_ACTION_ID, MEMBER1_ID),
+            "registration carried forward"
         );
-        executor.join(address(token), SERVICE_ACTION_ID, GROUP_ID);
-
-        // An application in a different source community does not count.
-        groupAction.setVerifierApplication(address(childToken), VERIFIER_ID, CREATION_PHASE);
-        vm.prank(VERIFIER);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE - 1, VERIFIER_ID
-            )
-        );
-        executor.join(address(token), SERVICE_ACTION_ID, VERIFIER_ID);
-
-        // An active group in a different community does not count either.
-        groupAction.setHasActiveGroups(address(childToken), GROUP_OWNER_B_ID, true);
-        vm.prank(GROUP_OWNER_B);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IGroupServiceExecutorErrors.NotQualified.selector, address(token), JOIN_PHASE - 1, GROUP_OWNER_B_ID
-            )
-        );
-        executor.join(address(token), SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
+        _exitService(MEMBER1_ID);
+        require(!actionTarget.isJoined(address(token), SERVICE_ACTION_ID, MEMBER1_ID), "registration removed");
     }
 
     function testJoinRejectsNonMemberOwner() external {

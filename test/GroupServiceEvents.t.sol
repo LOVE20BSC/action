@@ -8,146 +8,87 @@ import {GroupServiceTestBase, GroupServiceVm} from "./GroupServiceTestBase.sol";
 contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEvents, IActionExecutorEvents {
     function testSettlementEventsReconstructAssetChanges() external {
         _prepareCappedTwoActionScenario();
+        uint256 ownerBalance = token.balanceOf(GROUP_OWNER);
+        _assertOwnerReward(54e18, 360e18, false);
 
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit ServiceOwnerRewardBurned({
+            serviceTokenAddress: address(token),
+            serviceActionId: SERVICE_ACTION_ID,
+            round: SERVICE_ROUND,
+            groupId: GROUP_ID,
+            amount: 360e18
+        });
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit RecipientPaid({
+            serviceTokenAddress: address(token),
+            serviceActionId: SERVICE_ACTION_ID,
+            round: SERVICE_ROUND,
+            groupId: GROUP_ID,
+            sourceTokenAddress: address(token),
+            sourceActionId: GROUP_ACTION_ID,
+            recipientId: MEMBER1_ID,
+            amount: 27e18
+        });
         vm.recordLogs();
-        (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
+        require(_claimRecipient(GROUP_ACTION_ID, MEMBER1_ID) == 27e18, "first recipient received the capped share");
         GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
+        require(logs.length == 4, "burn and transfer each produce a token and service event");
+        require(logs[0].topics[0] == keccak256("TokenBurned(address,uint256)"), "actual burn precedes its attribution");
+        require(logs[1].topics[0] == IGroupServiceExecutorEvents.ServiceOwnerRewardBurned.selector, "owner overflow");
+        require(logs[2].topics[0] == keccak256("Transfer(address,address,uint256)"), "transfer precedes payout event");
+        require(logs[3].topics[0] == IGroupServiceExecutorEvents.RecipientPaid.selector, "recipient payout");
 
-        // The detail transfers come first; the aggregate mint closes the settlement, and the role split follows it.
-        GroupServiceVm.Log[] memory transfers = _logsWithTopic(
-            logs, bytes32(keccak256("RecipientPaid(address,uint256,uint256,uint256,address,uint256,uint256,uint256)"))
-        );
-        GroupServiceVm.Log[] memory mintLogs = _logsWithTopic(
-            logs, bytes32(keccak256("MemberRewardMinted(address,uint256,uint256,uint256,uint256,uint256)"))
-        );
-        GroupServiceVm.Log[] memory splitLogs = _logsWithTopic(
-            logs,
-            bytes32(
-                keccak256(
-                    "ServiceRewardsDistributed(address,uint256,uint256,address,uint256,uint256,uint256,uint256,uint256,uint256)"
-                )
-            )
-        );
-        _assertRecipientTransfers(transfers, address(token));
-        require(transfers[0].emitter == address(executor), "recipient event emitted by the executor");
-        require(mintLogs.length == 1 && splitLogs.length == 1, "one settlement event pair");
-        require(mintLogs[0].emitter == address(executor), "mint event emitted by the executor");
-        require(splitLogs[0].emitter == address(executor), "role split emitted by the executor");
-        require(
-            _indexOf(logs, mintLogs[0]) > _indexOf(logs, transfers[transfers.length - 1]),
-            "aggregate mint follows the detail transfers"
-        );
-        require(_indexOf(logs, mintLogs[0]) < _indexOf(logs, splitLogs[0]), "base event precedes the role split");
+        require(_claimRecipient(GROUP_ACTION_ID_B, MEMBER2_ID) == 9e18, "second recipient received the capped share");
+        _assertOwnerReward(54e18, 0, false);
 
-        (, uint256 loggedMintAmount, uint256 loggedBurnAmount) =
-            abi.decode(mintLogs[0].data, (uint256, uint256, uint256));
-        require(loggedMintAmount == mintAmount && loggedBurnAmount == burnAmount, "mint event matches the return");
-        // The event carries the member id in the data, after the round.
-        require(splitLogs[0].topics[1] == bytes32(uint256(uint160(address(token)))), "role split service token topic");
-        require(splitLogs[0].topics[2] == bytes32(SERVICE_ACTION_ID), "role split action topic");
-        require(splitLogs[0].topics[3] == bytes32(uint256(uint160(address(token)))), "role split action token topic");
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit MemberRewardMinted({
+            tokenAddress: address(token),
+            actionId: SERVICE_ACTION_ID,
+            memberId: GROUP_ID,
+            round: SERVICE_ROUND,
+            mintAmount: 54e18,
+            burnAmount: 0
+        });
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit ServiceRewardsDistributed({
+            serviceTokenAddress: address(token),
+            serviceActionId: SERVICE_ACTION_ID,
+            round: SERVICE_ROUND,
+            actionTokenAddress: address(token),
+            memberId: GROUP_ID,
+            verifierReward: 0,
+            ownerReward: 90e18,
+            ownerRemaining: 54e18
+        });
+        (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
+        require(mintAmount == 54e18 && burnAmount == 0, "owner received the remainder and did not burn again");
+        require(token.balanceOf(GROUP_OWNER) - ownerBalance == mintAmount, "reported payout matches the owner's balance increase");
+        _assertOwnerReward(54e18, 360e18, true);
 
-        uint256 ownerBurned;
-        uint256 ownerDistributed;
-        uint256 ownerRemaining;
-        uint256 ownerReward;
-        uint256 verifierReward;
-        (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining) =
-            _decodeOwnerSplit(splitLogs[0].data);
-        require(verifierReward == 0, "owner holds no verifier share");
-        require(ownerReward == 90e18, "owner reward capped by the gov ratio");
-        require(ownerBurned == 360e18, "overflow burned");
-        require(ownerDistributed == 36e18, "distributed to recipients");
-        require(ownerRemaining == 54e18, "remainder kept by the owner");
-
-        // The pair invariant: the base mint amount aggregates both roles.
-        require(mintAmount == verifierReward + ownerReward, "mint amount aggregates the roles");
-        require(burnAmount == ownerBurned, "burn amount is the owner overflow");
-
-        // Full asset reconstruction from the event stream plus the token moves.
         (uint256 verifierMint,) = _settleService(VERIFIER_ID);
         require(
-            27e18 + 9e18 + ownerRemaining + verifierMint + ownerBurned == SERVICE_REWARD,
-            "transfers plus burn reconstruct the reward"
+            token.balanceOf(MEMBER1) + token.balanceOf(MEMBER2) + token.balanceOf(GROUP_OWNER)
+                + verifierMint + token.burnedTotal() == SERVICE_REWARD,
+            "payouts and burn account for the budget"
         );
         require(token.balanceOf(address(executor)) == 0, "executor emptied");
-        require(token.burnedTotal() == 360e18, "burned ledger");
+        require(token.burnedTotal() == 360e18, "exactly one budget overflow burned");
     }
 
-    function _logsWithTopic(GroupServiceVm.Log[] memory logs, bytes32 topic)
-        internal
-        pure
-        returns (GroupServiceVm.Log[] memory matches)
-    {
-        uint256 count;
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == topic) {
-                count++;
-            }
-        }
-        matches = new GroupServiceVm.Log[](count);
-        uint256 index;
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == topic) {
-                matches[index] = logs[i];
-                index++;
-            }
-        }
-    }
-
-    function _indexOf(GroupServiceVm.Log[] memory logs, GroupServiceVm.Log memory log) internal pure returns (uint256) {
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics[0] == log.topics[0] && logs[i].emitter == log.emitter) {
-                return i;
-            }
-        }
-        revert("log not found");
-    }
-
-    function _assertRecipientTransfers(GroupServiceVm.Log[] memory logs, address expectedSourceToken)
-        internal
-        pure
-    {
-        require(logs.length == 2, "one event per recipient transfer");
-        require(logs[0].topics[3] == bytes32(uint256(GROUP_ID)), "recipient event group topic");
-
-        (uint256 round, address sourceTokenAddress, uint256 sourceActionId, uint256 recipientId, uint256 amount) =
-            abi.decode(logs[0].data, (uint256, address, uint256, uint256, uint256));
-        require(sourceTokenAddress == expectedSourceToken, "first transfer source token");
-        require(round == SERVICE_ROUND && sourceActionId == GROUP_ACTION_ID, "first transfer source");
-        require(recipientId == MEMBER1_ID && amount == 27e18, "first transfer amount");
-
-        address sourceTokenAddressB;
-        (, sourceTokenAddressB, sourceActionId, recipientId, amount) =
-            abi.decode(logs[1].data, (uint256, address, uint256, uint256, uint256));
-        require(sourceTokenAddressB == expectedSourceToken, "second transfer source token");
-        require(sourceActionId == GROUP_ACTION_ID_B && recipientId == MEMBER2_ID, "second transfer source");
-        require(amount == 9e18, "second transfer amount");
-    }
-
-    function _decodeOwnerSplit(bytes memory data)
-        internal
-        pure
-        returns (
-            uint256 verifierReward,
-            uint256 ownerReward,
-            uint256 ownerBurned,
-            uint256 ownerDistributed,
-            uint256 ownerRemaining
-        )
-    {
-        // (round, memberId, verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining)
-        uint256 round;
-        uint256 memberId;
-        (round, memberId, verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining) =
-            abi.decode(data, (uint256, uint256, uint256, uint256, uint256, uint256, uint256));
-        require(round == SERVICE_ROUND, "split event round");
-        require(memberId == GROUP_ID, "split event member");
+    function _assertOwnerReward(uint256 payout, uint256 burn, bool settled) private view {
+        (uint256 amount, uint256 burnAmount, bool claimed) =
+            _memberAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(amount == payout && burnAmount == burn && claimed == settled, "owner query reports the personal payout");
     }
 
     function testVerifierSettlementEventPair() external {
         _prepareCappedTwoActionScenario();
-        _settleService(GROUP_ID);
+        (uint256 ownerPaid, uint256 ownerBurned) = _settleService(GROUP_ID);
+        require(ownerPaid == 54e18 && ownerBurned == 360e18, "owner can settle before the recipients");
+        require(_claimRecipient(GROUP_ACTION_ID, MEMBER1_ID) == 27e18, "same recipient payout when owner goes first");
+        require(token.burnedTotal() == 360e18, "recipient did not repeat the owner's burn");
 
         vm.expectEmit(true, true, true, true, address(executor));
         emit MemberRewardMinted({
@@ -162,7 +103,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         require(mintAmount == 450e18 && burnAmount == 0, "verifier paid the whole verifier share");
 
         (uint256 verifierReward, uint256 ownerReward,, uint256 ownerDistributed, uint256 ownerRemaining, bool claimed) =
-            executor.serviceRewardByMemberId(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
+            _primaryAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
         require(claimed, "verifier claimed");
         require(verifierReward == 450e18 && ownerReward == 0, "verifier roles");
         require(ownerDistributed == 0 && ownerRemaining == 0, "no owner share to split");
@@ -190,21 +131,22 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _atPhase(CREATION_PHASE);
         vm.recordLogs();
         // A child action token keeps `tokenAddress` and `actionTokenAddress` distinguishable.
-        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 2e18, PRECISION / 2);
+        _createServiceActionOn(address(token), address(childToken), SERVICE_ACTION_ID, 2e18, PRECISION / 2, PRECISION / 5);
         GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
         require(logs.length == 1, "single creation event");
         require(logs[0].emitter == address(executor), "emitter is the executor");
         require(
-            logs[0].topics[0] == keccak256("ServiceActionCreated(address,uint256,address,uint256,uint256)"),
+            logs[0].topics[0] == keccak256("ServiceActionCreated(address,uint256,address,uint256,uint256,uint256)"),
             "creation signature"
         );
         require(logs[0].topics[1] == bytes32(uint256(uint160(address(token)))), "token topic");
         require(logs[0].topics[2] == bytes32(SERVICE_ACTION_ID), "action topic");
-        (address actionTokenAddress, uint256 govRatioMultiplier, uint256 publicVerifierRatio) =
-            abi.decode(logs[0].data, (address, uint256, uint256));
+        (address actionTokenAddress, uint256 govRatioMultiplier, uint256 publicVerifierRatio, uint256 providerRatio) =
+            abi.decode(logs[0].data, (address, uint256, uint256, uint256));
         require(actionTokenAddress == address(childToken), "action token");
         require(govRatioMultiplier == 2e18, "gov ratio multiplier");
         require(publicVerifierRatio == PRECISION / 2, "public verifier ratio");
+        require(providerRatio == PRECISION / 5, "fixed Provider ratio");
     }
 
     function _prepareCappedTwoActionScenario() internal {

@@ -4,6 +4,7 @@ pragma solidity =0.8.37;
 import {ActionTarget} from "../../src/ActionTarget.sol";
 import {LpExecutor} from "../../src/LpExecutor.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
+import {MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
 import {ILpExecutorErrors, LpCreationParams} from "../../src/interfaces/ILpExecutor.sol";
 import {MockERC20} from "../mocks/LpExecutorMocks.sol";
@@ -222,12 +223,14 @@ contract LpExecutorRealIntegrationTest {
         _assertJoinLedger(round, proposalId);
 
         _advanceToPhaseStart(round + 2);
-        (uint256 cappedMint, uint256 cappedBurn, bool mintedBefore) =
+        (uint256 cappedMint,, MemberRewardStatus status) =
             lpExecutor.memberReward(address(token), round, proposalId, 1);
-        require(!mintedBefore && cappedBurn != 0, "reward has pending overflow");
+        (uint256 cappedBurn,) = lpExecutor.lpRewardBurn(address(token), round, proposalId, 1);
+        require(status == MemberRewardStatus.Pending && cappedBurn != 0, "reward has pending overflow");
         vm.prank(member1);
         stake.increasePromisedWaitingPhases(address(token), 1, PROMISED_WAITING_PHASES * 3);
-        (uint256 toppedUpMint, uint256 toppedUpBurn,) = lpExecutor.memberReward(address(token), round, proposalId, 1);
+        (uint256 toppedUpMint,,) = lpExecutor.memberReward(address(token), round, proposalId, 1);
+        (uint256 toppedUpBurn,) = lpExecutor.lpRewardBurn(address(token), round, proposalId, 1);
         require(toppedUpMint > cappedMint && toppedUpBurn < cappedBurn, "current governance reduces overflow");
         require(toppedUpMint + toppedUpBurn == cappedMint + cappedBurn, "historical theoretical reward stays fixed");
         require(
@@ -260,15 +263,19 @@ contract LpExecutorRealIntegrationTest {
 
         uint256 memberBefore = token.balanceOf(member1);
         vm.prank(member1);
-        (uint256 mintAmount, uint256 burnAmount) = lpExecutor.mintMemberReward(address(token), round, proposalId, 1);
-        require(mintAmount == expectedMint && burnAmount == expectedBurn, "split follows the cap");
+        uint256 mintAmount = lpExecutor.mintMemberReward(address(token), round, proposalId, 1);
+        require(mintAmount == expectedMint, "payment follows the cap");
         require(token.balanceOf(member1) - memberBefore == expectedMint, "member received the mint");
         require(token.balanceOf(address(lpExecutor)) == 0, "executor keeps no reward");
         require(mint.totalRewardMinted(address(token)) == expectedReward, "mint ledger matches the action reward");
 
-        (uint256 recordedMint, uint256 recordedBurn, bool minted) =
-            lpExecutor.memberReward(address(token), round, proposalId, 1);
-        require(minted && recordedMint == mintAmount && recordedBurn == burnAmount, "settlement recorded");
+        {
+            (uint256 pending, uint256 recordedMint, MemberRewardStatus status) =
+                lpExecutor.memberReward(address(token), round, proposalId, 1);
+            (uint256 pendingBurn, uint256 recordedBurn) = lpExecutor.lpRewardBurn(address(token), round, proposalId, 1);
+            require(status == MemberRewardStatus.Settled && pending == 0 && pendingBurn == 0, "settlement complete");
+            require(recordedMint == mintAmount && recordedBurn == expectedBurn, "settlement recorded");
+        }
         (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), round, proposalId, 1);
         require(
             ratioMinted

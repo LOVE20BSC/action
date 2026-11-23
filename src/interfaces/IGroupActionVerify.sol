@@ -3,6 +3,11 @@ pragma solidity =0.8.37;
 
 import {IVerificationInfo} from "./IVerificationInfo.sol";
 
+struct GroupRewardKey {
+    uint256 sourceActionId;
+    uint256 groupId;
+}
+
 struct VerifierApplication {
     uint256 applicationId;
     uint256 verifierId;
@@ -139,6 +144,32 @@ interface IGroupActionVerifyErrors {
 }
 
 interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGroupActionVerifyErrors {
+    function providerWeights(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId
+    ) external view returns (uint256 groupScore, uint256 externalScore, uint256 providerScore);
+
+    function actionIdsWithProviderWeight(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
+
+    function providerRewardKeys(
+        address tokenAddress,
+        uint256 round,
+        uint256 providerId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (GroupRewardKey[] memory keys, uint256 totalCount);
+
     function submitOriginScores(
         address tokenAddress,
         uint256 actionId,

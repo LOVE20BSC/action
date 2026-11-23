@@ -25,6 +25,25 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 - GroupAction 已完成旧代码基线、改名、BSC 实现与单元测试（第 1-4 步），测试含事件、边界、fuzz 与 invariant 覆盖；GroupService 已完成旧代码基线、改名、BSC 实现与单元测试，`test/GroupService*.t.sol` 覆盖构造、加入、结算、二次分配、事件与边界。
 - 自有接口以本仓 `src/interfaces/` 为唯一来源：`matt-gov` 的 `interfaces/` 自迁移后只保留说明（`interfaces/action/` 已迁出），不再存副本；Core 的接口不走暂存副本，直接使用 `lib/core/src/interfaces/`。
 
+## 成员激励接口
+
+三个内置 Executor 都实现 [`IMemberRewardExecutor`](src/interfaces/IMemberRewardExecutor.sol)。`memberReward` 按代币、轮次、行动和身份返回待铸造到账金额、已铸造到账金额及状态。状态为 `Unavailable`、`Pending`、`Partial` 或 `Settled`，由是否还有待结算份额及是否已完成结算决定。`mintMemberReward` 返回本次实际到账。`mintMemberRewards` 每笔最多结算 4 项，返回各项实际到账。LP 的 `lpRewardBurn` 查询该身份的待销毁和已销毁金额。
+
+[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerWeights` 给出全群、外部 Provider 合计及单个 Provider 的验证权重，供链群服务按服务提案创建时固定的 Provider 比例分账。
+
+[`IGroupServiceExecutor`](src/interfaces/IGroupServiceExecutor.sol) 的 `serviceRewardByMemberId` 按身份查看四类激励及通过治理上限后的群主预算。`rewardDistribution` 按来源行动和链群给出合伙人编号、比例和金额，以及合伙人合计、群主自留和 Provider 预留。`groupOwnerBurn` 按链群预算查询待销毁和已销毁金额。
+
+当一轮有超过 64 项带 Provider 权重的来源行动时，先完成 GroupAction 群主权重准备，再调用 `prepareProviderReserve`，每页最多准备 64 项市场预留。准备首个有效页面会触发一次实际服务预算铸造。准备完成前，群主相关查询与群主或合并铸造会回滚 `ProviderReservePreparationRequired`，返回当前游标。Provider 和合伙人的单笔铸造仍直接按对应份额计算。
+
+| 角色 | 查金额与铸造状态 | 单项铸造 | 按身份分页与分批 |
+| --- | --- | --- | --- |
+| 公共验证者 | `verifierReward` | `mintVerifierReward` | 按服务行动整轮结算 |
+| 链群 owner | `groupOwnerReward` | `mintGroupOwnerReward` | 按服务行动整轮结算 |
+| 合伙人 | `recipientReward` | `mintRecipientReward` | `recipientRewardKeys`、`mintRecipientRewards` |
+| Provider | `providerReward` | `mintProviderReward` | `providerRewardKeys`、`mintProviderRewards` |
+
+份额键包含来源行动和链群。用单项查询核对候选份额的金额和状态后，可以选定待铸造的份额一起提交。按链群对账时，`joinedActionIdsByGroupId` 给出目标轮的来源行动，验证记录和首次归属可还原有外部权重的 Provider。验证者在某群某项来源行动的分摊额，按这项链群权重占本人所有已验证来源行动权重的比例，从本人整轮验证激励中折算。
+
 ## 构建与测试
 
 ```sh

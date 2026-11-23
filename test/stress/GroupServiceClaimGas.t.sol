@@ -89,18 +89,18 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         uint256 unpreparedSnapshot = vm.snapshotState();
         _assertProgress(round, 0);
         _assertClaim(round, serviceActionId, UNPREPARED_CLAIM_BUDGET, distributed);
-        _assertRecipientBalances(perRecipient);
+        _assertRecipientBalances(0);
         require(vm.revertToStateAndDelete(unpreparedSnapshot), "restore unprepared claim");
 
         uint256 firstPageGas = _preparePage(round, ACTIONS_PER_PAGE);
         uint256 onePageSnapshot = vm.snapshotState();
         _assertClaim(round, serviceActionId, ONE_PAGE_CLAIM_BUDGET, distributed);
-        _assertRecipientBalances(perRecipient);
+        _assertRecipientBalances(0);
         require(vm.revertToStateAndDelete(onePageSnapshot), "restore partially prepared claim");
 
         _finishPreparation(round, ACTIONS_PER_PAGE, firstPageGas);
         _assertClaim(round, serviceActionId, PREPARED_CLAIM_BUDGET, distributed);
-        _assertRecipientBalances(perRecipient);
+        _assertRecipientBalances(0);
     }
 
     function testBatchClaimWithTwoServicesSharingOwnerWeight() external {
@@ -112,16 +112,15 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         _finishServiceRound(sourceActionIds, serviceActionIds, proposers);
         vm.resumeGasMetering();
 
-        uint256 perRecipient = _recipientReward(round, 2);
         uint256 unpreparedSnapshot = vm.snapshotState();
         _assertProgress(round, 0);
         _assertBatchClaim(round, serviceActionIds, UNPREPARED_BATCH_MEASUREMENT_BUDGET);
-        _assertRecipientBalances(perRecipient * 2);
+        _assertRecipientBalances(0);
         require(vm.revertToStateAndDelete(unpreparedSnapshot), "restore unprepared batch");
 
         _finishPreparation(round, 0, 0);
         _assertBatchClaim(round, serviceActionIds, PREPARED_CLAIM_BUDGET);
-        _assertRecipientBalances(perRecipient * 2);
+        _assertRecipientBalances(0);
     }
 
     function _createProposers() private returns (uint256[] memory proposerIds) {
@@ -195,7 +194,7 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
     function _createServiceActions(uint256 count) private returns (uint256[] memory serviceActionIds) {
         serviceActionIds = new uint256[](count);
         bytes memory serviceData =
-            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17)));
+            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(sourceToken), 0, 5e17, 0)));
         for (uint256 i; i < count; ++i) {
             uint256 proposerId = i + 1;
             uint256 serviceActionId = _submitActionProposal(proposerId, "Group service", serviceData);
@@ -313,13 +312,13 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         _coolClaimContracts();
         vm.prank(member1);
         uint256 beforeGas = gasleft();
-        (uint256 paid, uint256 burned) =
+        uint256 paid =
             service.mintMemberReward{gas: gasBudget}(address(token), round, serviceActionId, MEMBER_ID);
         uint256 gasUsed = beforeGas - gasleft();
         emit log_named_uint("claim gas", gasUsed);
         require(gasUsed < gasBudget, "claim exceeds the local gas budget");
-        require(paid == expected && burned == 0, "owner and verifier receive their shares");
-        require(token.balanceOf(member1) - beforeBalance == paid - expectedDistributed, "claim pays the owner's balance");
+        require(paid == expected - expectedDistributed, "owner and verifier receive their shares");
+        require(token.balanceOf(member1) - beforeBalance == paid, "claim pays the owner's balance");
     }
 
     function _assertBatchClaim(uint256 round, uint256[] memory serviceActionIds, uint256 gasBudget) private {
@@ -327,22 +326,23 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
         for (uint256 i; i < rounds.length; ++i) {
             rounds[i] = round;
         }
-        uint256 expectedPerService = 2 * (mint.proposalReward(address(token), round) / serviceActionIds.length / 2);
+        uint256 reservedPerService = _recipientReward(round, serviceActionIds.length) * _recipientCount();
+        uint256 expectedPerService =
+            2 * (mint.proposalReward(address(token), round) / serviceActionIds.length / 2) - reservedPerService;
         uint256 beforeBalance = token.balanceOf(member1);
         _coolClaimContracts();
         vm.prank(member1);
         uint256 beforeGas = gasleft();
-        (uint256[] memory paid, uint256[] memory burned) =
+        uint256[] memory paid =
             service.mintMemberRewards{gas: gasBudget}(address(token), rounds, serviceActionIds, MEMBER_ID);
         uint256 gasUsed = beforeGas - gasleft();
         emit log_named_uint("batch claim gas", gasUsed);
         require(gasUsed < gasBudget, "batch exceeds its measurement budget");
         for (uint256 i; i < paid.length; ++i) {
-            require(paid[i] == expectedPerService && burned[i] == 0, "both services paid once");
+            require(paid[i] == expectedPerService, "both services paid once");
         }
-        uint256 distributedPerService = _recipientReward(round, serviceActionIds.length) * _recipientCount();
         require(
-            token.balanceOf(member1) - beforeBalance == paid.length * (expectedPerService - distributedPerService),
+            token.balanceOf(member1) - beforeBalance == paid.length * expectedPerService,
             "batch pays the owner's balance"
         );
     }

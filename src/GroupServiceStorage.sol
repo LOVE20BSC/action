@@ -5,12 +5,15 @@ import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
 import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
+import {GroupRewardKey} from "./interfaces/IGroupActionVerify.sol";
 
 library GroupServiceStorage {
     uint256 constant PRECISION = 1e18;
     uint256 constant MAX_RECIPIENTS_PER_ACTION = 8;
     uint256 constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = 16;
     uint256 constant MAX_REMARK_BYTES = 256;
+    uint256 constant MAX_PROVIDER_RESERVE_PREPARATION_PAGE_SIZE = 64;
+    uint256 constant MAX_REWARD_KEYS_PER_BATCH = 32;
 
     enum SettlementCause {
         RoundedToZero,
@@ -21,6 +24,64 @@ library GroupServiceStorage {
     struct Protocol {
         address memberNFTAddress;
         address groupActionExecutorAddress;
+        address actionTargetAddress;
+        address stakeAddress;
+    }
+
+    enum PrimaryRole {
+        Owner,
+        Verifier,
+        Both
+    }
+
+    struct Settlement {
+        address actionTokenAddress;
+        uint256 publicVerifierRatio;
+        uint256 providerIncentiveRatio;
+        uint256 govRatioMultiplier;
+        uint256 verifierWeight;
+        uint256 ownerWeight;
+        uint256 denominator;
+        uint256 serviceReward;
+        bool actionMinted;
+        uint256 verifierReward;
+        uint256 ownerReward;
+        uint256 ownerBurned;
+        SettlementCause cause;
+    }
+
+    struct MemberRewardKey {
+        address tokenAddress;
+        uint256 round;
+        uint256 actionId;
+        uint256 memberId;
+    }
+
+    struct PrimaryAmounts {
+        uint256 owner;
+        uint256 verifier;
+        uint256 burn;
+    }
+
+    struct Share {
+        address tokenAddress;
+        uint256 round;
+        uint256 serviceActionId;
+        uint256 sourceActionId;
+        uint256 groupId;
+        uint256 memberId;
+    }
+
+    struct PaidShare {
+        uint256 recipient;
+        uint256 provider;
+    }
+
+    struct ProviderReservePreparation {
+        uint256 ownerWeight;
+        uint256 processedActionCount;
+        uint256 totalActionCount;
+        uint256 providerReserve;
     }
 
     struct Layout {
@@ -30,27 +91,45 @@ library GroupServiceStorage {
         mapping(address => mapping(uint256 => uint256)) govRatioMultiplierByActionId;
         // serviceTokenAddress => serviceActionId => ratio for the public verifier (1e18 precision)
         mapping(address => mapping(uint256 => uint256)) publicVerifierRatioByActionId;
+        // serviceTokenAddress => serviceActionId => fixed Provider ratio (1e18 precision)
+        mapping(address => mapping(uint256 => uint256)) providerIncentiveRatioByActionId;
         // serviceTokenAddress => serviceActionId => creation vote round
         mapping(address => mapping(uint256 => uint256)) createdRoundByActionId;
-        // serviceTokenAddress => serviceActionId => round => memberId => whether the member reward is settled
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => bool)))) memberMinted;
         // serviceTokenAddress => serviceActionId => round => memberId => settled verifier reward
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) verifierRewardByMemberId;
-        // serviceTokenAddress => serviceActionId => round => memberId => owner reward burned at settlement
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerBurnedByMemberId;
-        // serviceTokenAddress => serviceActionId => round => memberId => owner reward paid to recipients
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerDistributedByMemberId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))
+            verifierRewardByMemberId;
+        // serviceTokenAddress => serviceActionId => round => groupId => owner overflow already burned
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerBurnByGroupId;
         // serviceTokenAddress => serviceActionId => round => memberId => owner reward retained by the member
-        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) ownerRemainingByMemberId;
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))
+            ownerRemainingByMemberId;
 
         // sourceTokenAddress => sourceActionId => groupId => round => recipient ids
-        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Array.History))) recipientIdsHistory;
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Array.History)))
+            recipientIdsHistory;
         // sourceTokenAddress => sourceActionId => groupId => round => ratios
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Array.History))) ratiosHistory;
         // sourceTokenAddress => sourceActionId => groupId => round => remarks
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryStringArray.History))) remarksHistory;
         // sourceTokenAddress => groupId => round => source action ids with recipients
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) actionIdsWithRecipients;
+        // serviceTokenAddress => serviceActionId => round => groupId => sourceActionId => memberId
+        mapping(
+            address
+                => mapping(
+                uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => PaidShare))))
+            )
+        ) paidShares;
+
+        // serviceTokenAddress => serviceActionId => round => groupId => ownerReward => provider reserve
+        mapping(
+            address => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => ProviderReservePreparation))))
+        ) providerReservePreparation;
+
+        // sourceTokenAddress => recipientId => configured source action and group keys by round
+        mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) rewardKeysByRecipientId;
+        // keccak256(sourceActionId, groupId) => source action and group, shared by all recipients
+        mapping(uint256 => GroupRewardKey) recipientRewardKeyById;
     }
 
     function groupReward(
@@ -60,8 +139,7 @@ library GroupServiceStorage {
         uint256 actionId,
         uint256 groupId
     ) internal view returns (uint256) {
-        return IGroupActionExecutor(groupActionExecutorAddress).generatedActionRewardByGroupId(
-            actionTokenAddress, round, actionId, groupId
-        );
+        return IGroupActionExecutor(groupActionExecutorAddress)
+            .generatedActionRewardByGroupId(actionTokenAddress, round, actionId, groupId);
     }
 }

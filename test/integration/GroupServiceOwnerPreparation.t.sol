@@ -8,6 +8,7 @@ import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecut
 import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
 import {IGroupActionExecutorEvents} from "../../src/interfaces/IGroupActionExecutor.sol";
+import {MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 
 contract RevertingPreparation {
@@ -21,7 +22,7 @@ contract RevertingPreparation {
 }
 
 contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGroupActionExecutorEvents {
-    error OwnerTransferFailed();
+    error RecipientTransferFailed();
 
     uint256 private constant OWNER_ID = 1;
     uint256 private constant VERIFIER_ID = 2;
@@ -42,6 +43,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     uint256 private ownerReward;
     uint256 private secondOwnerReward;
     uint256 private recipientReward;
+    uint256 private secondRecipientReward;
 
     function setUp() public {
         _setUpProtocol(1, 0);
@@ -119,30 +121,54 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         require(vm.getRecordedLogs().length == 0, "completed preparation emitted no event");
     }
 
-    function testPartialClaimRevertsWithOwnerTransferAndPaysOnceOnRetry() external {
+    function testRecipientCanClaimBeforeTheOwnerUsingVerifiedSourceRewards() external {
+        uint256 ownerBalance = token.balanceOf(member1);
+        uint256 recipientBalance = token.balanceOf(member2);
+        uint256 supply = token.totalSupply();
+        (uint256 serviceBudget,) = actionTarget.actionReward(address(token), round, serviceActionId);
+        _assertRecipientReward(serviceActionId, recipientReward, false);
+
+        vm.prank(member2);
+        uint256 paid = service.mintRecipientReward(
+            address(token), round, serviceActionId, actionA, OWNER_ID, VERIFIER_ID
+        );
+        require(paid == recipientReward, "recipient claim matches the source share");
+        require(token.balanceOf(member2) == recipientBalance + paid, "recipient paid");
+        require(token.balanceOf(member1) == ownerBalance, "owner can claim separately");
+        require(token.totalSupply() == supply + serviceBudget, "proposal minted on the first claim");
+        _assertRecipientReward(serviceActionId, paid, true);
+
+        _claim(serviceActionId, ownerReward - paid);
+        require(token.balanceOf(member1) == ownerBalance + ownerReward - paid, "owner receives the remainder");
+        require(token.balanceOf(member2) == recipientBalance + paid, "recipient paid once");
+        require(token.totalSupply() == supply + serviceBudget, "proposal minted once");
+    }
+
+    function testPartialClaimRevertsWithRecipientTransferAndPaysOnceOnRetry() external {
         _prepare(member2, 1, 1);
-        _assertServiceReward(serviceActionId, ownerReward, false);
+        _assertServiceReward(serviceActionId, ownerReward - recipientReward, false);
         uint256 ownerBalance = token.balanceOf(member1);
         uint256 recipientBalance = token.balanceOf(member2);
         uint256 supply = token.totalSupply();
         vm.mockCallRevert(
             address(token),
-            abi.encodeCall(token.transfer, (member1, ownerReward - recipientReward)),
-            abi.encodeWithSelector(OwnerTransferFailed.selector)
+            abi.encodeCall(token.transfer, (member2, recipientReward)),
+            abi.encodeWithSelector(RecipientTransferFailed.selector)
         );
-        vm.expectRevert(abi.encodeWithSelector(OwnerTransferFailed.selector));
-        vm.prank(member1);
-        service.mintMemberReward(address(token), round, serviceActionId, OWNER_ID);
+        vm.expectRevert(abi.encodeWithSelector(RecipientTransferFailed.selector));
+        _claimRecipient(serviceActionId);
         vm.clearMockedCalls();
 
         (, bool actionMinted) = actionTarget.actionReward(address(token), round, serviceActionId);
         require(!actionMinted && token.totalSupply() == supply, "proposal mint rolled back");
         require(token.balanceOf(member1) == ownerBalance, "owner balance rolled back");
         require(token.balanceOf(member2) == recipientBalance, "recipient transfer rolled back");
-        _assertServiceReward(serviceActionId, ownerReward, false);
+        _assertRecipientReward(serviceActionId, recipientReward, false);
+        _assertServiceReward(serviceActionId, ownerReward - recipientReward, false);
         _assertProgress(1);
 
-        _claim(serviceActionId, ownerReward);
+        require(_claimRecipient(serviceActionId) == recipientReward, "retry paid the recipient");
+        _claim(serviceActionId, ownerReward - recipientReward);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IActionExecutorErrors.RewardAlreadyMinted.selector, address(token), serviceActionId, OWNER_ID, round
@@ -156,17 +182,19 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     }
 
     function testTwoServicesSharePreparationAcrossPhases() external {
-        _assertServiceReward(serviceActionId, ownerReward, false);
-        _assertServiceReward(secondServiceActionId, secondOwnerReward, false);
+        _assertServiceReward(serviceActionId, ownerReward - recipientReward, false);
+        _assertServiceReward(secondServiceActionId, secondOwnerReward - secondRecipientReward, false);
         _prepare(member2, 1, 1);
-        _claim(serviceActionId, ownerReward);
+        _claim(serviceActionId, ownerReward - recipientReward);
         _assertProgress(1);
 
         _advancePhase();
         _prepare(member1, 2, 3);
-        _assertServiceReward(serviceActionId, ownerReward, true);
-        _assertServiceReward(secondServiceActionId, secondOwnerReward, false);
-        _claim(secondServiceActionId, secondOwnerReward);
+        _assertServiceReward(serviceActionId, ownerReward - recipientReward, true);
+        _assertServiceReward(secondServiceActionId, secondOwnerReward - secondRecipientReward, false);
+        _claim(secondServiceActionId, secondOwnerReward - secondRecipientReward);
+        _assertRecipientReward(secondServiceActionId, secondRecipientReward, false);
+        require(_claimRecipient(secondServiceActionId) == secondRecipientReward, "second service pays its own share");
         _assertProgress(3);
     }
 
@@ -185,7 +213,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         actionB = _submitActionProposal(VERIFIER_ID, "Source B", groupData);
         actionC = _submitActionProposal(_newProposer("Carol"), "Source C", groupData);
 
-        GroupServiceCreationParams memory params = GroupServiceCreationParams(address(token), 0, 5e17);
+        GroupServiceCreationParams memory params = GroupServiceCreationParams(address(token), 0, 5e17, 0);
         bytes memory serviceData = abi.encodePacked(address(service), abi.encode(params));
         serviceActionId = _submitActionProposal(_newProposer("David"), "Service A", serviceData);
         params.publicVerifierRatio = 75e16;
@@ -259,6 +287,7 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
         ownerReward = firstBudget * expectedWeight / (2 * denominator);
         secondOwnerReward = secondBudget * expectedWeight / (4 * denominator);
         recipientReward = (ownerReward * sliceA / expectedWeight) / 2;
+        secondRecipientReward = (secondOwnerReward * sliceA / expectedWeight) / 2;
         require(recipientReward > 0 && secondOwnerReward > 0, "fixture pays both services and the recipient");
     }
 
@@ -296,13 +325,27 @@ contract GroupServiceOwnerPreparationTest is ActionTargetIntegrationFixture, IGr
     }
 
     function _assertServiceReward(uint256 actionId, uint256 expected, bool alreadyClaimed) private view {
-        (uint256 amount, uint256 burned, bool claimed) = service.memberReward(address(token), round, actionId, OWNER_ID);
-        require(amount == expected && burned == 0 && claimed == alreadyClaimed, "service reward and claim status");
+        (uint256 pending, uint256 paid, MemberRewardStatus status) = service.memberReward(address(token), round, actionId, OWNER_ID);
+        require(pending == (alreadyClaimed ? 0 : expected) && paid == (alreadyClaimed ? expected : 0), "service reward amounts");
+        require(status == (alreadyClaimed ? MemberRewardStatus.Settled : MemberRewardStatus.Pending), "service settlement status");
+    }
+
+    function _assertRecipientReward(uint256 serviceId, uint256 expected, bool expectedMinted) private view {
+        (uint256 amount, bool isMinted) = service.recipientReward(
+            address(token), round, serviceId, actionA, OWNER_ID, VERIFIER_ID
+        );
+        require(amount == expected && isMinted == expectedMinted, "recipient reward and claim status");
     }
 
     function _claim(uint256 actionId, uint256 expected) private {
         vm.prank(member1);
-        (uint256 amount, uint256 burned) = service.mintMemberReward(address(token), round, actionId, OWNER_ID);
-        require(amount == expected && burned == 0, "claim matches preview");
+        uint256 amount = service.mintMemberReward(address(token), round, actionId, OWNER_ID);
+        (uint256 pendingBurn, uint256 burned) = service.groupOwnerBurn(address(token), round, actionId, OWNER_ID);
+        require(amount == expected && pendingBurn == 0 && burned == 0, "claim matches preview");
+    }
+
+    function _claimRecipient(uint256 serviceId) private returns (uint256) {
+        vm.prank(member2);
+        return service.mintRecipientReward(address(token), round, serviceId, actionA, OWNER_ID, VERIFIER_ID);
     }
 }

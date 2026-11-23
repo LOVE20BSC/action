@@ -7,10 +7,13 @@ import {IStake} from "@core/interfaces/IStake.sol";
 import {IVote} from "@core/interfaces/IVote.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IActionExecutor, IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
+import {IMemberRewardExecutor} from "./interfaces/IMemberRewardExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 
-abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
+abstract contract ExecutorBase is IActionExecutor, IMemberRewardExecutor, ReentrancyGuard {
+    uint256 private constant MAX_MEMBER_REWARD_BATCH_SIZE = 4;
+
     address public immutable ACTION_TARGET_ADDRESS;
     address public immutable STAKE_ADDRESS;
     address public immutable MEMBER_NFT_ADDRESS;
@@ -57,8 +60,8 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         uint256 round,
         uint256 actionId,
         uint256 memberId
-    ) public override nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount, uint256 burnAmount) {
-        return _mintMemberReward(tokenAddress, round, actionId, memberId);
+    ) public override nonReentrant onlyMemberOwner(memberId) returns (uint256 mintAmount) {
+        (mintAmount, ) = _mintMemberReward(tokenAddress, round, actionId, memberId);
     }
 
     function mintMemberRewards(
@@ -70,17 +73,30 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         override
         nonReentrant
         onlyMemberOwner(memberId)
-        returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts)
+        returns (uint256[] memory mintAmounts)
     {
         uint256 length = actionIds.length;
         if (length != rounds.length) {
             revert IActionExecutorErrors.BatchLengthMismatch(length, rounds.length);
         }
+        if (length > MAX_MEMBER_REWARD_BATCH_SIZE) {
+            revert IActionExecutorErrors.TooManyMemberRewardActions(length, MAX_MEMBER_REWARD_BATCH_SIZE);
+        }
 
+        return _mintMemberRewards(tokenAddress, rounds, actionIds, memberId);
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _mintMemberRewards(
+        address tokenAddress,
+        uint256[] calldata rounds,
+        uint256[] calldata actionIds,
+        uint256 memberId
+    ) internal virtual returns (uint256[] memory mintAmounts) {
+        uint256 length = actionIds.length;
         mintAmounts = new uint256[](length);
-        burnAmounts = new uint256[](length);
         for (uint256 i = 0; i < length; i++) {
-            (mintAmounts[i], burnAmounts[i]) = _mintMemberReward(tokenAddress, rounds[i], actionIds[i], memberId);
+            (mintAmounts[i], ) = _mintMemberReward(tokenAddress, rounds[i], actionIds[i], memberId);
         }
     }
 
@@ -108,6 +124,8 @@ abstract contract ExecutorBase is IActionExecutor, ReentrancyGuard {
         return round;
     }
 
+    // Every item must pass these checks for an atomic batch to settle.
+    // forge-lint: disable-next-item(require-revert-in-loop)
     function _checkMintWindow(
         address tokenAddress,
         uint256 round,

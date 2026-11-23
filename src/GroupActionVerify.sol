@@ -6,6 +6,7 @@ import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {IGroupActionExecutorErrors, IGroupActionExecutorEvents} from "./interfaces/IGroupActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {
+    GroupRewardKey,
     VerifierApplication,
     IGroupActionVerifyEvents,
     IGroupActionVerifyErrors
@@ -107,7 +108,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 score, bool verified) {
-        return _originScore(self, tokenAddress, round, actionId, memberId);
+        return self.originScoreAt(tokenAddress, round, actionId, memberId);
     }
 
     function finalScore(
@@ -117,14 +118,7 @@ library GroupActionVerify {
         uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 score, bool verified) {
-        (score, verified) = _originScore(self, tokenAddress, round, actionId, memberId);
-        if (!verified) {
-            // forge-lint: disable-next-line(boolean-cst)
-            return (0, false);
-        }
-        uint256 amount = self.memberAmountAt(tokenAddress, round, actionId, memberId);
-        // forge-lint: disable-next-line(boolean-cst)
-        return (amount * score, true);
+        return self.finalScoreAt(tokenAddress, round, actionId, memberId);
     }
 
     function totalFinalScore(
@@ -703,28 +697,65 @@ library GroupActionVerify {
 
     function _scoreBatch(
         GroupActionStorage.Layout storage self,
-        address tokenAddress,
+        OriginSubmission memory submission,
         uint256 round,
-        uint256 actionId,
-        uint256 groupId,
         uint256 verifiedCount,
         uint256 memberCount,
         uint256[] calldata originScores
     ) internal returns (bool groupVerified) {
         (uint256[] memory memberIds, ) =
-            _memberIds(self, tokenAddress, round, actionId, groupId, verifiedCount, originScores.length);
-        uint256 groupFinal = self.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
-        uint256 totalFinal = self.totalFinalScore[tokenAddress][actionId][round];
-        for (uint256 i = 0; i < originScores.length; i++) {
-            uint256 weighted = _scoreMember(self, tokenAddress, round, actionId, memberIds[i], originScores[i]);
-            groupFinal += weighted;
-            totalFinal += weighted;
+            _memberIds(self, submission.tokenAddress, round, submission.actionId, submission.groupId, verifiedCount, originScores.length);
+        (uint256 batchTotal, uint256 externalTotal) = _scoreMembers(self, submission, round, memberIds, originScores);
+        self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] += batchTotal;
+        self.totalFinalScore[submission.tokenAddress][submission.actionId][round] += batchTotal;
+        if (externalTotal != 0) {
+            GroupActionStorage.ProviderScores storage scores =
+                self.providerScores[submission.tokenAddress][submission.actionId][round][submission.groupId];
+            if (scores.total == 0) {
+                self.actionIdsWithProviderWeight[submission.tokenAddress][round][submission.groupId].push(submission.actionId);
+            }
+            scores.total += externalTotal;
         }
-        self.finalScoreByGroupId[tokenAddress][actionId][round][groupId] = groupFinal;
-        self.totalFinalScore[tokenAddress][actionId][round] = totalFinal;
         uint256 newVerifiedCount = verifiedCount + originScores.length;
-        self.verifiedMemberCountByGroupId[tokenAddress][actionId][round][groupId] = newVerifiedCount;
-        return _markGroupVerified(self, tokenAddress, round, actionId, newVerifiedCount, memberCount);
+        self.verifiedMemberCountByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] = newVerifiedCount;
+        return _markGroupVerified(self, submission.tokenAddress, round, submission.actionId, newVerifiedCount, memberCount);
+    }
+
+    function _scoreMembers(
+        GroupActionStorage.Layout storage self,
+        OriginSubmission memory submission,
+        uint256 round,
+        uint256[] memory memberIds,
+        uint256[] calldata originScores
+    ) private returns (uint256 batchTotal, uint256 externalTotal) {
+        for (uint256 i = 0; i < originScores.length; i++) {
+            uint256 weighted = _scoreMember(self, submission.tokenAddress, round, submission.actionId, memberIds[i], originScores[i]);
+            batchTotal += weighted;
+            if (weighted != 0) {
+                externalTotal += _recordProviderScore(self, submission, round, memberIds[i], weighted);
+            }
+        }
+    }
+
+    function _recordProviderScore(
+        GroupActionStorage.Layout storage self,
+        OriginSubmission memory submission,
+        uint256 round,
+        uint256 memberId,
+        uint256 score
+    ) private returns (uint256) {
+        uint256 providerId = self.providerAttribution[submission.groupId][memberId].providerId;
+        if (providerId == 0 || providerId == submission.groupId) return 0;
+        GroupActionStorage.ProviderScores storage scores =
+            self.providerScores[submission.tokenAddress][submission.actionId][round][submission.groupId];
+        uint256 previousScore = scores.byProviderId[providerId];
+        if (previousScore == 0) {
+            self.providerRewardKeys[submission.tokenAddress][round][providerId].push(
+                GroupRewardKey({sourceActionId: submission.actionId, groupId: submission.groupId})
+            );
+        }
+        scores.byProviderId[providerId] = previousScore + score;
+        return score;
     }
 
     function _markGroupVerified(
@@ -760,34 +791,6 @@ library GroupActionVerify {
             self.originScoreDeductionByMemberId[tokenAddress][actionId][round][memberId] = deduction;
         }
         return self.memberAmountAt(tokenAddress, round, actionId, memberId) * score;
-    }
-
-    // forge-lint: disable-next-item(boolean-cst)
-    function _originScore(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 actionId,
-        uint256 memberId
-    ) internal view returns (uint256 score, bool verified) {
-        uint256 groupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
-        if (groupId == 0) {
-            return (0, false);
-        }
-        uint256 verifiedCount = self.verifiedMemberCountByGroupId[tokenAddress][actionId][round][groupId];
-        if (verifiedCount == 0) {
-            return (0, false);
-        }
-        RoundHistoryUint256Set.Storage storage memberSet = self.memberIdsByGroupId[tokenAddress][actionId][groupId];
-        uint256 indexPlusOne = memberSet.indexPlusOneHistory[memberId].value(round);
-        if (
-            indexPlusOne == 0 || indexPlusOne - 1 >= verifiedCount
-                || memberSet.slotHistory[indexPlusOne - 1].value(round) != memberId
-        ) {
-            return (0, false);
-        }
-        uint256 deduction = self.originScoreDeductionByMemberId[tokenAddress][actionId][round][memberId];
-        return (GroupActionStorage.MAX_ORIGIN_SCORE - deduction, true);
     }
 
     function _memberIds(
@@ -922,16 +925,7 @@ library GroupActionVerify {
                 );
             }
 
-            groupVerified = _scoreBatch(
-                self,
-                submission.tokenAddress,
-                round,
-                submission.actionId,
-                submission.groupId,
-                verifiedCount,
-                memberCount,
-                originScores
-            );
+            groupVerified = _scoreBatch(self, submission, round, verifiedCount, memberCount, originScores);
         }
 
         if (groupVerified && self.roundVerified[submission.tokenAddress][submission.actionId][round]) {

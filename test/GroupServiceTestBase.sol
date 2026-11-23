@@ -2,7 +2,8 @@
 pragma solidity =0.8.37;
 
 import {GroupServiceExecutor} from "../src/GroupServiceExecutor.sol";
-import {GroupServiceCreationParams} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
+import {GroupServiceCreationParams, ServiceRewardDetails} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {
     MockGroupServicePhase,
     MockGroupServiceMemberNFT,
@@ -28,6 +29,8 @@ interface GroupServiceVm {
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
     function recordLogs() external;
     function getRecordedLogs() external returns (Log[] memory logs);
+    function pauseGasMetering() external;
+    function resumeGasMetering() external;
 }
 
 /// @dev Executor-level suite: deploys the real GroupServiceExecutor with thin
@@ -189,7 +192,18 @@ abstract contract GroupServiceTestBase {
         pure
         returns (bytes memory)
     {
-        return abi.encode(GroupServiceCreationParams(actionTokenAddress, govRatioMultiplier, publicVerifierRatio));
+        return _serviceTargetData(actionTokenAddress, govRatioMultiplier, publicVerifierRatio, 0);
+    }
+
+    function _serviceTargetData(
+        address actionTokenAddress,
+        uint256 govRatioMultiplier,
+        uint256 publicVerifierRatio,
+        uint256 providerIncentiveRatio
+    ) internal pure returns (bytes memory) {
+        return abi.encode(
+            GroupServiceCreationParams(actionTokenAddress, govRatioMultiplier, publicVerifierRatio, providerIncentiveRatio)
+        );
     }
 
     /// @dev Creates the service proposal through the ActionTarget callback. The
@@ -203,11 +217,24 @@ abstract contract GroupServiceTestBase {
         uint256 govRatioMultiplier,
         uint256 publicVerifierRatio
     ) internal {
+        _createServiceActionOn(
+            serviceTokenAddress, actionTokenAddress, actionId, govRatioMultiplier, publicVerifierRatio, 0
+        );
+    }
+
+    function _createServiceActionOn(
+        address serviceTokenAddress,
+        address actionTokenAddress,
+        uint256 actionId,
+        uint256 govRatioMultiplier,
+        uint256 publicVerifierRatio,
+        uint256 providerIncentiveRatio
+    ) internal {
         vm.prank(address(actionTarget));
         executor.onProposalCreated(
             serviceTokenAddress,
             actionId,
-            _serviceTargetData(actionTokenAddress, govRatioMultiplier, publicVerifierRatio)
+            _serviceTargetData(actionTokenAddress, govRatioMultiplier, publicVerifierRatio, providerIncentiveRatio)
         );
         actionTarget.setCreatedRound(serviceTokenAddress, actionId, _currentPhase);
     }
@@ -216,6 +243,17 @@ abstract contract GroupServiceTestBase {
         internal
     {
         _createServiceActionOn(address(token), address(token), actionId, govRatioMultiplier, publicVerifierRatio);
+    }
+
+    function _createServiceAction(
+        uint256 actionId,
+        uint256 govRatioMultiplier,
+        uint256 publicVerifierRatio,
+        uint256 providerIncentiveRatio
+    ) internal {
+        _createServiceActionOn(
+            address(token), address(token), actionId, govRatioMultiplier, publicVerifierRatio, providerIncentiveRatio
+        );
     }
 
     function _joinService(uint256 memberId) internal {
@@ -266,8 +304,45 @@ abstract contract GroupServiceTestBase {
         internal
         returns (uint256 mintAmount, uint256 burnAmount)
     {
+        (, uint256 previouslyBurned) = executor.groupOwnerBurn(address(token), SERVICE_ROUND, actionId, memberId);
         vm.prank(_memberAddress(memberId));
-        return executor.mintMemberReward(address(token), SERVICE_ROUND, actionId, memberId);
+        mintAmount = executor.mintMemberReward(address(token), SERVICE_ROUND, actionId, memberId);
+        (, uint256 currentBurned) = executor.groupOwnerBurn(address(token), SERVICE_ROUND, actionId, memberId);
+        burnAmount = currentBurned - previouslyBurned;
+    }
+
+    function _memberAccounting(address serviceToken, uint256 round, uint256 actionId, uint256 memberId)
+        internal view returns (uint256 amount, uint256 burn, bool settled)
+    {
+        (uint256 pending, uint256 paid, MemberRewardStatus status) = executor.memberReward(serviceToken, round, actionId, memberId);
+        (uint256 pendingBurn, uint256 burned) = executor.groupOwnerBurn(serviceToken, round, actionId, memberId);
+        settled = status == MemberRewardStatus.Settled;
+        (amount, burn) = settled ? (paid, burned) : (pending, pendingBurn);
+    }
+
+    function _primaryAccounting(address serviceToken, uint256 round, uint256 actionId, uint256 memberId)
+        internal view returns (uint256 verifier, uint256 budget, uint256 burn, uint256 distributed, uint256 owner, bool settled)
+    {
+        ServiceRewardDetails memory details = executor.serviceRewardByMemberId(serviceToken, round, actionId, memberId);
+        (uint256 pendingBurn, uint256 burned) = executor.groupOwnerBurn(serviceToken, round, actionId, memberId);
+        verifier = details.verifier.pendingAmount + details.verifier.mintedAmount;
+        budget = details.ownerBudget;
+        burn = pendingBurn + burned;
+        owner = details.owner.pendingAmount + details.owner.mintedAmount;
+        distributed = budget - owner;
+        settled = details.owner.status == MemberRewardStatus.Settled || details.verifier.status == MemberRewardStatus.Settled;
+    }
+
+    function _claimRecipient(uint256 sourceActionId, uint256 recipientId) internal returns (uint256) {
+        return _claimRecipientOn(SERVICE_ACTION_ID, sourceActionId, recipientId);
+    }
+
+    function _claimRecipientOn(uint256 serviceActionId, uint256 sourceActionId, uint256 recipientId)
+        internal
+        returns (uint256)
+    {
+        vm.prank(_memberAddress(recipientId));
+        return executor.mintRecipientReward(address(token), SERVICE_ROUND, serviceActionId, sourceActionId, GROUP_ID, recipientId);
     }
 
     function _setRecipients(

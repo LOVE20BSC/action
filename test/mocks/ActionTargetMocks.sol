@@ -4,6 +4,7 @@ pragma solidity =0.8.37;
 import {Pagination} from "@libs/Pagination.sol";
 import {IMintErrors, ProposalRewardStatus} from "@core/interfaces/IMint.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {IActionTarget} from "../../src/interfaces/IActionTarget.sol";
 
 contract MockPhase {
     uint256 internal _currentPhase;
@@ -273,6 +274,10 @@ contract MockExecutor {
     function ACTION_TARGET_ADDRESS() external view returns (address) {
         if (revertActionTarget) revert ActionTargetUnavailable();
         return _actionTargetAddress;
+    }
+
+    function mintActionBudget(address tokenAddress, uint256 round, uint256 actionId) external returns (uint256) {
+        return IActionTarget(_actionTargetAddress).mintActionReward(tokenAddress, round, actionId);
     }
 
     function onProposalCreated(

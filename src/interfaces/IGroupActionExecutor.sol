@@ -6,6 +6,7 @@ import {IGroupActionJoin} from "./IGroupActionJoin.sol";
 import {IGroupActionVerify} from "./IGroupActionVerify.sol";
 import {IGroupActionManager} from "./IGroupActionManager.sol";
 import {IActionExecutor} from "./IActionExecutor.sol";
+import {IMemberRewardExecutor} from "./IMemberRewardExecutor.sol";
 
 struct GroupActionCreationParams {
     address joinTokenAddress;
@@ -70,6 +71,7 @@ interface IGroupActionExecutor is
     IGroupActionVerify,
     IGroupActionManager,
     IActionExecutor,
+    IMemberRewardExecutor,
     IGroupActionExecutorEvents,
     IGroupActionExecutorErrors
 {

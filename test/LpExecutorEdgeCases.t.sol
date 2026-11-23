@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {ILpExecutorErrors} from "../src/interfaces/ILpExecutor.sol";
 import {MockERC20} from "./mocks/LpExecutorMocks.sol";
@@ -190,9 +191,11 @@ contract LpExecutorEdgeCasesTest is LpExecutorTestBase {
         _mintMemberReward(2, 1);
 
         _setActionReward(2, 999e18, true);
-        (uint256 mintAmount, uint256 burnAmount, bool minted) =
+        (uint256 pending, uint256 mintAmount, MemberRewardStatus status) =
             lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(minted && mintAmount == 200e18 && burnAmount == 800e18, "recorded settlement is stable");
+        (, uint256 burnAmount) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        require(pending == 0 && mintAmount == 200e18 && status == MemberRewardStatus.Settled, "settled payment is stable");
+        require(burnAmount == 800e18, "settled burn is stable");
     }
 
     function testJoinSecondActionRequiresOwnMinRatio() external {

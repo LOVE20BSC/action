@@ -7,9 +7,13 @@ import {GroupServiceRoundAxis} from "./GroupServiceRoundAxis.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {MemberOwner} from "./MemberOwner.sol";
-import {IGroupServiceExecutor, GroupServiceCreationParams} from "./interfaces/IGroupServiceExecutor.sol";
+import {
+    IGroupServiceExecutor, GroupServiceCreationParams, MemberRewardSummary, ServiceRewardDetails
+} from "./interfaces/IGroupServiceExecutor.sol";
+import {MemberRewardStatus} from "./interfaces/IMemberRewardExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {IGroupActionExecutor} from "./interfaces/IGroupActionExecutor.sol";
+import {GroupRewardKey} from "./interfaces/IGroupActionVerify.sol";
 import {ILaunch} from "@core/interfaces/ILaunch.sol";
 import {ILOVE20Token} from "@core/interfaces/ILOVE20Token.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
@@ -25,28 +29,21 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     uint256 public constant MAX_RECIPIENTS_PER_ACTION = GroupServiceStorage.MAX_RECIPIENTS_PER_ACTION;
     uint256 public constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP;
 
-    uint256 private constant CREATION_DATA_BYTES = 96;
+    uint256 private constant CREATION_DATA_BYTES = 128;
+
+    struct MemberShareMintResult {
+        uint256 mintAmount;
+        uint256 burnAmount;
+        bool previouslySettled;
+        GroupServiceStorage.PrimaryAmounts primaryPaid;
+        GroupServiceStorage.Settlement settlement;
+    }
 
     GroupServiceStorage.Layout internal _layout;
 
     address public immutable GROUP_ACTION_EXECUTOR_ADDRESS;
     address public immutable override LAUNCH_ADDRESS;
     address public immutable override MINT_ADDRESS;
-
-    struct Settlement {
-        address actionTokenAddress;
-        uint256 publicVerifierRatio;
-        uint256 govRatioMultiplier;
-        uint256 verifierWeight;
-        uint256 ownerWeight;
-        uint256 denominator;
-        uint256 serviceReward;
-        bool actionMinted;
-        uint256 verifierReward;
-        uint256 ownerReward;
-        uint256 ownerBurned;
-        GroupServiceStorage.SettlementCause cause;
-    }
 
     modifier onlyGroupOwner(uint256 groupId) {
         address owner = MemberOwner.ownerOrZero(MEMBER_NFT_ADDRESS, groupId);
@@ -71,6 +68,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function _protocol() internal view returns (GroupServiceStorage.Protocol memory protocol) {
         protocol.memberNFTAddress = MEMBER_NFT_ADDRESS;
         protocol.groupActionExecutorAddress = GROUP_ACTION_EXECUTOR_ADDRESS;
+        protocol.actionTargetAddress = ACTION_TARGET_ADDRESS;
+        protocol.stakeAddress = STAKE_ADDRESS;
     }
 
     // Load-bearing: the service rounds are the served GroupAction rounds shifted by the same phase
@@ -102,6 +101,13 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return _layout.publicVerifierRatioByActionId[serviceTokenAddress][serviceActionId];
     }
 
+    function providerIncentiveRatio(
+        address serviceTokenAddress,
+        uint256 serviceActionId
+    ) external view returns (uint256) {
+        return _layout.providerIncentiveRatioByActionId[serviceTokenAddress][serviceActionId];
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control)
     function join(
         address serviceTokenAddress,
@@ -117,11 +123,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             revert AlreadyJoined(serviceTokenAddress, serviceActionId, memberId);
         }
 
-        address sourceTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
-        if (!_isQualified(sourceTokenAddress, round, memberId)) {
-            revert NotQualified(sourceTokenAddress, round, memberId);
-        }
-
         IActionTarget(ACTION_TARGET_ADDRESS).registerJoinState(serviceTokenAddress, serviceActionId, memberId);
 
         emit ServiceJoined({
@@ -132,26 +133,159 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         });
     }
 
-    function rewardByRecipientId(
+    function recipientReward(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
         uint256 sourceActionId,
         uint256 groupId,
         uint256 recipientId
-    ) external view returns (uint256) {
-        GroupRecipients.Distribution memory distributionInfo =
-            _distribution(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId);
+    ) external view returns (uint256 amount, bool isMinted) {
+        return GroupRecipients.shareReward(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, recipientId),
+            false,
+            _mintRound()
+        );
+    }
 
-        if (recipientId == groupId) {
-            return distributionInfo.ownerAmount;
-        }
-        for (uint256 i = 0; i < distributionInfo.recipientIds.length; i++) {
-            if (distributionInfo.recipientIds[i] == recipientId) {
-                return distributionInfo.amounts[i];
-            }
-        }
-        return 0;
+    function providerReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 providerId
+    ) external view returns (uint256 amount, bool isMinted) {
+        return GroupRecipients.shareReward(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, providerId),
+            true,
+            _mintRound()
+        );
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintRecipientReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 recipientId
+    ) external nonReentrant onlyMemberOwner(recipientId) returns (uint256 amount) {
+        (amount,) = GroupRecipients.mintShare(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, recipientId),
+            false,
+            true,
+            _mintRound()
+        );
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintProviderReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 providerId
+    ) external nonReentrant onlyMemberOwner(providerId) returns (uint256 amount) {
+        (amount,) = GroupRecipients.mintShare(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, providerId),
+            true,
+            true,
+            _mintRound()
+        );
+    }
+
+    function providerRewardKeys(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 providerId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (GroupRewardKey[] memory keys, uint256 totalCount) {
+        return GroupRecipients.rewardKeys(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, providerId),
+            true,
+            offset,
+            limit,
+            reverse
+        );
+    }
+
+    function recipientRewardKeys(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 recipientId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (GroupRewardKey[] memory keys, uint256 totalCount) {
+        return GroupRecipients.rewardKeys(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, recipientId),
+            false,
+            offset,
+            limit,
+            reverse
+        );
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintProviderRewards(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 providerId,
+        GroupRewardKey[] calldata keys
+    ) external nonReentrant onlyMemberOwner(providerId) returns (uint256[] memory amounts) {
+        _checkRewardKeyBatchSize(keys.length);
+        return GroupRecipients.mintShares(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, providerId),
+            keys,
+            true,
+            _mintRound()
+        );
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintRecipientRewards(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 recipientId,
+        GroupRewardKey[] calldata keys
+    ) external nonReentrant onlyMemberOwner(recipientId) returns (uint256[] memory amounts) {
+        _checkRewardKeyBatchSize(keys.length);
+        return GroupRecipients.mintShares(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, recipientId),
+            keys,
+            false,
+            _mintRound()
+        );
+    }
+
+    function _checkRewardKeyBatchSize(uint256 actual) private pure {
+        uint256 limit = GroupServiceStorage.MAX_REWARD_KEYS_PER_BATCH;
+        if (actual > limit) revert TooManyRewardKeys(actual, limit);
     }
 
     function rewardDistribution(
@@ -167,12 +301,24 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             uint256[] memory recipientIds,
             uint256[] memory ratios,
             uint256[] memory amounts,
-            uint256 ownerAmount
+            uint256 totalRecipientAmount,
+            uint256 ownerAmount,
+            uint256 providerReserve
         )
     {
-        GroupRecipients.Distribution memory distributionInfo =
-            _distribution(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId);
-        return (distributionInfo.recipientIds, distributionInfo.ratios, distributionInfo.amounts, distributionInfo.ownerAmount);
+        GroupServiceStorage.MemberRewardKey memory key =
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId);
+        GroupRecipients.Distribution memory distributionInfo = GroupRecipients.distributionForAction(
+            _layout, _protocol(), key, sourceActionId
+        );
+        return (
+            distributionInfo.recipientIds,
+            distributionInfo.ratios,
+            distributionInfo.amounts,
+            distributionInfo.totalRecipientAmount,
+            distributionInfo.ownerAmount,
+            distributionInfo.providerReserve
+        );
     }
 
     function joinedAmountByActionId(
@@ -212,50 +358,166 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalGeneratedActionReward(sourceTokenAddress, round);
     }
 
+    function groupOwnerReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 groupId
+    ) external view returns (uint256 amount, bool isMinted) {
+        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) return (amount, isMinted);
+        GroupServiceStorage.MemberRewardKey memory key = GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId);
+        amount = _ownerPaid(key);
+        // forge-lint: disable-next-line(boolean-cst)
+        if (amount != 0) return (amount, true);
+        GroupServiceStorage.Settlement memory settlement = _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
+        _checkProviderReservePrepared(key, settlement);
+        amount = settlement.ownerReward - _projectedDistribution(key, settlement);
+        isMinted = _ownerBurnCompletesRole(key, settlement, amount);
+    }
+
+    function prepareProviderReserve(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 groupId,
+        uint256 limit
+    ) external nonReentrant returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
+        _checkMintWindow(
+            serviceTokenAddress,
+            round,
+            serviceActionId,
+            groupId,
+            _layout.createdRoundByActionId[serviceTokenAddress][serviceActionId],
+            false
+        );
+        GroupServiceStorage.MemberRewardKey memory key =
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId);
+        GroupServiceStorage.Settlement memory settlement =
+            _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
+        _checkSettlementPool(settlement, serviceTokenAddress, round, serviceActionId, groupId);
+        (processedActionCount, totalActionCount, providerReserve) = _providerReservePreparation(key, settlement);
+        if (processedActionCount == totalActionCount || limit == 0) {
+            return (processedActionCount, totalActionCount, providerReserve);
+        }
+
+        if (!settlement.actionMinted) {
+            _mintServiceRewardIfNeeded(settlement, serviceTokenAddress, round, serviceActionId, groupId);
+            settlement.actionMinted = true;
+        }
+        if (settlement.ownerReward == 0) {
+            return _providerReservePreparation(key, settlement);
+        }
+
+        return _advanceProviderReserve(key, settlement, limit, processedActionCount);
+    }
+
+    function _advanceProviderReserve(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        uint256 limit,
+        uint256 previousProcessedActionCount
+    ) private returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
+        (processedActionCount, totalActionCount, providerReserve) = GroupRecipients.prepareProviderReserve(
+            _layout,
+            GROUP_ACTION_EXECUTOR_ADDRESS,
+            key,
+            settlement,
+            limit
+        );
+        if (processedActionCount > previousProcessedActionCount) {
+            emit ProviderReservePreparationAdvanced({
+                serviceTokenAddress: key.tokenAddress,
+                serviceActionId: key.actionId,
+                round: key.round,
+                groupId: key.memberId,
+                ownerReward: settlement.ownerReward,
+                processedActionCount: processedActionCount,
+                totalActionCount: totalActionCount,
+                providerReserve: providerReserve
+            });
+        }
+    }
+
+    function providerReservePreparation(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 groupId
+    ) external view returns (
+        uint256 ownerWeight,
+        uint256 processedActionCount,
+        uint256 totalActionCount,
+        uint256 providerReserve
+    ) {
+        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) return (0, 0, 0, 0);
+        GroupServiceStorage.Settlement memory settlement =
+            _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
+        (processedActionCount, totalActionCount, providerReserve) =
+            _providerReservePreparation(
+                GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId), settlement
+            );
+        return (settlement.ownerWeight, processedActionCount, totalActionCount, providerReserve);
+    }
+
+    function verifierReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 verifierId
+    ) external view returns (uint256 amount, bool isMinted) {
+        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) return (amount, isMinted);
+        amount = _layout.verifierRewardByMemberId[serviceTokenAddress][serviceActionId][round][verifierId];
+        // forge-lint: disable-next-line(boolean-cst)
+        if (amount != 0) return (amount, true);
+        amount = _settlement(serviceTokenAddress, round, serviceActionId, verifierId, GroupServiceStorage.PrimaryRole.Verifier).verifierReward;
+    }
+
+    function groupOwnerBurn(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 groupId
+    ) external view returns (uint256 pendingAmount, uint256 burnedAmount) {
+        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) return (0, 0);
+        burnedAmount = _layout.ownerBurnByGroupId[serviceTokenAddress][serviceActionId][round][groupId];
+        if (burnedAmount == 0) {
+            pendingAmount = _settlement(serviceTokenAddress, round, serviceActionId, groupId, GroupServiceStorage.PrimaryRole.Owner).ownerBurned;
+        }
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintGroupOwnerReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 groupId
+    ) external nonReentrant onlyMemberOwner(groupId) returns (uint256 amount) {
+        GroupServiceStorage.MemberRewardKey memory key = GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, groupId);
+        (GroupServiceStorage.Settlement memory settlement, GroupServiceStorage.PrimaryAmounts memory amounts) = _mintPrimary(key, GroupServiceStorage.PrimaryRole.Owner);
+        _emitPrimary(key, settlement, amounts);
+        return amounts.owner;
+    }
+
+    // forge-lint: disable-next-item(missing-events-access-control)
+    function mintVerifierReward(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 verifierId
+    ) external nonReentrant onlyMemberOwner(verifierId) returns (uint256 amount) {
+        GroupServiceStorage.MemberRewardKey memory key = GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, verifierId);
+        (GroupServiceStorage.Settlement memory settlement, GroupServiceStorage.PrimaryAmounts memory amounts) = _mintPrimary(key, GroupServiceStorage.PrimaryRole.Verifier);
+        _emitPrimary(key, settlement, amounts);
+        return amounts.verifier;
+    }
+
     function serviceRewardByMemberId(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
         uint256 memberId
-    )
-        external
-        view
-        returns (
-            uint256 verifierReward,
-            uint256 ownerReward,
-            uint256 ownerBurned,
-            uint256 ownerDistributed,
-            uint256 ownerRemaining,
-            bool claimed
-        )
-    {
-        if (_layout.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
-            verifierReward = _layout.verifierRewardByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
-            ownerDistributed = _layout.ownerDistributedByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
-            ownerRemaining = _layout.ownerRemainingByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
-            ownerReward = ownerDistributed + ownerRemaining;
-            ownerBurned = _layout.ownerBurnedByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
-            // forge-lint: disable-next-line(boolean-cst)
-            return (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining, true);
-        }
-
-        if (!_isSettleableRound(serviceTokenAddress, round, serviceActionId)) {
-            // forge-lint: disable-next-line(boolean-cst)
-            return (0, 0, 0, 0, 0, false);
-        }
-
-        Settlement memory settlement = _settlement(serviceTokenAddress, round, serviceActionId, memberId);
-        verifierReward = settlement.verifierReward;
-        ownerReward = settlement.ownerReward;
-        ownerBurned = settlement.ownerBurned;
-        if (ownerReward != 0) {
-            ownerDistributed = GroupRecipients.projectedDistribution(
-                _layout, _protocol(), settlement.actionTokenAddress, round, memberId, ownerReward, settlement.ownerWeight
-            );
-            ownerRemaining = ownerReward - ownerDistributed;
-        }
-        // forge-lint: disable-next-line(boolean-cst)
-        return (verifierReward, ownerReward, ownerBurned, ownerDistributed, ownerRemaining, false);
+    ) external view returns (ServiceRewardDetails memory details) {
+        return _memberDetails(GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, memberId));
     }
 
     function memberReward(
@@ -263,26 +525,15 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 round,
         uint256 actionId,
         uint256 memberId
-    ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
-        if (_layout.memberMinted[tokenAddress][actionId][round][memberId]) {
-            return (
-                _layout.verifierRewardByMemberId[tokenAddress][actionId][round][memberId]
-                    + _layout.ownerDistributedByMemberId[tokenAddress][actionId][round][memberId]
-                    + _layout.ownerRemainingByMemberId[tokenAddress][actionId][round][memberId],
-                _layout.ownerBurnedByMemberId[tokenAddress][actionId][round][memberId],
-                // forge-lint: disable-next-line(boolean-cst)
-                true
-            );
-        }
-
-        if (!_isSettleableRound(tokenAddress, round, actionId)) {
-            // forge-lint: disable-next-line(boolean-cst)
-            return (0, 0, false);
-        }
-
-        Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId);
-        // forge-lint: disable-next-line(boolean-cst)
-        return (settlement.verifierReward + settlement.ownerReward, settlement.ownerBurned, false);
+    ) external view returns (uint256 pendingAmount, uint256 mintedAmount, MemberRewardStatus status) {
+        ServiceRewardDetails memory details = _memberDetails(GroupServiceStorage.MemberRewardKey(tokenAddress, round, actionId, memberId));
+        pendingAmount = details.owner.pendingAmount + details.verifier.pendingAmount
+            + details.recipient.pendingAmount + details.provider.pendingAmount;
+        mintedAmount = details.owner.mintedAmount + details.verifier.mintedAmount
+            + details.recipient.mintedAmount + details.provider.mintedAmount;
+        bool hasPending = pendingAmount != 0 || details.owner.status == MemberRewardStatus.Pending;
+        bool hasSettled = mintedAmount != 0 || details.owner.status == MemberRewardStatus.Settled;
+        status = _status(hasPending, hasSettled);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -397,6 +648,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (params.publicVerifierRatio == 0 || params.publicVerifierRatio >= PRECISION) {
             revert InvalidRatioForPublicVerifier(params.publicVerifierRatio);
         }
+        if (params.providerIncentiveRatio > PRECISION) {
+            revert InvalidProviderIncentiveRatio(params.providerIncentiveRatio);
+        }
         if (params.actionTokenAddress != tokenAddress) {
             address parentTokenAddress = ILaunch(LAUNCH_ADDRESS).parentToken(params.actionTokenAddress);
             if (parentTokenAddress != tokenAddress) {
@@ -408,6 +662,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         _layout.actionTokenAddressByActionId[tokenAddress][serviceActionId] = params.actionTokenAddress;
         _layout.govRatioMultiplierByActionId[tokenAddress][serviceActionId] = params.govRatioMultiplier;
         _layout.publicVerifierRatioByActionId[tokenAddress][serviceActionId] = params.publicVerifierRatio;
+        _layout.providerIncentiveRatioByActionId[tokenAddress][serviceActionId] = params.providerIncentiveRatio;
         _layout.createdRoundByActionId[tokenAddress][serviceActionId] = IPhase(PHASE_ADDRESS).currentPhase();
 
         emit ServiceActionCreated({
@@ -415,7 +670,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             actionId: serviceActionId,
             actionTokenAddress: params.actionTokenAddress,
             govRatioMultiplier: params.govRatioMultiplier,
-            publicVerifierRatio: params.publicVerifierRatio
+            publicVerifierRatio: params.publicVerifierRatio,
+            providerIncentiveRatio: params.providerIncentiveRatio
         });
     }
 
@@ -431,32 +687,70 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         if (voteData.length != 0) revert UnexpectedVoteData();
     }
 
-    function _distribution(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 sourceActionId,
-        uint256 groupId
-    ) internal view returns (GroupRecipients.Distribution memory) {
-        (address sourceTokenAddress, uint256 slice) =
-            _ownerSlice(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId);
-        return GroupRecipients.distribution(_layout, sourceTokenAddress, round, sourceActionId, groupId, slice);
+    function _memberDetails(GroupServiceStorage.MemberRewardKey memory key) private view returns (ServiceRewardDetails memory details) {
+        if (!_isSettleableRound(key.tokenAddress, key.round, key.actionId)) return details;
+        GroupServiceStorage.Settlement memory settlement = _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, GroupServiceStorage.PrimaryRole.Both);
+        _checkProviderReservePrepared(key, settlement);
+        GroupServiceStorage.PrimaryAmounts memory pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
+        details.ownerBudget = settlement.ownerReward;
+        uint256 ownerPaid = _ownerPaid(key);
+        details.owner = MemberRewardSummary(pending.owner, ownerPaid,
+            _status(pending.owner != 0 || pending.burn != 0, ownerPaid != 0 || _ownerBurnCompletesRole(key, settlement, pending.owner)));
+        uint256 verifierPaid = _verifierPaid(key);
+        details.verifier = MemberRewardSummary(pending.verifier, verifierPaid, _status(pending.verifier != 0, verifierPaid != 0));
+        (details.recipient, details.provider) = GroupRecipients.shareSummaries(
+            _layout, _protocol(), key, _mintRound()
+        );
     }
 
-    function _ownerSlice(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 sourceActionId,
-        uint256 groupId
-    ) internal view returns (address sourceTokenAddress, uint256 slice) {
-        uint256 ownerReward;
-        uint256 ownerWeight;
-        (sourceTokenAddress, ownerReward, ownerWeight) =
-            _ownerRewardAndWeight(serviceTokenAddress, round, serviceActionId, groupId);
-        if (ownerReward != 0 && ownerWeight != 0) {
-            slice = GroupRecipients.ownerSlice(
-                _protocol(), sourceTokenAddress, round, sourceActionId, groupId, ownerReward, ownerWeight
+    function _status(
+        bool hasPending,
+        bool hasSettled
+    ) private pure returns (MemberRewardStatus) {
+        if (hasPending) return hasSettled ? MemberRewardStatus.Partial : MemberRewardStatus.Pending;
+        return hasSettled ? MemberRewardStatus.Settled : MemberRewardStatus.Unavailable;
+    }
+
+    function _projectedDistribution(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement
+    ) private view returns (uint256) {
+        if (settlement.ownerReward == 0) {
+            return 0;
+        }
+        return GroupRecipients.projectedDistribution(
+            _layout,
+            _protocol(),
+            key,
+            settlement
+        );
+    }
+
+    function _providerReservePreparation(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement
+    ) private view returns (uint256 processedActionCount, uint256 totalActionCount, uint256 providerReserve) {
+        return GroupRecipients.providerReservePreparation(
+            _layout,
+            _protocol(),
+            key,
+            settlement
+        );
+    }
+
+    function _checkProviderReservePrepared(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement
+    ) private view {
+        (uint256 processedActionCount, uint256 totalActionCount, ) = _providerReservePreparation(key, settlement);
+        if (processedActionCount < totalActionCount) {
+            revert ProviderReservePreparationRequired(
+                key.tokenAddress,
+                key.actionId,
+                key.round,
+                key.memberId,
+                processedActionCount,
+                totalActionCount
             );
         }
     }
@@ -465,132 +759,25 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
-        uint256 memberId
-    ) internal view returns (Settlement memory settlement) {
-        settlement.actionTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
-        if (!IActionTarget(ACTION_TARGET_ADDRESS).isJoinedByRound(serviceTokenAddress, round, serviceActionId, memberId)) {
-            settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
-            return settlement;
-        }
-
-        settlement.denominator = totalGroupActionReward(settlement.actionTokenAddress, round);
-        if (settlement.denominator == 0) {
-            settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
-            return settlement;
-        }
-
-        settlement.verifierWeight = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS)
-            .totalGeneratedActionRewardByVerifierId(settlement.actionTokenAddress, round, memberId);
-        settlement.ownerWeight = _ownerWeight(settlement.actionTokenAddress, round, memberId);
-        if (settlement.verifierWeight == 0 && settlement.ownerWeight == 0) {
-            settlement.cause = GroupServiceStorage.SettlementCause.NoEligibleWeight;
-            return settlement;
-        }
-
-        settlement.publicVerifierRatio = _layout.publicVerifierRatioByActionId[serviceTokenAddress][serviceActionId];
-        settlement.govRatioMultiplier = _layout.govRatioMultiplierByActionId[serviceTokenAddress][serviceActionId];
-
-        (settlement.serviceReward, settlement.actionMinted) =
-            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(serviceTokenAddress, round, serviceActionId);
-        if (settlement.serviceReward == 0) {
-            settlement.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
-            return settlement;
-        }
-
-        _applyFormulas(settlement, memberId);
-    }
-
-    function _applyFormulas(
-        Settlement memory settlement,
-        uint256 memberId
-    ) internal view {
-        settlement.ownerBurned = 0;
-        settlement.verifierReward = Math.mulDiv(
-            settlement.serviceReward,
-            settlement.publicVerifierRatio * settlement.verifierWeight,
-            settlement.denominator * PRECISION
+        uint256 memberId,
+        GroupServiceStorage.PrimaryRole role
+    ) internal view returns (GroupServiceStorage.Settlement memory settlement) {
+        settlement = GroupRecipients.settlement(
+            _layout,
+            _protocol(),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, memberId),
+            role
         );
-
-        uint256 ownerRatioWeight = (PRECISION - settlement.publicVerifierRatio) * settlement.ownerWeight;
-        uint256 theoreticalOwnerReward =
-            Math.mulDiv(settlement.serviceReward, ownerRatioWeight, settlement.denominator * PRECISION);
-
-        if (settlement.govRatioMultiplier == 0) {
-            settlement.ownerReward = theoreticalOwnerReward;
-            return;
-        }
-
-        uint256 cap = 0;
-        uint256 currentPhase = IPhase(PHASE_ADDRESS).currentPhase();
-        uint256 totalGovVotes = IStake(STAKE_ADDRESS).totalGovVotes(settlement.actionTokenAddress, currentPhase);
-        if (totalGovVotes != 0) {
-            uint256 govRatio = Math.mulDiv(
-                IStake(STAKE_ADDRESS).govVotes(settlement.actionTokenAddress, currentPhase, memberId),
-                PRECISION,
-                totalGovVotes
-            );
-            cap = Math.mulDiv(govRatio, settlement.govRatioMultiplier, PRECISION);
-        }
-
-        // Load-bearing: ceil, not floor. The threshold must be the smallest cap that reaches the
-        // theoretical reward, so the two branches stay continuous at the boundary; a cap one below
-        // also passes under floor and the fractional burn silently disappears.
-        uint256 capForTheoreticalOwnerReward =
-            Math.mulDiv(ownerRatioWeight, 1, settlement.denominator, Math.Rounding.Ceil);
-        if (cap >= capForTheoreticalOwnerReward) {
-            settlement.ownerReward = theoreticalOwnerReward;
-        } else {
-            settlement.ownerReward = Math.mulDiv(settlement.serviceReward, cap, PRECISION);
-            settlement.ownerBurned = theoreticalOwnerReward - settlement.ownerReward;
-        }
     }
 
     function _ownerRewardAndWeight(
-        address serviceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 serviceActionId,
-        uint256 memberId
-    )
-        internal
-        view
-        returns (
-            address sourceTokenAddress,
-            uint256 ownerReward,
-            uint256 ownerWeight
-        )
-    {
-        sourceTokenAddress = _layout.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
-        if (_layout.memberMinted[serviceTokenAddress][serviceActionId][round][memberId]) {
-            ownerReward = _layout.ownerDistributedByMemberId[serviceTokenAddress][serviceActionId][round][memberId]
-                + _layout.ownerRemainingByMemberId[serviceTokenAddress][serviceActionId][round][memberId];
-            if (ownerReward != 0) {
-                ownerWeight = _ownerWeight(sourceTokenAddress, round, memberId);
-            }
-            return (sourceTokenAddress, ownerReward, ownerWeight);
-        }
-
-        Settlement memory settlement = _settlement(serviceTokenAddress, round, serviceActionId, memberId);
-        return (sourceTokenAddress, settlement.ownerReward, settlement.ownerWeight);
-    }
-
-    function _isQualified(
-        address sourceTokenAddress,
-        uint256 round,
-        uint256 memberId
-    ) internal view returns (bool) {
-        IGroupActionExecutor groupActionExecutor = IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS);
-        return groupActionExecutor.hasActiveGroups(sourceTokenAddress, memberId)
-            || groupActionExecutor.hasVerifierApplicationByRound(sourceTokenAddress, round, memberId);
-    }
-
-    function _ownerWeight(
-        address sourceTokenAddress,
-        uint256 round,
+        uint256 actionId,
         uint256 groupId
-    ) internal view returns (uint256) {
-        return IGroupActionExecutor(GROUP_ACTION_EXECUTOR_ADDRESS).totalGeneratedActionRewardByGroupId(
-            sourceTokenAddress, round, groupId
-        );
+    ) internal view returns (address sourceTokenAddress, uint256 ownerReward, uint256 ownerWeight) {
+        GroupServiceStorage.Settlement memory settlement = _settlement(tokenAddress, round, actionId, groupId, GroupServiceStorage.PrimaryRole.Owner);
+        return (settlement.actionTokenAddress, settlement.ownerReward, settlement.ownerWeight);
     }
 
     function _isSettleableRound(
@@ -605,6 +792,238 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     function _mintRound() internal view override returns (uint256) {
         return GroupServiceRoundAxis.mintRound(PHASE_ADDRESS);
     }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _checkSettlementPool(
+        GroupServiceStorage.Settlement memory settlement,
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    ) internal pure {
+        if (settlement.cause == GroupServiceStorage.SettlementCause.NoEligibleWeight) {
+            revert ZeroRewardWeight(tokenAddress, actionId, memberId);
+        }
+        if (settlement.cause == GroupServiceStorage.SettlementCause.PoolEmpty) {
+            revert MemberRewardPoolEmpty(tokenAddress, round);
+        }
+    }
+
+    // forge-lint: disable-next-item(require-revert-in-loop)
+    function _mintServiceRewardIfNeeded(
+        GroupServiceStorage.Settlement memory settlement,
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    ) internal returns (bool rewardChanged) {
+        if (settlement.actionMinted) {
+            return false;
+        }
+
+        // The member and recipient claim entry points both hold the reentrancy guard.
+        // forge-lint: disable-next-line(reentrancy-no-eth)
+        uint256 reward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, round, actionId);
+        settlement.actionMinted = true;
+        if (reward == settlement.serviceReward) {
+            return false;
+        }
+        if (reward == 0) {
+            revert MemberRewardPoolEmpty(tokenAddress, round);
+        }
+        settlement.serviceReward = reward;
+        GroupServiceStorage.Settlement memory actualSettlement =
+            GroupRecipients.applyFormulas(settlement, STAKE_ADDRESS, round, memberId);
+        settlement.verifierReward = actualSettlement.verifierReward;
+        settlement.ownerReward = actualSettlement.ownerReward;
+        settlement.ownerBurned = actualSettlement.ownerBurned;
+        return true;
+    }
+
+    function _pendingOwnerBurn(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 ownerOverflow
+    ) internal view returns (uint256) {
+        if (ownerOverflow == 0) {
+            return 0;
+        }
+        return _layout.ownerBurnByGroupId[tokenAddress][actionId][round][groupId] == 0 ? ownerOverflow : 0;
+    }
+
+    function _burnOwnerReward(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 amount
+    ) internal {
+        if (amount == 0) return;
+        _layout.ownerBurnByGroupId[tokenAddress][actionId][round][groupId] = amount;
+        ILOVE20Token(tokenAddress).burn(amount);
+        emit ServiceOwnerRewardBurned({
+            serviceTokenAddress: tokenAddress,
+            serviceActionId: actionId,
+            round: round,
+            groupId: groupId,
+            amount: amount
+        });
+    }
+
+    function _ownerPaid(GroupServiceStorage.MemberRewardKey memory key) private view returns (uint256) {
+        return _layout.ownerRemainingByMemberId[key.tokenAddress][key.actionId][key.round][key.memberId];
+    }
+
+    function _verifierPaid(GroupServiceStorage.MemberRewardKey memory key) private view returns (uint256) {
+        return _layout.verifierRewardByMemberId[key.tokenAddress][key.actionId][key.round][key.memberId];
+    }
+
+    function _ownerBurnCompletesRole(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        uint256 pendingOwner
+    ) private view returns (bool) {
+        return pendingOwner == 0 && settlement.ownerBurned != 0
+            && _pendingOwnerBurn(key.tokenAddress, key.round, key.actionId, key.memberId, settlement.ownerBurned) == 0;
+    }
+
+    function _anyPrimaryPaid(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        GroupServiceStorage.PrimaryRole role,
+        uint256 pendingOwner
+    ) private view returns (bool) {
+        if (role != GroupServiceStorage.PrimaryRole.Owner && _verifierPaid(key) != 0) return true;
+        return role != GroupServiceStorage.PrimaryRole.Verifier && (_ownerPaid(key) != 0
+            || _ownerBurnCompletesRole(key, settlement, pendingOwner));
+    }
+
+    function _pendingPrimary(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        GroupServiceStorage.PrimaryRole role
+    ) private view returns (GroupServiceStorage.PrimaryAmounts memory pending) {
+        if (role != GroupServiceStorage.PrimaryRole.Owner && _verifierPaid(key) == 0) pending.verifier = settlement.verifierReward;
+        if (role != GroupServiceStorage.PrimaryRole.Verifier && _ownerPaid(key) == 0) {
+            pending.owner = settlement.ownerReward - _projectedDistribution(key, settlement);
+            pending.burn = _pendingOwnerBurn(key.tokenAddress, key.round, key.actionId, key.memberId, settlement.ownerBurned);
+        }
+    }
+
+    function _checkPrimaryAmounts(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        GroupServiceStorage.PrimaryRole role,
+        GroupServiceStorage.PrimaryAmounts memory pending
+    ) private view {
+        if (pending.owner + pending.verifier + pending.burn != 0) return;
+        if (_anyPrimaryPaid(key, settlement, role, pending.owner)) {
+            revert RewardAlreadyMinted(key.tokenAddress, key.actionId, key.memberId, key.round);
+        }
+        if (role != GroupServiceStorage.PrimaryRole.Verifier && settlement.ownerReward != 0) revert ZeroOwnerRewardRemaining(key.memberId);
+        revert MemberRewardRoundedToZero(key.tokenAddress, key.round, key.memberId);
+    }
+
+    function _mintPrimary(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.PrimaryRole role
+    ) private returns (GroupServiceStorage.Settlement memory settlement, GroupServiceStorage.PrimaryAmounts memory pending) {
+        _checkMintWindow(
+            key.tokenAddress,
+            key.round,
+            key.actionId,
+            key.memberId,
+            _layout.createdRoundByActionId[key.tokenAddress][key.actionId],
+            false
+        );
+        settlement = _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, role);
+        _checkSettlementPool(settlement, key.tokenAddress, key.round, key.actionId, key.memberId);
+        if (role != GroupServiceStorage.PrimaryRole.Verifier) _checkProviderReservePrepared(key, settlement);
+        pending = _pendingPrimary(key, settlement, role);
+        if (
+            pending.owner + pending.verifier + pending.burn == 0 && !settlement.actionMinted
+                && (settlement.ownerWeight != 0 || settlement.verifierWeight != 0)
+        ) {
+            _mintServiceRewardIfNeeded(settlement, key.tokenAddress, key.round, key.actionId, key.memberId);
+            pending = _pendingPrimary(key, settlement, role);
+        }
+        _checkPrimaryAmounts(key, settlement, role, pending);
+        if (_mintServiceRewardIfNeeded(settlement, key.tokenAddress, key.round, key.actionId, key.memberId)) {
+            pending = _pendingPrimary(key, settlement, role);
+            _checkPrimaryAmounts(key, settlement, role, pending);
+        }
+        _payPrimary(key, pending);
+    }
+
+    function _payPrimary(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.PrimaryAmounts memory pending
+    ) private {
+        if (pending.verifier != 0) {
+            _layout.verifierRewardByMemberId[key.tokenAddress][key.actionId][key.round][key.memberId] = pending.verifier;
+        }
+        if (pending.owner != 0 || pending.burn != 0) {
+            _layout.ownerRemainingByMemberId[key.tokenAddress][key.actionId][key.round][key.memberId] = pending.owner;
+            _burnOwnerReward(key.tokenAddress, key.round, key.actionId, key.memberId, pending.burn);
+        }
+        uint256 amount = pending.owner + pending.verifier;
+        if (amount != 0) IERC20(key.tokenAddress).safeTransfer(msg.sender, amount);
+    }
+
+    function _emitPrimary(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        GroupServiceStorage.PrimaryAmounts memory amounts
+    ) private {
+        emit ServiceRewardsDistributed({
+            serviceTokenAddress: key.tokenAddress,
+            serviceActionId: key.actionId,
+            round: key.round,
+            actionTokenAddress: settlement.actionTokenAddress,
+            memberId: key.memberId,
+            verifierReward: amounts.verifier,
+            ownerReward: amounts.owner != 0 || amounts.burn != 0 ? settlement.ownerReward : 0,
+            ownerRemaining: amounts.owner
+        });
+    }
+
+    function _mintMemberShares(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement
+    ) private returns (MemberShareMintResult memory result) {
+        result.settlement = settlement;
+        bool sharesPreviouslySettled;
+        (result.mintAmount, result.burnAmount, sharesPreviouslySettled) =
+            GroupRecipients.mintMemberShares(_layout, _protocol(), key, _mintRound());
+        result.previouslySettled = sharesPreviouslySettled;
+
+        (uint256 actualReward, ) =
+            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(key.tokenAddress, key.round, key.actionId);
+        if (actualReward == settlement.serviceReward) return result;
+
+        result.settlement =
+            _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, GroupServiceStorage.PrimaryRole.Both);
+        _checkProviderReservePrepared(key, result.settlement);
+        GroupServiceStorage.PrimaryAmounts memory pending =
+            _pendingPrimary(key, result.settlement, GroupServiceStorage.PrimaryRole.Both);
+        if (pending.owner + pending.verifier + pending.burn != 0) {
+            _payPrimary(key, pending);
+            result.primaryPaid = pending;
+            result.mintAmount += pending.owner + pending.verifier;
+            result.burnAmount += pending.burn;
+        }
+
+        uint256 shareAmount;
+        uint256 shareBurn;
+        (shareAmount, shareBurn, sharesPreviouslySettled) =
+            GroupRecipients.mintMemberShares(_layout, _protocol(), key, _mintRound());
+        result.mintAmount += shareAmount;
+        result.burnAmount += shareBurn;
+        result.previouslySettled = result.previouslySettled || sharesPreviouslySettled;
+    }
+
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
     function _mintMemberReward(
         address tokenAddress,
@@ -613,70 +1032,43 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
         _checkMintWindow(
-            tokenAddress,
-            round,
-            actionId,
-            memberId,
-            _layout.createdRoundByActionId[tokenAddress][actionId],
-            _layout.memberMinted[tokenAddress][actionId][round][memberId]
+            tokenAddress, round, actionId, memberId, _layout.createdRoundByActionId[tokenAddress][actionId], false
         );
-
-        Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId);
-        mintAmount = settlement.verifierReward + settlement.ownerReward;
-        burnAmount = settlement.ownerBurned;
-        if (mintAmount == 0 && burnAmount == 0) {
-            if (settlement.cause == GroupServiceStorage.SettlementCause.NoEligibleWeight) {
-                revert ZeroRewardWeight(tokenAddress, actionId, memberId);
+        GroupServiceStorage.MemberRewardKey memory key = GroupServiceStorage.MemberRewardKey(tokenAddress, round, actionId, memberId);
+        GroupServiceStorage.Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId, GroupServiceStorage.PrimaryRole.Both);
+        _checkProviderReservePrepared(key, settlement);
+        GroupServiceStorage.PrimaryAmounts memory pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
+        if (
+            pending.owner + pending.verifier + pending.burn == 0 && !settlement.actionMinted
+                && (settlement.ownerWeight != 0 || settlement.verifierWeight != 0)
+        ) {
+            _mintServiceRewardIfNeeded(settlement, tokenAddress, round, actionId, memberId);
+            pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
+        }
+        GroupServiceStorage.PrimaryAmounts memory primaryPaid;
+        if (pending.owner + pending.verifier + pending.burn != 0) {
+            if (_mintServiceRewardIfNeeded(settlement, tokenAddress, round, actionId, memberId)) {
+                pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
             }
-            if (settlement.cause == GroupServiceStorage.SettlementCause.PoolEmpty) {
-                revert MemberRewardPoolEmpty(tokenAddress, round);
-            }
-            revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
+            _payPrimary(key, pending);
+            primaryPaid = pending;
         }
-
-        if (!settlement.actionMinted) {
-            // forge-lint: disable-next-line(reentrancy-no-eth)
-            settlement.serviceReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, round, actionId);
-            _applyFormulas(settlement, memberId);
-            mintAmount = settlement.verifierReward + settlement.ownerReward;
-            burnAmount = settlement.ownerBurned;
+        mintAmount = pending.owner + pending.verifier;
+        burnAmount = pending.burn;
+        MemberShareMintResult memory shareResult = _mintMemberShares(key, settlement);
+        mintAmount += shareResult.mintAmount;
+        burnAmount += shareResult.burnAmount;
+        if (
+            shareResult.primaryPaid.owner + shareResult.primaryPaid.verifier + shareResult.primaryPaid.burn != 0
+        ) {
+            primaryPaid = shareResult.primaryPaid;
+            settlement = shareResult.settlement;
         }
-
-        _layout.memberMinted[tokenAddress][actionId][round][memberId] = true;
-        _layout.verifierRewardByMemberId[tokenAddress][actionId][round][memberId] = settlement.verifierReward;
-        _layout.ownerBurnedByMemberId[tokenAddress][actionId][round][memberId] = burnAmount;
-
-        if (burnAmount != 0) {
-            // forge-lint: disable-next-line(reentrancy-no-eth)
-            ILOVE20Token(tokenAddress).burn(burnAmount);
+        if (mintAmount + burnAmount == 0) {
+            if (shareResult.previouslySettled) revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
+            _checkSettlementPool(settlement, tokenAddress, round, actionId, memberId);
+            _checkPrimaryAmounts(key, settlement, GroupServiceStorage.PrimaryRole.Both, pending);
         }
-
-        uint256 distributed = 0;
-        if (settlement.ownerReward != 0) {
-            // forge-lint: disable-next-item(reentrancy-no-eth)
-            distributed = GroupRecipients.distribute(
-                _layout,
-                _protocol(),
-                settlement.actionTokenAddress,
-                tokenAddress,
-                round,
-                actionId,
-                memberId,
-                settlement.ownerReward,
-                settlement.ownerWeight
-            );
-        }
-        uint256 remaining = settlement.ownerReward - distributed;
-        _layout.ownerDistributedByMemberId[tokenAddress][actionId][round][memberId] = distributed;
-        _layout.ownerRemainingByMemberId[tokenAddress][actionId][round][memberId] = remaining;
-
-        if (remaining != 0) {
-            IERC20(tokenAddress).safeTransfer(msg.sender, remaining);
-        }
-        if (settlement.verifierReward != 0) {
-            IERC20(tokenAddress).safeTransfer(msg.sender, settlement.verifierReward);
-        }
-
         emit MemberRewardMinted({
             tokenAddress: tokenAddress,
             actionId: actionId,
@@ -685,17 +1077,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             mintAmount: mintAmount,
             burnAmount: burnAmount
         });
-        emit ServiceRewardsDistributed({
-            serviceTokenAddress: tokenAddress,
-            serviceActionId: actionId,
-            round: round,
-            actionTokenAddress: settlement.actionTokenAddress,
-            memberId: memberId,
-            verifierReward: settlement.verifierReward,
-            ownerReward: settlement.ownerReward,
-            ownerBurned: burnAmount,
-            ownerDistributed: distributed,
-            ownerRemaining: remaining
-        });
+        if (primaryPaid.owner + primaryPaid.verifier + primaryPaid.burn != 0) {
+            _emitPrimary(key, settlement, primaryPaid);
+        }
     }
 }

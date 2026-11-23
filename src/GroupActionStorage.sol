@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
+import {GroupRewardKey} from "./interfaces/IGroupActionVerify.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
@@ -41,6 +42,16 @@ library GroupActionStorage {
     struct GroupRewardPreparationState {
         uint256 processedActionCount;
         uint256 weight;
+    }
+
+    struct ProviderAttribution {
+        uint256 providerId;
+        uint256 joinedBlock;
+    }
+
+    struct ProviderScores {
+        uint256 total;
+        mapping(uint256 => uint256) byProviderId;
     }
 
     struct Layout {
@@ -205,6 +216,14 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) generatedActionReward;
         // tokenAddress => round => groupId => accumulated shares for a prefix of the generated actions
         mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardPreparationState))) groupRewardProgress;
+        // groupId => memberId => permanent first-join attribution across actions and tokens
+        mapping(uint256 => mapping(uint256 => ProviderAttribution)) providerAttribution;
+        // tokenAddress => actionId => round => groupId => external Provider scores
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => ProviderScores)))) providerScores;
+        // tokenAddress => round => groupId => actions with positive external Provider weight
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) actionIdsWithProviderWeight;
+        // tokenAddress => round => providerId => source action and group pairs with positive weight
+        mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardKey[]))) providerRewardKeys;
     }
 
     function generatedActionRewardByGroupId(
@@ -232,5 +251,50 @@ library GroupActionStorage {
     ) internal view returns (uint256) {
         return self.ownAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round)
             + self.providerAmountHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
+    }
+
+    // forge-lint: disable-next-item(boolean-cst)
+    function originScoreAt(
+        Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    ) internal view returns (uint256 score, bool verified) {
+        uint256 groupId = self.groupHistoryByMemberId[tokenAddress][actionId][memberId].value(round);
+        if (groupId == 0) {
+            return (0, false);
+        }
+        uint256 verifiedCount = self.verifiedMemberCountByGroupId[tokenAddress][actionId][round][groupId];
+        if (verifiedCount == 0) {
+            return (0, false);
+        }
+        RoundHistoryUint256Set.Storage storage memberSet = self.memberIdsByGroupId[tokenAddress][actionId][groupId];
+        uint256 indexPlusOne = memberSet.indexPlusOneHistory[memberId].value(round);
+        if (
+            indexPlusOne == 0 || indexPlusOne - 1 >= verifiedCount
+                || memberSet.slotHistory[indexPlusOne - 1].value(round) != memberId
+        ) {
+            return (0, false);
+        }
+        uint256 deduction = self.originScoreDeductionByMemberId[tokenAddress][actionId][round][memberId];
+        return (MAX_ORIGIN_SCORE - deduction, true);
+    }
+
+    function finalScoreAt(
+        Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    ) internal view returns (uint256 score, bool verified) {
+        (score, verified) = originScoreAt(self, tokenAddress, round, actionId, memberId);
+        if (!verified) {
+            // forge-lint: disable-next-line(boolean-cst)
+            return (0, false);
+        }
+        uint256 amount = memberAmountAt(self, tokenAddress, round, actionId, memberId);
+        // forge-lint: disable-next-line(boolean-cst)
+        return (amount * score, true);
     }
 }

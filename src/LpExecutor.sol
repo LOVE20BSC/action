@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {ILpExecutor, LpCreationParams} from "./interfaces/ILpExecutor.sol";
+import {MemberRewardStatus} from "./interfaces/IMemberRewardExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {LpRoundAxis} from "./LpRoundAxis.sol";
@@ -381,17 +382,32 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 round,
         uint256 actionId,
         uint256 memberId
-    ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
-        minted = _memberMinted[tokenAddress][actionId][round][memberId];
-        if (minted) {
-            mintAmount = _mintedRewardByMemberId[tokenAddress][actionId][round][memberId];
-            burnAmount = _burnedRewardByMemberId[tokenAddress][actionId][round][memberId];
-            return (mintAmount, burnAmount, minted);
+    ) external view returns (uint256 pendingAmount, uint256 mintedAmount, MemberRewardStatus status) {
+        if (_memberMinted[tokenAddress][actionId][round][memberId]) {
+            return (0, _mintedRewardByMemberId[tokenAddress][actionId][round][memberId], MemberRewardStatus.Settled);
         }
 
-        uint256 createdRound = _createdRoundByActionId[tokenAddress][actionId];
-        if (createdRound != 0 && round >= createdRound && round <= _mintRound()) {
-            (mintAmount, burnAmount) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
+        if (_isSettleableRound(tokenAddress, round, actionId)) {
+            uint256 pendingBurn;
+            (pendingAmount, pendingBurn) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
+            if (pendingAmount != 0 || pendingBurn != 0) {
+                status = MemberRewardStatus.Pending;
+            }
+        }
+    }
+
+    function lpRewardBurn(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (uint256 pendingAmount, uint256 burnedAmount) {
+        if (_memberMinted[tokenAddress][actionId][round][memberId]) {
+            return (0, _burnedRewardByMemberId[tokenAddress][actionId][round][memberId]);
+        }
+
+        if (_isSettleableRound(tokenAddress, round, actionId)) {
+            (, pendingAmount) = _pendingMemberReward(tokenAddress, round, actionId, memberId);
         }
     }
 
@@ -419,6 +435,15 @@ contract LpExecutor is ILpExecutor, ExecutorBase {
         uint256 actionId
     ) external view returns (address joinedTokenAddress) {
         return _joinTokenAddressByActionId[tokenAddress][actionId];
+    }
+
+    function _isSettleableRound(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId
+    ) private view returns (bool) {
+        uint256 createdRound = _createdRoundByActionId[tokenAddress][actionId];
+        return createdRound != 0 && round >= createdRound && round <= _mintRound();
     }
 
     function _totalEffectiveAmount(

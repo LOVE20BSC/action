@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupActionExecutor} from "../src/GroupActionExecutor.sol";
+import {IMemberRewardExecutor} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {GroupActionCreationParams} from "../src/interfaces/IGroupActionExecutor.sol";
 import {GroupConfig} from "../src/interfaces/IGroupActionManager.sol";
 import {
@@ -206,6 +207,17 @@ abstract contract GroupActionExecutorTestBase {
         executor.onProposalVoted(address(token), round, ACTION_ID, voterId, votes, abi.encode(verifierId));
     }
 
+    function _castVotesForActionAt(
+        uint256 actionId,
+        uint256 voterId,
+        uint256 verifierId,
+        uint256 votes,
+        uint256 round
+    ) internal {
+        vm.prank(address(actionTarget));
+        executor.onProposalVoted(address(token), round, actionId, voterId, votes, abi.encode(verifierId));
+    }
+
     function _activateGroup() internal {
         _activateGroupWith(GROUP_ID, _defaultConfig());
     }
@@ -300,9 +312,9 @@ abstract contract GroupActionExecutorTestBase {
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, GROUP_ID, 0, scores);
     }
 
-    function _settle(uint256 round, uint256 memberId) internal returns (uint256 mintAmount, uint256 burnAmount) {
+    function _settle(uint256 round, uint256 memberId) internal returns (uint256 mintAmount) {
         vm.prank(_memberAddress(memberId));
-        return executor.mintMemberReward(address(token), round, ACTION_ID, memberId);
+        return IMemberRewardExecutor(address(executor)).mintMemberReward(address(token), round, ACTION_ID, memberId);
     }
 
     function _fundExecutor(uint256 amount) internal {

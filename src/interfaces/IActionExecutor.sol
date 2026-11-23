@@ -55,6 +55,10 @@ interface IActionExecutorErrors {
         uint256 actionIdsLength,
         uint256 roundsLength
     );
+    error TooManyMemberRewardActions(
+        uint256 actual,
+        uint256 limit
+    );
     error RoundNotStarted(
         uint256 requiredRound,
         uint256 currentRound
@@ -80,28 +84,10 @@ interface IActionExecutor is IProposalTarget, IActionExecutorEvents, IActionExec
         uint256 actionId,
         uint256 memberId
     ) external;
-    function mintMemberReward(
-        address tokenAddress,
-        uint256 round,
-        uint256 actionId,
-        uint256 memberId
-    ) external returns (uint256 mintAmount, uint256 burnAmount);
-    function mintMemberRewards(
-        address tokenAddress,
-        uint256[] calldata rounds,
-        uint256[] calldata actionIds,
-        uint256 memberId
-    ) external returns (uint256[] memory mintAmounts, uint256[] memory burnAmounts);
 
     function currentVoteRound() external view returns (uint256);
     function currentJoinRound() external view returns (uint256);
     function currentMintRound() external view returns (uint256);
-    function memberReward(
-        address tokenAddress,
-        uint256 round,
-        uint256 actionId,
-        uint256 memberId
-    ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted);
     function joinedAmountByActionId(
         address tokenAddress,
         uint256 round,

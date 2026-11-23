@@ -74,7 +74,52 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
             executor.publicVerifierRatio(address(token), SERVICE_ACTION_ID) == PRECISION / 4,
             "verifier ratio bound"
         );
+        require(
+            executor.providerIncentiveRatio(address(token), SERVICE_ACTION_ID) == 0,
+            "Provider ratio defaults to the creation parameter"
+        );
 
+    }
+
+    function testOnProposalCreatedStoresProviderIncentiveRatio() external {
+        uint256 providerIncentiveRatio = PRECISION / 5;
+        bytes memory creationData = abi.encode(address(token), 0, PRECISION / 2, providerIncentiveRatio);
+
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(address(token), SERVICE_ACTION_ID, creationData);
+
+        (bool success, bytes memory returnData) = address(executor).staticcall(
+            abi.encodeWithSignature("providerIncentiveRatio(address,uint256)", address(token), SERVICE_ACTION_ID)
+        );
+        require(success, "service action exposes its fixed Provider ratio");
+        require(abi.decode(returnData, (uint256)) == providerIncentiveRatio, "creation ratio is stored");
+    }
+
+    function testOnProposalCreatedRejectsProviderRatioAboveOneHundredPercent() external {
+        bytes memory creationData = abi.encode(address(token), 0, PRECISION / 2, PRECISION + 1);
+        vm.expectRevert(abi.encodeWithSignature("InvalidProviderIncentiveRatio(uint256)", PRECISION + 1));
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(address(token), SERVICE_ACTION_ID, creationData);
+    }
+
+    function testOnProposalCreatedAcceptsZeroAndFullProviderRatios() external {
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(
+            address(token), SERVICE_ACTION_ID, abi.encode(address(token), 0, PRECISION / 2, 0)
+        );
+        vm.prank(address(actionTarget));
+        executor.onProposalCreated(
+            address(token), SERVICE_ACTION_ID + 1, abi.encode(address(token), 0, PRECISION / 2, PRECISION)
+        );
+
+        (bool zeroSuccess, bytes memory zeroData) = address(executor).staticcall(
+            abi.encodeWithSignature("providerIncentiveRatio(address,uint256)", address(token), SERVICE_ACTION_ID)
+        );
+        (bool fullSuccess, bytes memory fullData) = address(executor).staticcall(
+            abi.encodeWithSignature("providerIncentiveRatio(address,uint256)", address(token), SERVICE_ACTION_ID + 1)
+        );
+        require(zeroSuccess && abi.decode(zeroData, (uint256)) == 0, "zero market ratio is valid");
+        require(fullSuccess && abi.decode(fullData, (uint256)) == PRECISION, "full market ratio is valid");
     }
 
     function testOnProposalCreatedAcceptsDirectParentToken() external {
@@ -97,17 +142,17 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
         uint256 invalidTokenWord = (uint256(1) << 160) | uint160(address(token));
         _expectCreateRevert(
             address(token),
-            new bytes(95),
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 95, 96)
+            new bytes(127),
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 127, 128)
         );
         _expectCreateRevert(
             address(token),
-            new bytes(97),
-            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 97, 96)
+            new bytes(129),
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataLength.selector, 129, 128)
         );
         _expectCreateRevert(
             address(token),
-            abi.encode(invalidTokenWord, 0, PRECISION - 1),
+            abi.encode(invalidTokenWord, 0, PRECISION - 1, 0),
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidCreationDataEncoding.selector)
         );
         _expectCreateRevert(
@@ -129,6 +174,11 @@ contract GroupServiceConstructorTest is GroupServiceTestBase {
             address(token),
             _serviceTargetData(address(token), 0, 0),
             abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidRatioForPublicVerifier.selector, 0)
+        );
+        _expectCreateRevert(
+            address(token),
+            _serviceTargetData(address(token), 0, PRECISION - 1, PRECISION + 1),
+            abi.encodeWithSelector(IGroupServiceExecutorErrors.InvalidProviderIncentiveRatio.selector, PRECISION + 1)
         );
     }
 

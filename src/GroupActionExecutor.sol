@@ -3,27 +3,24 @@ pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
+import {Pagination} from "@libs/Pagination.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {GroupActionJoin} from "./GroupActionJoin.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {IGroupActionExecutor, IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
-import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
-import {VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
+import {GroupRewardKey, VerifierApplication} from "./interfaces/IGroupActionVerify.sol";
+import {MemberRewardStatus} from "./interfaces/IMemberRewardExecutor.sol";
 import {JoinInfo} from "./interfaces/IGroupActionJoin.sol";
 import {IStake} from "@core/interfaces/IStake.sol";
 import {IPhase} from "@core/interfaces/IPhase.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {LowLevelCall} from "@openzeppelin/contracts/utils/LowLevelCall.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     using GroupActionStorage for GroupActionStorage.Layout;
     using RoundHistoryUint256 for RoundHistoryUint256.History;
-    using SafeERC20 for IERC20;
 
     GroupActionStorage.Layout internal _layout;
 
@@ -80,6 +77,50 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 groupId
     ) external view returns (uint256) {
         return _layout.generatedActionRewardByGroupId(tokenAddress, round, actionId, groupId);
+    }
+
+    function providerWeights(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId
+    ) external view returns (uint256 groupScore, uint256 externalScore, uint256 providerScore) {
+        if (_layout.generatedActionReward[tokenAddress][actionId][round] == 0) return (0, 0, 0);
+        GroupActionStorage.ProviderScores storage scores = _layout.providerScores[tokenAddress][actionId][round][groupId];
+        groupScore = _layout.finalScoreByGroupId[tokenAddress][actionId][round][groupId];
+        externalScore = scores.total;
+        providerScore = scores.byProviderId[providerId];
+    }
+
+    function actionIdsWithProviderWeight(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return Pagination.paginate(
+            _layout.actionIdsWithProviderWeight[tokenAddress][round][groupId], offset, limit, reverse
+        );
+    }
+
+    function providerRewardKeys(
+        address tokenAddress,
+        uint256 round,
+        uint256 providerId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (GroupRewardKey[] memory keys, uint256 totalCount) {
+        GroupRewardKey[] storage candidates = _layout.providerRewardKeys[tokenAddress][round][providerId];
+        totalCount = candidates.length;
+        uint256 count = Pagination.pageCount(totalCount, offset, limit);
+        keys = new GroupRewardKey[](count);
+        for (uint256 i = 0; i < count; i++) {
+            keys[i] = candidates[Pagination.pageIndex(totalCount, offset, i, reverse)];
+        }
     }
 
     function generatedActionReward(
@@ -171,6 +212,14 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
 
     function isGroupMember(uint256 groupId, uint256 memberId) external view returns (bool) {
         return _layout.membershipCountByGroupIdByMemberId[groupId][memberId] != 0;
+    }
+
+    function providerAttribution(
+        uint256 groupId,
+        uint256 memberId
+    ) external view returns (uint256 providerId, uint256 joinedBlock) {
+        GroupActionStorage.ProviderAttribution storage attribution = _layout.providerAttribution[groupId][memberId];
+        return (attribution.providerId, attribution.joinedBlock);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control)
@@ -758,52 +807,31 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 round,
         uint256 actionId,
         uint256 memberId
-    ) external view returns (uint256 mintAmount, uint256 burnAmount, bool minted) {
-        minted = _layout.memberMinted[tokenAddress][actionId][round][memberId];
-        if (minted) {
-            return (
-                _layout.memberMintedReward[tokenAddress][actionId][round][memberId],
-                0,
-                // forge-lint: disable-next-line(boolean-cst)
-                true
-            );
-        }
-
-        uint256 createdRound = _layout.createdRoundByActionId[tokenAddress][actionId];
-        if (createdRound == 0 || round < createdRound || round > _mintRound()) {
-            // forge-lint: disable-next-line(boolean-cst)
-            return (0, 0, false);
-        }
-        uint256 totalFinal = _layout.totalFinalScore[tokenAddress][actionId][round];
-        if (totalFinal == 0 || !GroupActionVerify.isRoundVerified(_layout, tokenAddress, round, actionId)) {
-            // forge-lint: disable-next-line(boolean-cst)
-            return (0, 0, false);
-        }
-        uint256 memberFinalScore = _memberFinalScore(tokenAddress, round, actionId, memberId);
-        if (memberFinalScore == 0) {
-            // forge-lint: disable-next-line(boolean-cst)
-            return (0, 0, false);
-        }
-        (uint256 proposalReward, ) = IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, round, actionId);
-        // forge-lint: disable-next-line(boolean-cst)
-        return (Math.mulDiv(proposalReward, memberFinalScore, totalFinal), 0, false);
-    }
-
-    function _memberFinalScore(
-        address tokenAddress,
-        uint256 round,
-        uint256 actionId,
-        uint256 memberId
-    ) internal view returns (uint256) {
-        (uint256 score, ) = GroupActionVerify.finalScore(_layout, tokenAddress, round, actionId, memberId);
-        return score;
+    ) external view returns (uint256 pendingAmount, uint256 mintedAmount, MemberRewardStatus status) {
+        return GroupActionJoin.memberReward(
+            _layout,
+            ACTION_TARGET_ADDRESS,
+            PHASE_ADDRESS,
+            GroupActionJoin.MemberRewardKey({tokenAddress: tokenAddress, round: round, actionId: actionId, memberId: memberId})
+        );
     }
 
     function _mintRound() internal view override returns (uint256) {
         return GroupActionRoundAxis.mintRound(PHASE_ADDRESS);
     }
 
-    // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
+    function _mintMemberRewards(
+        address tokenAddress,
+        uint256[] calldata rounds,
+        uint256[] calldata actionIds,
+        uint256 memberId
+    ) internal override returns (uint256[] memory mintAmounts) {
+        GroupActionJoin.MemberRewardBatch memory batch = GroupActionJoin.MemberRewardBatch({
+            tokenAddress: tokenAddress, memberId: memberId, rounds: rounds, actionIds: actionIds
+        });
+        return GroupActionJoin.mintMemberRewards(_layout, _protocol(), batch);
+    }
+
     function _mintMemberReward(
         address tokenAddress,
         uint256 round,
@@ -819,46 +847,11 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
             _layout.memberMinted[tokenAddress][actionId][round][memberId]
         );
 
-        uint256 totalFinal = _layout.totalFinalScore[tokenAddress][actionId][round];
-        bool verified = GroupActionVerify.isRoundVerified(_layout, tokenAddress, round, actionId);
-        uint256 memberFinalScore = _memberFinalScore(tokenAddress, round, actionId, memberId);
-        if (verified && totalFinal != 0 && memberFinalScore != 0) {
-            (uint256 proposalReward, bool actionMinted) =
-                IActionTarget(ACTION_TARGET_ADDRESS).actionReward(tokenAddress, round, actionId);
-            if (!actionMinted && proposalReward != 0) {
-                // forge-lint: disable-next-line(reentrancy-no-eth)
-                proposalReward = IActionTarget(ACTION_TARGET_ADDRESS).mintActionReward(tokenAddress, round, actionId);
-            }
-            if (proposalReward == 0) {
-                revert MemberRewardPoolEmpty(tokenAddress, round);
-            }
-            mintAmount = Math.mulDiv(proposalReward, memberFinalScore, totalFinal);
-        }
-
-        if (mintAmount == 0 && burnAmount == 0) {
-            if (!verified || totalFinal == 0) {
-                revert MemberRewardPoolEmpty(tokenAddress, round);
-            }
-            if (memberFinalScore == 0) {
-                revert ZeroFinalScore(tokenAddress, actionId, memberId);
-            }
-            revert MemberRewardRoundedToZero(tokenAddress, round, memberId);
-        }
-
-        _layout.memberMinted[tokenAddress][actionId][round][memberId] = true;
-        _layout.memberMintedReward[tokenAddress][actionId][round][memberId] = mintAmount;
-
-        if (mintAmount != 0) {
-            IERC20(tokenAddress).safeTransfer(msg.sender, mintAmount);
-        }
-
-        emit MemberRewardMinted({
-            tokenAddress: tokenAddress,
-            actionId: actionId,
-            memberId: memberId,
-            round: round,
-            mintAmount: mintAmount,
-            burnAmount: burnAmount
-        });
+        mintAmount = GroupActionJoin.mintMemberReward(
+            _layout,
+            ACTION_TARGET_ADDRESS,
+            GroupActionJoin.MemberRewardKey({tokenAddress: tokenAddress, round: round, actionId: actionId, memberId: memberId})
+        );
+        burnAmount = 0;
     }
 }

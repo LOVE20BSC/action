@@ -3,6 +3,8 @@ pragma solidity =0.8.37;
 
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
+import {Pagination} from "@libs/Pagination.sol";
+import {GroupRewardKey} from "../../src/interfaces/IGroupActionVerify.sol";
 
 import {IPhase} from "@core/interfaces/IPhase.sol";
 
@@ -329,6 +331,16 @@ contract MockGroupServiceGroupActionExecutor {
     mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))) internal _joinedActions;
     mapping(address => mapping(uint256 => Uint256Set.Storage)) internal _generatedActions;
     bool internal _groupSliceReadsBlocked;
+    struct MarketScores {
+        uint256 externalScore;
+        mapping(uint256 => uint256) providerScore;
+    }
+
+    mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => MarketScores)))) internal _markets;
+    mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage))) internal _marketActions;
+    mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardKey[]))) internal _providerKeys;
+    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal _preparedGroupReward;
+    mapping(address => mapping(uint256 => mapping(uint256 => bool))) internal _hasPreparedGroupReward;
     // tokenAddress => total staked
     mapping(address => mapping(uint256 => uint256)) internal _totalStaked;
     // tokenAddress => memberId => total staked
@@ -421,6 +433,47 @@ contract MockGroupServiceGroupActionExecutor {
         _groupSliceReadsBlocked = blocked;
     }
 
+    function setPreparedGroupReward(address tokenAddress, uint256 round, uint256 groupId, uint256 reward) external {
+        _preparedGroupReward[tokenAddress][round][groupId] = reward;
+        _hasPreparedGroupReward[tokenAddress][round][groupId] = true;
+    }
+
+    function setMarketScores(
+        address tokenAddress, uint256 round, uint256 actionId, uint256 groupId,
+        uint256 externalScore, uint256 providerId, uint256 providerScore
+    ) external {
+        MarketScores storage scores = _markets[tokenAddress][actionId][round][groupId];
+        scores.externalScore = externalScore;
+        if (scores.providerScore[providerId] == 0 && providerScore != 0) {
+            _providerKeys[tokenAddress][round][providerId].push(GroupRewardKey(actionId, groupId));
+        }
+        scores.providerScore[providerId] = providerScore;
+        _marketActions[tokenAddress][round][groupId].add(actionId);
+    }
+
+    function providerWeights(address tokenAddress, uint256 round, uint256 actionId, uint256 groupId, uint256 providerId)
+        external view returns (uint256, uint256, uint256)
+    {
+        MarketScores storage scores = _markets[tokenAddress][actionId][round][groupId];
+        return (_verifiedAction[tokenAddress][actionId][round].scoreByGroupId[groupId], scores.externalScore, scores.providerScore[providerId]);
+    }
+
+    function actionIdsWithProviderWeight(address tokenAddress, uint256 round, uint256 groupId, uint256 offset, uint256 limit, bool reverse)
+        external view returns (uint256[] memory, uint256)
+    {
+        return _marketActions[tokenAddress][round][groupId].values(offset, limit, reverse);
+    }
+
+    function providerRewardKeys(address tokenAddress, uint256 round, uint256 providerId, uint256 offset, uint256 limit, bool reverse)
+        external view returns (GroupRewardKey[] memory keys, uint256 totalCount)
+    {
+        GroupRewardKey[] storage all = _providerKeys[tokenAddress][round][providerId];
+        totalCount = all.length;
+        uint256[] memory indices = Pagination.paginateIndices(totalCount, offset, limit, reverse);
+        keys = new GroupRewardKey[](indices.length);
+        for (uint256 i; i < indices.length; ++i) keys[i] = all[indices[i]];
+    }
+
     function setTotalStaked(address tokenAddress, uint256 round, uint256 amount) external {
         _totalStaked[tokenAddress][round] = amount;
     }
@@ -461,6 +514,9 @@ contract MockGroupServiceGroupActionExecutor {
         view
         returns (uint256 weight)
     {
+        if (_hasPreparedGroupReward[tokenAddress][round][groupId]) {
+            return _preparedGroupReward[tokenAddress][round][groupId];
+        }
         if (_joinedActions[tokenAddress][round][groupId].count() == 0) return 0;
         (uint256[] memory actionIds,) = _generatedActions[tokenAddress][round].values(0, type(uint256).max, false);
         for (uint256 i = 0; i < actionIds.length; ++i) {

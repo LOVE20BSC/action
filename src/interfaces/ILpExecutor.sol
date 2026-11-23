@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionExecutor} from "./IActionExecutor.sol";
+import {IMemberRewardExecutor} from "./IMemberRewardExecutor.sol";
 
 struct LpCreationParams {
     address joinTokenAddress;
@@ -68,7 +69,7 @@ interface ILpExecutorEvents {
     );
 }
 
-interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
+interface ILpExecutor is IActionExecutor, IMemberRewardExecutor, ILpExecutorErrors, ILpExecutorEvents {
     function PAIR_FACTORY_ADDRESS() external view returns (address);
 
     function govRatioMultiplier(address tokenAddress, uint256 actionId) external view returns (uint256);
@@ -114,4 +115,11 @@ interface ILpExecutor is IActionExecutor, ILpExecutorErrors, ILpExecutorEvents {
         uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 ratio, bool minted);
+
+    function lpRewardBurn(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 memberId
+    ) external view returns (uint256 pendingAmount, uint256 burnedAmount);
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 import {LpExecutorTestBase} from "./LpExecutorTestBase.sol";
 
@@ -82,10 +83,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
 
         (uint256 expectedMint, uint256 expectedBurn) =
             _referenceReward(reward, validVotes, totalGovVotes, multiplier);
-        (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
-        require(mintedBefore == false, "not minted yet");
-        require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending matches the reference");
+        _assertPendingSplit(expectedMint, expectedBurn);
 
         (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, SECOND_ACTION_ID, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "split matches the reference");
@@ -127,9 +125,9 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
     function test_ZeroBoundaries(uint256 effectiveAmount, uint256 totalVotes, uint256 multiplier) external {
         _atPhase(4);
         _setActionReward(2, ACTION_ID, PROPOSAL_REWARD, true);
-        (uint256 idleMint, uint256 idleBurn, bool idleMinted) =
+        (uint256 idleMint, uint256 alreadyPaid, MemberRewardStatus idleStatus) =
             lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(!idleMinted && idleMint == 0 && idleBurn == 0, "zero total effective amount");
+        require(idleStatus == MemberRewardStatus.Unavailable && idleMint == 0 && alreadyPaid == 0, "zero total effective amount");
 
         uint256 memberAmount = effectiveAmount % 1e24 + 1e18;
         uint256 totalGovVotes = totalVotes % 1e24;
@@ -165,10 +163,7 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
             expectedBurn = theoreticalReward - expectedMint;
         }
 
-        (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
-            lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
-        require(!mintedBefore, "not minted yet");
-        require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending zero boundary");
+        _assertPendingSplit(expectedMint, expectedBurn);
 
         (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, SECOND_ACTION_ID, 1);
         require(mintAmount == expectedMint && burnAmount == expectedBurn, "zero boundary split");
@@ -189,6 +184,14 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
             )
         );
         lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
+    }
+
+    function _assertPendingSplit(uint256 expectedMint, uint256 expectedBurn) private view {
+        (uint256 pendingMint, uint256 paid, MemberRewardStatus status) =
+            lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
+        (uint256 pendingBurn, uint256 burned) = lpExecutor.lpRewardBurn(address(token), 2, SECOND_ACTION_ID, 1);
+        require(paid == 0 && burned == 0 && status == MemberRewardStatus.Pending, "reward awaits settlement");
+        require(pendingMint == expectedMint && pendingBurn == expectedBurn, "pending matches the reference");
     }
 
     function _referenceReward(

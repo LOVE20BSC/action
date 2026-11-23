@@ -8,6 +8,7 @@ import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecut
 import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
 import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
+import {IMemberRewardExecutor, MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 import {IActionTargetErrors} from "../../src/interfaces/IActionTarget.sol";
 import {MockExecutor} from "../mocks/ActionTargetMocks.sol";
 import {MockUniswapV2Factory, MockUniswapV2Router} from "../mocks/UniswapV2Mocks.sol";
@@ -236,7 +237,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
 
     function _createServiceActionProposal(GroupServiceExecutor service) internal returns (uint256) {
         bytes memory creationData =
-            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(token), 0, 5e17)));
+            abi.encodePacked(address(service), abi.encode(GroupServiceCreationParams(address(token), 0, 5e17, 0)));
         return _submitActionProposal(2, "Group service", creationData);
     }
 
@@ -336,19 +337,20 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
     )
         internal
     {
-        (uint256 preview,, bool claimed) = service.memberReward(address(token), round, serviceActionId, 1);
-        require(!claimed && preview == serviceReward / 2 && preview > 0, "owner preview after deactivation");
+        IMemberRewardExecutor rewards = IMemberRewardExecutor(address(service));
+        (uint256 preview,, MemberRewardStatus status) = rewards.memberReward(address(token), round, serviceActionId, 1);
+        require(status == MemberRewardStatus.Pending && preview == serviceReward / 2 && preview > 0, "owner preview after deactivation");
         uint256 balanceBefore = token.balanceOf(member1);
         vm.prank(member1);
-        (uint256 paid, uint256 burned) = service.mintMemberReward(address(token), round, serviceActionId, 1);
-        require(paid == preview && burned == 0 && token.balanceOf(member1) - balanceBefore == paid, "owner paid");
+        uint256 paid = rewards.mintMemberReward(address(token), round, serviceActionId, 1);
+        require(paid == preview && token.balanceOf(member1) - balanceBefore == paid, "owner paid");
 
         vm.prank(member2);
-        (paid, burned) = service.mintMemberReward(address(token), round, serviceActionId, 2);
-        require(paid == serviceReward / 2 && burned == 0, "verifier paid from recorded weight");
+        paid = rewards.mintMemberReward(address(token), round, serviceActionId, 2);
+        require(paid == serviceReward / 2, "verifier paid from recorded weight");
     }
 
-    function testRealIntegration_ActionLifecycle() external {
+    function testRealIntegration_CustomExecutorWithoutMemberRewardCanMintActionReward() external {
         uint256 proposalId = _createActionProposal(1);
         require(proposalId == 1, "first proposal");
         _assertCreationCallbacks(proposalId);
@@ -432,19 +434,17 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         require(expectedAmount > 0, "reward available");
         (uint256 quotedAmount, bool mintedBefore) = actionTarget.actionReward(address(token), round, proposalId);
         require(quotedAmount == expectedAmount && mintedBefore == false, "expected amount before mint");
-        vm.prank(address(executor));
-        uint256 amount = actionTarget.mintActionReward(address(token), round, proposalId);
+        uint256 amount = executor.mintActionBudget(address(token), round, proposalId);
         require(amount == expectedAmount, "minted amount matches quote");
         require(token.balanceOf(address(executor)) == amount, "executor received the full reward");
         require(mint.totalRewardMinted(address(token)) == amount, "mint ledger matches");
         (uint256 recorded, bool mintedFlag) = actionTarget.actionReward(address(token), round, proposalId);
         require(recorded == amount && mintedFlag, "action reward query");
 
-        vm.prank(address(executor));
         vm.expectRevert(
             abi.encodeWithSelector(IMintErrors.ProposalRewardAlreadyMinted.selector, address(token), round, proposalId)
         );
-        actionTarget.mintActionReward(address(token), round, proposalId);
+        executor.mintActionBudget(address(token), round, proposalId);
     }
 
     function testRealIntegration_JoinWindowAndForceClearJoinState() external {

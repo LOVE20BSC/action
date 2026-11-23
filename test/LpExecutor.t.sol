@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {LpExecutor} from "../src/LpExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
+import {IMemberRewardExecutor, MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {ILpExecutorErrors} from "../src/interfaces/ILpExecutor.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {
@@ -620,9 +621,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(actionTarget.lastMintActionId() == ACTION_ID, "action forwarded");
         require(actionTarget.lastMintRound() == 2, "round forwarded");
 
-        (uint256 recordedMint, uint256 recordedBurn, bool minted) =
+        (uint256 pending, uint256 recordedMint, MemberRewardStatus status) =
             lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(minted && recordedMint == 200e18 && recordedBurn == 800e18, "settlement recorded");
+        (, uint256 recordedBurn) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        require(pending == 0 && status == MemberRewardStatus.Settled && recordedMint == 200e18, "settlement recorded");
+        require(recordedBurn == 800e18, "burn recorded");
         (uint256 ratio, bool ratioMinted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(ratioMinted && ratio == 1e17, "gov ratio snapshot at mint");
     }
@@ -685,12 +688,20 @@ contract LpExecutorTest is LpExecutorTestBase {
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
+        IMemberRewardExecutor rewards = IMemberRewardExecutor(address(lpExecutor));
+        (uint256 pending, uint256 paid, MemberRewardStatus status) = rewards.memberReward(address(token), 2, ACTION_ID, 1);
+        require(pending == 0 && paid == 0 && status == MemberRewardStatus.Pending, "pure burn is executable");
+        (uint256 pendingBurn, uint256 burned) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        require(pendingBurn == PROPOSAL_REWARD && burned == 0, "burn is pending");
         uint256 memberBefore = token.balanceOf(MEMBER1);
-        (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
-        require(mintAmount == 0, "nothing minted");
-        require(burnAmount == PROPOSAL_REWARD, "theoretical reward burned");
+        vm.prank(MEMBER1);
+        require(rewards.mintMemberReward(address(token), 2, ACTION_ID, 1) == 0, "nothing paid");
         require(token.balanceOf(MEMBER1) == memberBefore, "no transfer");
         require(token.burnCalls() == 1 && token.lastBurnAmount() == PROPOSAL_REWARD, "pure burn");
+        (pending, paid, status) = rewards.memberReward(address(token), 2, ACTION_ID, 1);
+        require(pending == 0 && paid == 0 && status == MemberRewardStatus.Settled, "pure burn settles the reward");
+        (pendingBurn, burned) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        require(pendingBurn == 0 && burned == PROPOSAL_REWARD, "burn is recorded");
     }
 
     function testMintMemberRewardMintsAllWhenCapAboveLpRatio() external {
@@ -746,8 +757,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         );
         lpExecutor.mintMemberReward(address(token), 2, ACTION_ID, 1);
         require(actionTarget.mintRewardCalls() == 0, "no pull without effective participation");
-        (,, bool minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(!minted, "not marked minted");
+        (,, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        require(status == MemberRewardStatus.Unavailable, "no member reward without effective participation");
     }
 
     function testMintMemberRewardRevertsForNonParticipant() external {
@@ -765,8 +776,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         );
         lpExecutor.mintMemberReward(address(token), 2, ACTION_ID, 2);
         require(token.balanceOf(MEMBER2) == memberBefore, "no transfer");
-        (,, bool minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 2);
-        require(!minted, "not marked minted");
+        (,, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 2);
+        require(status == MemberRewardStatus.Unavailable, "no share for non-participant");
     }
 
     function testMintMemberRewardRevertsOnZeroProposalReward() external {
@@ -862,8 +873,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(MockLpActionTarget.MintActionRewardReverted.selector));
         lpExecutor.mintMemberReward(address(token), 2, ACTION_ID, 1);
 
-        (,, bool minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(minted == false, "settlement rolled back");
+        (,, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        require(status == MemberRewardStatus.Pending, "settlement rolled back");
         require(token.burnCalls() == 0, "burn rolled back");
     }
 
@@ -879,8 +890,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(token)));
         lpExecutor.mintMemberReward(address(token), 2, ACTION_ID, 1);
 
-        (,, bool minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(minted == false, "settlement rolled back");
+        (,, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        require(status == MemberRewardStatus.Pending, "settlement rolled back");
         require(token.burnCalls() == 0, "burn rolled back");
         require(token.balanceOf(address(lpExecutor)) == PROPOSAL_REWARD, "reward retained by the executor");
     }
@@ -922,12 +933,14 @@ contract LpExecutorTest is LpExecutorTestBase {
         rounds[1] = 2;
 
         vm.prank(MEMBER1);
-        (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
+        uint256[] memory mintAmounts = lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
 
-        require(mintAmounts.length == 2 && burnAmounts.length == 2, "aligned lengths");
-        require(mintAmounts[0] == 200e18 && burnAmounts[0] == 800e18, "capped action");
-        require(mintAmounts[1] == PROPOSAL_REWARD && burnAmounts[1] == 0, "uncapped action");
+        require(mintAmounts.length == 2, "aligned length");
+        require(mintAmounts[0] == 200e18, "capped action");
+        require(mintAmounts[1] == PROPOSAL_REWARD, "uncapped action");
+        (, uint256 cappedBurn) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        (, uint256 uncappedBurn) = lpExecutor.lpRewardBurn(address(token), 2, SECOND_ACTION_ID, 1);
+        require(cappedBurn == 800e18 && uncappedBurn == 0, "burns recorded by action");
         require(actionTarget.mintRewardCalls() == 0, "no pulls for recorded rewards");
     }
 
@@ -947,10 +960,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         rounds[1] = 3;
 
         vm.prank(MEMBER1);
-        (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
+        uint256[] memory mintAmounts = lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
         require(mintAmounts[0] == 200e18 && mintAmounts[1] == 100e18, "per round mints");
-        require(burnAmounts[0] == 800e18 && burnAmounts[1] == 400e18, "per round burns");
+        (, uint256 firstBurn) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        (, uint256 secondBurn) = lpExecutor.lpRewardBurn(address(token), 3, ACTION_ID, 1);
+        require(firstBurn == 800e18 && secondBurn == 400e18, "per round burns");
     }
 
     function testMintMemberRewardsRejectsLengthMismatch() external {
@@ -972,11 +986,10 @@ contract LpExecutorTest is LpExecutorTestBase {
     function testMintMemberRewardsEmptyArraysDoNothing() external {
         uint256[] memory empty = new uint256[](0);
         vm.prank(MEMBER1);
-        (uint256[] memory mintAmounts, uint256[] memory burnAmounts) =
-            lpExecutor.mintMemberRewards(address(token), empty, empty, 1);
-        require(mintAmounts.length == 0 && burnAmounts.length == 0, "empty result");
-        (,, bool minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(minted == false, "no state change");
+        uint256[] memory mintAmounts = lpExecutor.mintMemberRewards(address(token), empty, empty, 1);
+        require(mintAmounts.length == 0, "empty result");
+        (,, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        require(status == MemberRewardStatus.Unavailable, "no state change");
     }
 
     function testMintMemberRewardsRollsBackAllOnElementFailure() external {
@@ -992,9 +1005,10 @@ contract LpExecutorTest is LpExecutorTestBase {
         actionIds[0] = ACTION_ID;
         actionIds[1] = ACTION_ID;
         uint256[] memory rounds = new uint256[](2);
-        rounds[0] = 2;
-        rounds[1] = 3;
+        rounds[0] = 3;
+        rounds[1] = 2;
 
+        uint256 balance = token.balanceOf(MEMBER1);
         vm.prank(MEMBER1);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -1003,8 +1017,9 @@ contract LpExecutorTest is LpExecutorTestBase {
         );
         lpExecutor.mintMemberRewards(address(token), rounds, actionIds, 1);
 
-        (,, bool minted) = lpExecutor.memberReward(address(token), 3, ACTION_ID, 1);
-        require(minted == false, "later element rolled back");
+        (uint256 pending, uint256 paid, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 3, ACTION_ID, 1);
+        require(pending == 100e18 && paid == 0 && status == MemberRewardStatus.Pending, "first element rolled back");
+        require(token.balanceOf(MEMBER1) == balance && token.burnCalls() == 1, "batch transfers and burns rolled back");
     }
 
     function testCurrentRoundsFollowPhaseMapping() external {
@@ -1063,11 +1078,13 @@ contract LpExecutorTest is LpExecutorTestBase {
         _atPhase(4);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
-        (uint256 pendingMint, uint256 pendingBurn,) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        (uint256 pendingMint,,) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        (uint256 pendingBurn,) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
         require(pendingMint == 200e18 && pendingBurn == 800e18, "initial cap");
         stake.setTotalGovVotes(address(token), 1200e18);
         stake.setGovVotes(address(token), 1, 300e18);
-        (pendingMint, pendingBurn,) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        (pendingMint,,) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        (pendingBurn,) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
         require(pendingMint == 500e18 && pendingBurn == 500e18, "latest numerator and denominator set the cap");
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(!minted && ratio == 25e16, "pending ratio follows the latest votes");
@@ -1080,8 +1097,11 @@ contract LpExecutorTest is LpExecutorTestBase {
         stake.setTotalGovVotes(address(token), 3000e18);
         (ratio, minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(minted && ratio == 25e16, "stake changes do not rewrite the settlement ratio");
-        (pendingMint, pendingBurn, minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(minted && pendingMint == 500e18 && pendingBurn == 500e18, "settled rewards stay fixed");
+        {
+            (uint256 pending, uint256 paid, MemberRewardStatus status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+            (, uint256 burned) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+            require(status == MemberRewardStatus.Settled && pending == 0 && paid == 500e18 && burned == 500e18, "settled rewards stay fixed");
+        }
         (ratio, minted) = lpExecutor.govRatio(address(token), 3, ACTION_ID, 1);
         require(minted == false && ratio == 1e17, "unminted round follows the latest total votes");
     }
@@ -1100,17 +1120,19 @@ contract LpExecutorTest is LpExecutorTestBase {
         actionTarget.setMintReturnAmount(PROPOSAL_REWARD);
         _fundExecutor(PROPOSAL_REWARD);
 
-        (uint256 pendingMint, uint256 pendingBurn, bool mintedBefore) =
+        (uint256 pendingMint, uint256 paid, MemberRewardStatus status) =
             lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(mintedBefore == false, "not minted yet");
+        (uint256 pendingBurn, uint256 burned) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        require(status == MemberRewardStatus.Pending && paid == 0 && burned == 0, "unsettled reward");
         require(pendingMint == 200e18 && pendingBurn == 800e18, "pending computation");
 
         (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, 1);
         require(mintAmount == pendingMint && burnAmount == pendingBurn, "settlement matches the quote");
 
-        (uint256 recordedMint, uint256 recordedBurn, bool mintedAfter) =
-            lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(mintedAfter && recordedMint == mintAmount && recordedBurn == burnAmount, "recorded values");
+        (pendingMint, paid, status) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
+        (pendingBurn, burned) = lpExecutor.lpRewardBurn(address(token), 2, ACTION_ID, 1);
+        require(status == MemberRewardStatus.Settled && pendingMint == 0 && pendingBurn == 0, "settled reward");
+        require(paid == mintAmount && burned == burnAmount, "recorded values");
     }
 
     function testMemberRewardReturnsZeroOutsideRange() external {
@@ -1118,29 +1140,29 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(1, 100e18);
         _atPhase(4);
 
-        (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            lpExecutor.memberReward(address(token), 1, ACTION_ID, 1);
-        require(mintAmount == 0 && burnAmount == 0 && minted == false, "before creation");
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), 3, ACTION_ID, 1);
-        require(mintAmount == 0 && burnAmount == 0 && minted == false, "after mint round");
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 2);
-        require(mintAmount == 0 && burnAmount == 0 && minted == false, "non participant");
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), 2, SECOND_ACTION_ID, 1);
-        require(mintAmount == 0 && burnAmount == 0 && minted == false, "unbound action");
+        _assertUnavailableReward(1, ACTION_ID, 1, "before creation");
+        _assertUnavailableReward(3, ACTION_ID, 1, "after mint round");
+        _assertUnavailableReward(2, ACTION_ID, 2, "non participant");
+        _assertUnavailableReward(2, SECOND_ACTION_ID, 1, "unbound action");
     }
 
     function testMemberRewardPendingReturnsZeroWithoutEffectiveParticipation() external {
         _atPhase(4);
-        (uint256 mintAmount, uint256 burnAmount, bool minted) =
-            lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(mintAmount == 0 && burnAmount == 0 && minted == false, "round without participants");
+        _assertUnavailableReward(2, ACTION_ID, 1, "round without participants");
 
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _withdraw(1, 100e18);
         _atPhase(4);
-        (mintAmount, burnAmount, minted) = lpExecutor.memberReward(address(token), 2, ACTION_ID, 1);
-        require(mintAmount == 0 && burnAmount == 0 && minted == false, "fully withdrawn round");
+        _assertUnavailableReward(2, ACTION_ID, 1, "fully withdrawn round");
+    }
+
+    function _assertUnavailableReward(uint256 round, uint256 actionId, uint256 memberId, string memory reason)
+        private view
+    {
+        (uint256 pending, uint256 paid, MemberRewardStatus status) =
+            lpExecutor.memberReward(address(token), round, actionId, memberId);
+        require(pending == 0 && paid == 0 && status == MemberRewardStatus.Unavailable, reason);
     }
 
     function testUnallocatedRoundBlocksSettlement() external {
