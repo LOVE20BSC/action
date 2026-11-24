@@ -75,6 +75,12 @@ library GroupServiceStorage {
         uint256 provider;
     }
 
+    struct ShareMintResult {
+        uint256 mintAmount;
+        bool previouslyMinted;
+        bool hasEligibleWeight;
+    }
+
     struct Layout {
         // serviceTokenAddress => serviceActionId => action token address
         mapping(address => mapping(uint256 => address)) actionTokenAddressByActionId;

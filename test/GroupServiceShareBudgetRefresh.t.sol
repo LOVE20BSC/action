@@ -187,16 +187,127 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         require(actionTarget.mintRewardCalls() == 1, "already-minted budget is not retried");
     }
 
-    function testProviderRoleMintRollsBackBudgetWhenAllSharesRoundToZero() external {
+    function testRoundClaimsCheckMintWindowBeforeEmptyPool() external {
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0.5e18, 0.5e18);
+        _atPhase(VERIFY_PHASE);
+
+        _expectRoundClaimsToRevert(abi.encodeWithSelector(
+            IActionExecutorErrors.RoundAfterMintWindow.selector, SERVICE_ROUND, SERVICE_ROUND - 1
+        ));
+    }
+
+    function testRoundClaimsRejectEmptySourcePool() external {
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0.5e18, 0.5e18);
+        _armServiceReward(SERVICE_REWARD);
+        _atPhase(MINT_PHASE);
+
+        _expectRoundClaimsToRevert(abi.encodeWithSelector(
+            IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), SERVICE_ROUND
+        ));
+        require(actionTarget.mintRewardCalls() == 0, "empty source pool cannot mint");
+    }
+
+    function testRoundClaimsRejectEmptyServicePoolBeforeCheckingMemberWeight() external {
+        _prepareSingleGroup(0, 200, 100, 0.5e18, 50, 50);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        _atPhase(MINT_PHASE);
+
+        _expectRoundClaimsToRevert(abi.encodeWithSelector(
+            IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), SERVICE_ROUND
+        ));
+        require(actionTarget.mintRewardCalls() == 0, "empty service pool cannot mint");
+    }
+
+    function testRoundClaimsRollBackWhenActualServiceBudgetIsZero() external {
+        _prepareSingleGroup(200, 0, 100, 0.5e18, 50, 50);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        _atPhase(MINT_PHASE);
+
+        _expectRoundClaimsToRevert(abi.encodeWithSelector(
+            IActionExecutorErrors.MemberRewardPoolEmpty.selector, address(token), SERVICE_ROUND
+        ));
+        require(actionTarget.mintRewardCalls() == 0 && token.balanceOf(MEMBER1) == 0, "empty budget mint rolls back");
+    }
+
+    function testRoundProviderClaimRepricesZeroPreviewUsingActualBudget() external {
+        _prepareSingleGroup(1, 200, 100, 0.5e18, 50, 50);
+        _atPhase(MINT_PHASE);
+
+        (uint256 pending,,) = executor.providerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        require(pending == 0, "provider preview rounds to zero");
+        vm.prank(MEMBER1);
+        require(executor.mintProviderReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID) == 25);
+        require(actionTarget.mintRewardCalls() == 1, "provider uses the actual budget");
+    }
+
+    function testRoundRecipientClaimRepricesZeroPreviewUsingActualBudget() external {
+        _prepareSingleGroup(1, 200, 100, 0.5e18, 50, 50);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        _atPhase(MINT_PHASE);
+
+        (uint256 pending,,) = executor.recipientReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        require(pending == 0, "recipient preview rounds to zero");
+        vm.prank(MEMBER1);
+        require(executor.mintRecipientReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID) == 37);
+        require(actionTarget.mintRewardCalls() == 1, "recipient uses the actual budget");
+    }
+
+    function testUnrewardedSourcesHaveNoMemberWeight() external {
+        _prepareSingleGroup(200, 200, 100, 0.5e18, 50, 50);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        groupAction.setActionReward(address(token), SERVICE_ROUND, GROUP_ACTION_ID, 0);
+        _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        _atPhase(MINT_PHASE);
+
+        _expectRoundClaimsToRevert(abi.encodeWithSelector(
+            IActionExecutorErrors.ZeroRewardWeight.selector, address(token), SERVICE_ACTION_ID, MEMBER1_ID
+        ));
+        require(actionTarget.mintRewardCalls() == 0, "unrewarded sources cannot mint");
+    }
+
+    function testProviderClaimsRollBackBudgetWhenAllSharesRoundToZero() external {
         _prepareSingleGroup(4, 4, 3, PRECISION, 1, 1);
         _atPhase(MINT_PHASE);
 
-        vm.expectRevert(abi.encodeWithSelector(
+        bytes memory expected = abi.encodeWithSelector(
             IActionExecutorErrors.MemberRewardRoundedToZero.selector, address(token), SERVICE_ROUND, MEMBER1_ID
-        ));
+        );
+        vm.expectRevert(expected);
         vm.prank(MEMBER1);
         executor.mintProviderReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
-        require(actionTarget.mintRewardCalls() == 0 && token.balanceOf(MEMBER1) == 0, "zero role reward rolls back");
+        vm.expectRevert(expected);
+        vm.prank(MEMBER1);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        require(actionTarget.mintRewardCalls() == 0 && token.balanceOf(MEMBER1) == 0, "zero provider reward rolls back");
+    }
+
+    function testRecipientClaimsRollBackBudgetWhenAllSharesRoundToZero() external {
+        _prepareSingleGroup(2, 2, 100, 0, 0, 0);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        _atPhase(MINT_PHASE);
+
+        bytes memory expected = abi.encodeWithSelector(
+            IActionExecutorErrors.MemberRewardRoundedToZero.selector, address(token), SERVICE_ROUND, MEMBER1_ID
+        );
+        vm.expectRevert(expected);
+        vm.prank(MEMBER1);
+        executor.mintRecipientReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        vm.expectRevert(expected);
+        vm.prank(MEMBER1);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        require(actionTarget.mintRewardCalls() == 0 && token.balanceOf(MEMBER1) == 0, "zero recipient reward rolls back");
+    }
+
+    function _expectRoundClaimsToRevert(bytes memory expected) private {
+        vm.expectRevert(expected);
+        vm.prank(MEMBER1);
+        executor.mintRecipientReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        vm.expectRevert(expected);
+        vm.prank(MEMBER1);
+        executor.mintProviderReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        vm.expectRevert(expected);
+        vm.prank(MEMBER1);
+        executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
     }
 
     function _prepareSingleGroup(

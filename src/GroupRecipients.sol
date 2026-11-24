@@ -46,15 +46,10 @@ library GroupRecipients {
         GroupServiceStorage.PrimaryRole role,
         bool includeOwnerProviderWeight
     ) private view returns (GroupServiceStorage.Settlement memory settlementInfo) {
-        IGroupActionExecutor source = IGroupActionExecutor(protocol.groupActionExecutorAddress);
-        settlementInfo.actionTokenAddress = self.actionTokenAddressByActionId[key.tokenAddress][key.actionId];
-        settlementInfo.denominator = source.totalGeneratedActionReward(settlementInfo.actionTokenAddress, key.round);
-        if (settlementInfo.denominator == 0) {
-            settlementInfo.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
-            return settlementInfo;
-        }
+        settlementInfo = _settlementPool(self, protocol, key);
+        if (settlementInfo.cause == GroupServiceStorage.SettlementCause.PoolEmpty) return settlementInfo;
 
-        settlementInfo.providerIncentiveRatio = self.providerIncentiveRatioByActionId[key.tokenAddress][key.actionId];
+        IGroupActionExecutor source = IGroupActionExecutor(protocol.groupActionExecutorAddress);
         if (role != GroupServiceStorage.PrimaryRole.Owner) {
             settlementInfo.verifierWeight = source
                 .totalGeneratedActionRewardByVerifierId(settlementInfo.actionTokenAddress, key.round, key.memberId);
@@ -73,8 +68,22 @@ library GroupRecipients {
             return settlementInfo;
         }
 
-        settlementInfo.publicVerifierRatio = self.publicVerifierRatioByActionId[key.tokenAddress][key.actionId];
-        settlementInfo.govRatioMultiplier = self.govRatioMultiplierByActionId[key.tokenAddress][key.actionId];
+        _applyFormulas(settlementInfo, protocol.stakeAddress, key.round, key.memberId);
+    }
+
+    function _settlementPool(
+        GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
+        GroupServiceStorage.MemberRewardKey memory key
+    ) private view returns (GroupServiceStorage.Settlement memory settlementInfo) {
+        settlementInfo.actionTokenAddress = self.actionTokenAddressByActionId[key.tokenAddress][key.actionId];
+        settlementInfo.denominator = IGroupActionExecutor(protocol.groupActionExecutorAddress)
+            .totalGeneratedActionReward(settlementInfo.actionTokenAddress, key.round);
+        if (settlementInfo.denominator == 0) {
+            settlementInfo.cause = GroupServiceStorage.SettlementCause.PoolEmpty;
+            return settlementInfo;
+        }
+
         (settlementInfo.serviceReward, settlementInfo.actionMinted) =
             IActionTarget(protocol.actionTargetAddress).actionReward(key.tokenAddress, key.round, key.actionId);
         if (settlementInfo.serviceReward == 0) {
@@ -82,7 +91,9 @@ library GroupRecipients {
             return settlementInfo;
         }
 
-        _applyFormulas(settlementInfo, protocol.stakeAddress, key.round, key.memberId);
+        settlementInfo.publicVerifierRatio = self.publicVerifierRatioByActionId[key.tokenAddress][key.actionId];
+        settlementInfo.providerIncentiveRatio = self.providerIncentiveRatioByActionId[key.tokenAddress][key.actionId];
+        settlementInfo.govRatioMultiplier = self.govRatioMultiplierByActionId[key.tokenAddress][key.actionId];
     }
 
     function _applyFormulas(
@@ -230,10 +241,9 @@ library GroupRecipients {
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.Share memory share,
-        GroupServiceStorage.Settlement memory settlementInfo,
+        address sourceTokenAddress,
         bool provider
     ) private view returns (uint256[] memory actionIds) {
-        address sourceTokenAddress = settlementInfo.actionTokenAddress;
         if (provider) {
             (actionIds,) = IGroupActionExecutor(protocol.groupActionExecutorAddress)
                 .actionIdsWithProviderRewardByGroupIdByProviderId(
@@ -311,7 +321,8 @@ library GroupRecipients {
         MemberRewardSummary memory summary
     ) private view {
         GroupServiceStorage.Settlement memory settlementInfo = _shareSettlement(self, protocol, share);
-        uint256[] memory sourceActionIds = _sourceActionIds(self, protocol, share, settlementInfo, provider);
+        uint256[] memory sourceActionIds =
+            _sourceActionIds(self, protocol, share, settlementInfo.actionTokenAddress, provider);
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
             share.sourceActionId = sourceActionIds[i];
             GroupServiceStorage.PaidShare storage paid = _paidShare(self, share);
@@ -355,40 +366,53 @@ library GroupRecipients {
     function mintMemberShares(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.MemberRewardKey memory key
-    ) external returns (uint256 mintAmount, bool previouslyMinted) {
-        (mintAmount, previouslyMinted) = _mintRemainingShares(self, protocol, key, false);
-        if (self.providerIncentiveRatioByActionId[key.tokenAddress][key.actionId] != 0) {
-            (uint256 amount, bool providerPreviouslyMinted) = _mintRemainingShares(self, protocol, key, true);
-            mintAmount += amount;
-            previouslyMinted = previouslyMinted || providerPreviouslyMinted;
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlementInfo
+    ) external returns (GroupServiceStorage.ShareMintResult memory result) {
+        settlementInfo.verifierWeight = 0;
+        _mintRemainingShares(self, protocol, key, settlementInfo, false, result);
+        if (settlementInfo.providerIncentiveRatio != 0) {
+            _mintRemainingShares(self, protocol, key, settlementInfo, true, result);
         }
     }
 
+    // forge-lint: disable-next-item(require-revert-in-loop)
     function mintRoleShares(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.MemberRewardKey memory key,
         bool provider
-    ) external returns (uint256 mintAmount, bool previouslyMinted) {
-        if (provider && self.providerIncentiveRatioByActionId[key.tokenAddress][key.actionId] == 0) {
-            return (mintAmount, previouslyMinted);
+    ) external returns (uint256 mintAmount) {
+        GroupServiceStorage.Settlement memory settlementInfo = _settlementPool(self, protocol, key);
+        if (settlementInfo.cause == GroupServiceStorage.SettlementCause.PoolEmpty) {
+            revert IActionExecutorErrors.MemberRewardPoolEmpty(key.tokenAddress, key.round);
         }
-        return _mintRemainingShares(self, protocol, key, provider);
+
+        GroupServiceStorage.ShareMintResult memory result;
+        if (!provider || settlementInfo.providerIncentiveRatio != 0) {
+            _mintRemainingShares(self, protocol, key, settlementInfo, provider, result);
+        }
+        if (result.mintAmount != 0) return result.mintAmount;
+        if (result.previouslyMinted) {
+            revert IActionExecutorErrors.RewardAlreadyMinted(key.tokenAddress, key.actionId, key.memberId, key.round);
+        }
+        if (!result.hasEligibleWeight) {
+            revert IActionExecutorErrors.ZeroRewardWeight(key.tokenAddress, key.actionId, key.memberId);
+        }
+        revert IActionExecutorErrors.MemberRewardRoundedToZero(key.tokenAddress, key.round, key.memberId);
     }
 
     function _mintRemainingShares(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.MemberRewardKey memory key,
-        bool provider
-    ) private returns (uint256 mintAmount, bool previouslyMinted) {
+        GroupServiceStorage.Settlement memory settlementInfo,
+        bool provider,
+        GroupServiceStorage.ShareMintResult memory result
+    ) private {
         uint256[] memory groupIds = _rewardGroupIds(self, protocol, key, provider);
         for (uint256 i = 0; i < groupIds.length; ++i) {
-            (uint256 amount, bool groupPreviouslyMinted) =
-                _mintGroupShares(self, protocol, _share(key, 0, groupIds[i]), provider);
-            mintAmount += amount;
-            previouslyMinted = previouslyMinted || groupPreviouslyMinted;
+            _mintGroupShares(self, protocol, _share(key, 0, groupIds[i]), settlementInfo, provider, result);
         }
     }
 
@@ -396,20 +420,34 @@ library GroupRecipients {
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.Share memory share,
-        bool provider
-    ) private returns (uint256 mintAmount, bool previouslyMinted) {
-        GroupServiceStorage.Settlement memory settlementInfo = _shareSettlement(self, protocol, share);
-        if (settlementInfo.cause != GroupServiceStorage.SettlementCause.RoundedToZero) return (0, previouslyMinted);
-
-        uint256[] memory sourceActionIds = _sourceActionIds(self, protocol, share, settlementInfo, provider);
+        GroupServiceStorage.Settlement memory settlementInfo,
+        bool provider,
+        GroupServiceStorage.ShareMintResult memory result
+    ) private {
+        uint256[] memory sourceActionIds =
+            _sourceActionIds(self, protocol, share, settlementInfo.actionTokenAddress, provider);
+        bool groupBudgetCalculated = false;
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
             share.sourceActionId = sourceActionIds[i];
             GroupServiceStorage.PaidShare storage paid = _paidShare(self, share);
             if ((provider ? paid.provider : paid.recipient) != 0) {
-                previouslyMinted = true;
-            } else {
-                mintAmount += _mintUnclaimedShare(self, protocol, share, settlementInfo, paid, provider);
+                result.previouslyMinted = true;
+                continue;
             }
+            uint256 sourceWeight = _shareSourceWeight(protocol, settlementInfo.actionTokenAddress, share, provider);
+            if (sourceWeight == 0) continue;
+
+            result.hasEligibleWeight = true;
+            if (!groupBudgetCalculated) {
+                _mintServiceRewardIfNeeded(protocol, settlementInfo, share);
+                settlementInfo.ownerWeight = IGroupActionExecutor(protocol.groupActionExecutorAddress)
+                    .totalGeneratedActionRewardByGroupId(settlementInfo.actionTokenAddress, share.round, share.groupId);
+                _applyFormulas(settlementInfo, protocol.stakeAddress, share.round, share.groupId);
+                groupBudgetCalculated = true;
+            }
+            result.mintAmount += _payUnclaimedShare(
+                self, protocol, share, settlementInfo, paid, provider, sourceWeight
+            );
         }
     }
 
@@ -437,22 +475,24 @@ library GroupRecipients {
 
         GroupServiceStorage.Settlement memory settlementInfo = _shareSettlement(self, protocol, share);
         _checkSettlementPool(settlementInfo, share.tokenAddress, share.round, share.serviceActionId, share.groupId);
-        mintAmount = _mintUnclaimedShare(self, protocol, share, settlementInfo, paid, provider);
+        if (_mintServiceRewardIfNeeded(protocol, settlementInfo, share)) {
+            _applyFormulas(settlementInfo, protocol.stakeAddress, share.round, share.groupId);
+        }
+        uint256 sourceWeight = _shareSourceWeight(protocol, settlementInfo.actionTokenAddress, share, provider);
+        mintAmount = _payUnclaimedShare(self, protocol, share, settlementInfo, paid, provider, sourceWeight);
         if (mintAmount == 0) _revertZeroShare(share, provider);
     }
 
-    function _mintUnclaimedShare(
+    function _payUnclaimedShare(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
         GroupServiceStorage.Share memory share,
         GroupServiceStorage.Settlement memory settlementInfo,
         GroupServiceStorage.PaidShare storage paid,
-        bool provider
+        bool provider,
+        uint256 sourceWeight
     ) private returns (uint256 amount) {
-        amount = _shareAmount(self, protocol, settlementInfo, share, provider);
-        if (_mintServiceRewardIfNeeded(protocol, settlementInfo, share)) {
-            amount = _shareAmount(self, protocol, settlementInfo, share, provider);
-        }
+        amount = _weightedShareAmount(self, protocol, settlementInfo, share, provider, sourceWeight);
         if (amount != 0) _payShare(share, provider, paid, settlementInfo, amount);
     }
 
@@ -504,7 +544,6 @@ library GroupRecipients {
         if (reward == settlementInfo.serviceReward) return false;
         if (reward == 0) revert IActionExecutorErrors.MemberRewardPoolEmpty(share.tokenAddress, share.round);
         settlementInfo.serviceReward = reward;
-        _applyFormulas(settlementInfo, protocol.stakeAddress, share.round, share.groupId);
         return true;
     }
 
@@ -597,10 +636,41 @@ library GroupRecipients {
         GroupServiceStorage.Share memory share,
         bool provider
     ) private view returns (uint256) {
-        if (share.memberId == 0 || share.memberId == share.groupId || settlementInfo.ownerReward == 0) return 0;
-        if (provider) return _providerAmount(protocol.groupActionExecutorAddress, settlementInfo, share);
+        if (settlementInfo.ownerReward == 0) return 0;
+        if (provider && _marketBudget(settlementInfo) == 0) return 0;
+        uint256 sourceWeight = _shareSourceWeight(protocol, settlementInfo.actionTokenAddress, share, provider);
+        return _weightedShareAmount(self, protocol, settlementInfo, share, provider, sourceWeight);
+    }
+
+    function _shareSourceWeight(
+        GroupServiceStorage.Protocol memory protocol,
+        address sourceTokenAddress,
+        GroupServiceStorage.Share memory share,
+        bool provider
+    ) private view returns (uint256) {
+        if (share.memberId == 0 || share.memberId == share.groupId) return 0;
+        IGroupActionExecutor source = IGroupActionExecutor(protocol.groupActionExecutorAddress);
+        if (provider) {
+            return source.generatedActionRewardAttributionByProviderId(
+                sourceTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
+            );
+        }
+        return source.generatedActionRewardByGroupId(sourceTokenAddress, share.round, share.sourceActionId, share.groupId);
+    }
+
+    function _weightedShareAmount(
+        GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.Protocol memory protocol,
+        GroupServiceStorage.Settlement memory settlementInfo,
+        GroupServiceStorage.Share memory share,
+        bool provider,
+        uint256 sourceWeight
+    ) private view returns (uint256) {
+        if (sourceWeight == 0 || settlementInfo.ownerReward == 0) return 0;
+        if (provider) return Math.mulDiv(_marketBudget(settlementInfo), sourceWeight, settlementInfo.ownerWeight);
         uint256 partnershipBudget = _actionPartnershipBudget(
-            protocol.groupActionExecutorAddress, _settlementKey(share), settlementInfo, share.sourceActionId
+            protocol.groupActionExecutorAddress, settlementInfo, share.round, share.sourceActionId, share.groupId,
+            sourceWeight
         );
         return recipientAmount(
             self,
@@ -613,39 +683,24 @@ library GroupRecipients {
         );
     }
 
-    function _providerAmount(
-        address groupActionExecutorAddress,
-        GroupServiceStorage.Settlement memory settlementInfo,
-        GroupServiceStorage.Share memory share
-    ) private view returns (uint256) {
-        uint256 marketBudget = _marketBudget(settlementInfo);
-        if (marketBudget == 0) return 0;
-        uint256 attribution = IGroupActionExecutor(groupActionExecutorAddress).generatedActionRewardAttributionByProviderId(
-            settlementInfo.actionTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
-        );
-        return Math.mulDiv(marketBudget, attribution, settlementInfo.ownerWeight);
-    }
-
     function _actionPartnershipBudget(
         address groupActionExecutorAddress,
-        GroupServiceStorage.MemberRewardKey memory key,
         GroupServiceStorage.Settlement memory settlementInfo,
-        uint256 sourceActionId
+        uint256 round,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 groupWeight
     ) private view returns (uint256 partnershipBudget) {
-        if (settlementInfo.ownerReward == 0) return 0;
-        IGroupActionExecutor source = IGroupActionExecutor(groupActionExecutorAddress);
-        uint256 groupWeight = source.generatedActionRewardByGroupId(
-            settlementInfo.actionTokenAddress, key.round, sourceActionId, key.memberId
-        );
         if (groupWeight == 0) return 0;
         uint256 marketBudget = _marketBudget(settlementInfo);
         if (marketBudget == 0) {
             return Math.mulDiv(settlementInfo.ownerReward, groupWeight, settlementInfo.ownerWeight);
         }
 
-        uint256 ownerAttribution = source.generatedActionRewardAttributionByProviderId(
-            settlementInfo.actionTokenAddress, key.round, sourceActionId, key.memberId, key.memberId
-        );
+        uint256 ownerAttribution = IGroupActionExecutor(groupActionExecutorAddress)
+            .generatedActionRewardAttributionByProviderId(
+                settlementInfo.actionTokenAddress, round, sourceActionId, groupId, groupId
+            );
         partnershipBudget = Math.mulDiv(settlementInfo.ownerReward - marketBudget, groupWeight, settlementInfo.ownerWeight);
         partnershipBudget += Math.mulDiv(marketBudget, ownerAttribution, settlementInfo.ownerWeight);
     }
@@ -914,8 +969,11 @@ library GroupRecipients {
         GroupServiceStorage.Settlement memory settlementInfo,
         uint256 sourceActionId
     ) private view returns (uint256 distributed) {
-        uint256 partnershipBudget =
-            _actionPartnershipBudget(protocol.groupActionExecutorAddress, key, settlementInfo, sourceActionId);
+        uint256 groupWeight = IGroupActionExecutor(protocol.groupActionExecutorAddress)
+            .generatedActionRewardByGroupId(settlementInfo.actionTokenAddress, key.round, sourceActionId, key.memberId);
+        uint256 partnershipBudget = _actionPartnershipBudget(
+            protocol.groupActionExecutorAddress, settlementInfo, key.round, sourceActionId, key.memberId, groupWeight
+        );
         if (partnershipBudget == 0) return 0;
         uint256[] memory ratios =
             self.ratiosHistory[settlementInfo.actionTokenAddress][sourceActionId][key.memberId].values(key.round);

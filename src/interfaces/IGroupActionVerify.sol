@@ -199,7 +199,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         address tokenAddress,
         uint256 round,
         uint256 actionId
-    ) external view returns (uint256);
+    ) external view returns (uint256 score);
 
     function verifiedMemberCount(
         address tokenAddress,

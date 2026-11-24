@@ -30,14 +30,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     uint256 private constant CREATION_DATA_BYTES = 128;
 
-    struct MemberShareMintResult {
-        uint256 mintAmount;
-        uint256 burnAmount;
-        bool previouslySettled;
-        GroupServiceStorage.PrimaryAmounts primaryPaid;
-        GroupServiceStorage.Settlement settlement;
-    }
-
     struct MemberRewardDetails {
         MemberRewardSummary verifier;
         MemberRewardSummary groupOwner;
@@ -993,32 +985,6 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         });
     }
 
-    function _mintMemberShares(
-        GroupServiceStorage.MemberRewardKey memory key,
-        GroupServiceStorage.Settlement memory settlement
-    ) private returns (MemberShareMintResult memory result) {
-        result.settlement = settlement;
-        bool sharesPreviouslySettled;
-        (result.mintAmount, sharesPreviouslySettled) = GroupRecipients.mintMemberShares(_layout, _protocol(), key);
-        result.previouslySettled = sharesPreviouslySettled;
-
-        (uint256 actualReward, ) =
-            IActionTarget(ACTION_TARGET_ADDRESS).actionReward(key.tokenAddress, key.round, key.actionId);
-        if (actualReward == settlement.serviceReward) return result;
-
-        result.settlement =
-            _settlement(key.tokenAddress, key.round, key.actionId, key.memberId, GroupServiceStorage.PrimaryRole.Both);
-        GroupServiceStorage.PrimaryAmounts memory pending =
-            _pendingPrimary(key, result.settlement, GroupServiceStorage.PrimaryRole.Both);
-        if (pending.owner + pending.verifier + pending.burn != 0) {
-            _payPrimary(key, pending);
-            result.primaryPaid = pending;
-            result.mintAmount += pending.owner + pending.verifier;
-            result.burnAmount += pending.burn;
-        }
-
-    }
-
     function _mintRoleShares(
         GroupServiceStorage.MemberRewardKey memory key,
         bool provider
@@ -1027,11 +993,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             key.tokenAddress, key.round, key.actionId, key.memberId,
             _layout.createdRoundByActionId[key.tokenAddress][key.actionId], false
         );
-        bool previouslyMinted;
-        (mintAmount, previouslyMinted) = GroupRecipients.mintRoleShares(_layout, _protocol(), key, provider);
-        if (mintAmount != 0) return mintAmount;
-        if (previouslyMinted) revert RewardAlreadyMinted(key.tokenAddress, key.actionId, key.memberId, key.round);
-        revert MemberRewardRoundedToZero(key.tokenAddress, key.round, key.memberId);
+        return GroupRecipients.mintRoleShares(_layout, _protocol(), key, provider);
     }
 
     // forge-lint: disable-next-item(missing-events-access-control, require-revert-in-loop)
@@ -1044,39 +1006,27 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         _checkMintWindow(
             tokenAddress, round, actionId, memberId, _layout.createdRoundByActionId[tokenAddress][actionId], false
         );
-        GroupServiceStorage.MemberRewardKey memory key = GroupServiceStorage.MemberRewardKey(tokenAddress, round, actionId, memberId);
-        GroupServiceStorage.Settlement memory settlement = _settlement(tokenAddress, round, actionId, memberId, GroupServiceStorage.PrimaryRole.Both);
-        GroupServiceStorage.PrimaryAmounts memory pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
-        if (
-            pending.owner + pending.verifier + pending.burn == 0 && !settlement.actionMinted
-                && (settlement.ownerWeight != 0 || settlement.verifierWeight != 0)
-        ) {
+        GroupServiceStorage.MemberRewardKey memory key =
+            GroupServiceStorage.MemberRewardKey(tokenAddress, round, actionId, memberId);
+        GroupServiceStorage.Settlement memory settlement =
+            _settlement(tokenAddress, round, actionId, memberId, GroupServiceStorage.PrimaryRole.Both);
+        if (settlement.cause == GroupServiceStorage.SettlementCause.PoolEmpty) {
+            revert MemberRewardPoolEmpty(tokenAddress, round);
+        }
+        if (settlement.ownerWeight != 0 || settlement.verifierWeight != 0) {
             _mintServiceRewardIfNeeded(settlement, tokenAddress, round, actionId, memberId);
-            pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
         }
-        GroupServiceStorage.PrimaryAmounts memory primaryPaid;
-        if (pending.owner + pending.verifier + pending.burn != 0) {
-            if (_mintServiceRewardIfNeeded(settlement, tokenAddress, round, actionId, memberId)) {
-                pending = _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
-            }
-            _payPrimary(key, pending);
-            primaryPaid = pending;
-        }
-        mintAmount = pending.owner + pending.verifier;
-        burnAmount = pending.burn;
-        MemberShareMintResult memory shareResult = _mintMemberShares(key, settlement);
-        mintAmount += shareResult.mintAmount;
-        burnAmount += shareResult.burnAmount;
-        if (
-            shareResult.primaryPaid.owner + shareResult.primaryPaid.verifier + shareResult.primaryPaid.burn != 0
-        ) {
-            primaryPaid = shareResult.primaryPaid;
-            settlement = shareResult.settlement;
-        }
+        GroupServiceStorage.PrimaryAmounts memory primaryPaid =
+            _pendingPrimary(key, settlement, GroupServiceStorage.PrimaryRole.Both);
+        bool hasPrimaryPayment = primaryPaid.owner + primaryPaid.verifier + primaryPaid.burn != 0;
+        if (hasPrimaryPayment) _payPrimary(key, primaryPaid);
+
+        GroupServiceStorage.ShareMintResult memory shareResult =
+            GroupRecipients.mintMemberShares(_layout, _protocol(), key, settlement);
+        mintAmount = primaryPaid.owner + primaryPaid.verifier + shareResult.mintAmount;
+        burnAmount = primaryPaid.burn;
         if (mintAmount + burnAmount == 0) {
-            if (shareResult.previouslySettled) revert RewardAlreadyMinted(tokenAddress, actionId, memberId, round);
-            _checkSettlementPool(settlement, tokenAddress, round, actionId, memberId);
-            _checkPrimaryAmounts(key, settlement, GroupServiceStorage.PrimaryRole.Both, pending);
+            _checkMemberMintResult(key, settlement, primaryPaid, shareResult);
         }
         emit MemberRewardMinted({
             tokenAddress: tokenAddress,
@@ -1086,8 +1036,22 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             mintAmount: mintAmount,
             burnAmount: burnAmount
         });
-        if (primaryPaid.owner + primaryPaid.verifier + primaryPaid.burn != 0) {
-            _emitPrimary(key, settlement, primaryPaid);
+        if (hasPrimaryPayment) _emitPrimary(key, settlement, primaryPaid);
+    }
+
+    function _checkMemberMintResult(
+        GroupServiceStorage.MemberRewardKey memory key,
+        GroupServiceStorage.Settlement memory settlement,
+        GroupServiceStorage.PrimaryAmounts memory primaryPaid,
+        GroupServiceStorage.ShareMintResult memory shareResult
+    ) private view {
+        if (shareResult.previouslyMinted) {
+            revert RewardAlreadyMinted(key.tokenAddress, key.actionId, key.memberId, key.round);
         }
+        if (settlement.cause == GroupServiceStorage.SettlementCause.NoEligibleWeight && shareResult.hasEligibleWeight) {
+            revert MemberRewardRoundedToZero(key.tokenAddress, key.round, key.memberId);
+        }
+        _checkSettlementPool(settlement, key.tokenAddress, key.round, key.actionId, key.memberId);
+        _checkPrimaryAmounts(key, settlement, GroupServiceStorage.PrimaryRole.Both, primaryPaid);
     }
 }

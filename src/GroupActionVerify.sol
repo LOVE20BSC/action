@@ -125,7 +125,7 @@ library GroupActionVerify {
         address tokenAddress,
         uint256 round,
         uint256 actionId
-    ) external view returns (uint256) {
+    ) external view returns (uint256 score) {
         return self.totalActionFinalScore[tokenAddress][actionId][round];
     }
 

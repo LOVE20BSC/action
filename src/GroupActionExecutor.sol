@@ -536,7 +536,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         address tokenAddress,
         uint256 round,
         uint256 actionId
-    ) external view returns (uint256) {
+    ) external view returns (uint256 score) {
         return GroupActionVerify.totalActionFinalScore(_layout, tokenAddress, round, actionId);
     }
 
