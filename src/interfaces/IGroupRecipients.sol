@@ -74,6 +74,14 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
         uint256 groupId
     ) external view returns (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory remarks);
 
+    function recipientRatio(
+        address sourceTokenAddress,
+        uint256 round,
+        uint256 sourceActionId,
+        uint256 groupId,
+        uint256 recipientId
+    ) external view returns (uint256 ratio);
+
     function actionIdsWithRecipients(
         address sourceTokenAddress,
         uint256 groupId,
@@ -83,19 +91,20 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount);
 
-    function distribution(
+    function currentRecipientGroupIdsByRecipientId(
         address sourceTokenAddress,
-        uint256 round,
-        uint256 sourceActionId,
+        uint256 recipientId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount);
+
+    function currentRecipientSourceActionIdsByRecipientIdByGroupId(
+        address sourceTokenAddress,
+        uint256 recipientId,
         uint256 groupId,
-        uint256 groupReward
-    )
-        external
-        view
-        returns (
-            uint256[] memory recipientIds,
-            uint256[] memory ratios,
-            uint256[] memory amounts,
-            uint256 ownerAmount
-        );
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory sourceActionIds, uint256 totalCount);
 }

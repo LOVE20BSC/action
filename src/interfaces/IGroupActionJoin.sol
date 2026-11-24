@@ -236,7 +236,7 @@ interface IGroupActionJoin is IGroupActionJoinEvents, IGroupActionJoinErrors {
     function providerAttribution(
         uint256 groupId,
         uint256 memberId
-    ) external view returns (uint256 providerId, uint256 joinedBlock);
+    ) external view returns (uint256 providerId, uint256 joinedBlockNumber);
 
     function providerQuotas(
         address tokenAddress,

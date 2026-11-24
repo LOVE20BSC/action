@@ -4,28 +4,13 @@ pragma solidity =0.8.37;
 import {IActionExecutor} from "./IActionExecutor.sol";
 import {IGroupRecipients} from "./IGroupRecipients.sol";
 import {GroupRewardKey} from "./IGroupActionVerify.sol";
-import {IMemberRewardExecutor, MemberRewardStatus} from "./IMemberRewardExecutor.sol";
+import {IMemberRewardExecutor} from "./IMemberRewardExecutor.sol";
 
 struct GroupServiceCreationParams {
     address actionTokenAddress;
     uint256 govRatioMultiplier;
     uint256 publicVerifierRatio;
     uint256 providerIncentiveRatio;
-}
-
-struct MemberRewardSummary {
-    uint256 pendingAmount;
-    uint256 mintedAmount;
-    MemberRewardStatus status;
-}
-
-struct ServiceRewardDetails {
-    MemberRewardSummary verifier;
-    MemberRewardSummary owner;
-    MemberRewardSummary recipient;
-    MemberRewardSummary provider;
-    uint256 ownerBudget;
-    uint256 ownerBudgetBeforeCap;
 }
 
 interface IGroupServiceExecutorEvents {
@@ -184,35 +169,42 @@ interface IGroupServiceExecutor is
         uint256 round,
         uint256 serviceActionId,
         uint256 groupId
-    ) external view returns (uint256 amount, bool isMinted);
+    ) external view returns (uint256 rewardAmount, bool settled);
+
+    function groupOwnerRewardBudget(
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId,
+        uint256 groupId
+    )
+        external
+        view
+        returns (
+            uint256 ownerBudgetAmount,
+            uint256 ownerBudgetAmountBeforeCap,
+            bool capExcessBurned
+        );
 
     function verifierReward(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
         uint256 verifierId
-    ) external view returns (uint256 amount, bool isMinted);
+    ) external view returns (uint256 rewardAmount, bool settled);
 
     function mintGroupOwnerReward(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
         uint256 groupId
-    ) external returns (uint256 amount);
+    ) external returns (uint256 mintAmount);
 
     function mintVerifierReward(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
         uint256 verifierId
-    ) external returns (uint256 amount);
-
-    function groupOwnerBurn(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 groupId
-    ) external view returns (uint256 pendingAmount, uint256 burnedAmount);
+    ) external returns (uint256 mintAmount);
 
     function recipientReward(
         address serviceTokenAddress,
@@ -221,7 +213,7 @@ interface IGroupServiceExecutor is
         uint256 sourceActionId,
         uint256 groupId,
         uint256 recipientId
-    ) external view returns (uint256 amount, bool isMinted);
+    ) external view returns (uint256 rewardAmount, bool settled);
 
     function mintRecipientReward(
         address serviceTokenAddress,
@@ -230,7 +222,7 @@ interface IGroupServiceExecutor is
         uint256 sourceActionId,
         uint256 groupId,
         uint256 recipientId
-    ) external returns (uint256 amount);
+    ) external returns (uint256 mintAmount);
 
     function providerReward(
         address serviceTokenAddress,
@@ -239,7 +231,7 @@ interface IGroupServiceExecutor is
         uint256 sourceActionId,
         uint256 groupId,
         uint256 providerId
-    ) external view returns (uint256 amount, bool isMinted);
+    ) external view returns (uint256 rewardAmount, bool settled);
 
     function mintProviderReward(
         address serviceTokenAddress,
@@ -248,9 +240,9 @@ interface IGroupServiceExecutor is
         uint256 sourceActionId,
         uint256 groupId,
         uint256 providerId
-    ) external returns (uint256 amount);
+    ) external returns (uint256 mintAmount);
 
-    function providerRewardKeys(
+    function providerRewardKeysByProviderId(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
@@ -258,9 +250,16 @@ interface IGroupServiceExecutor is
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (GroupRewardKey[] memory keys, uint256 totalCount);
+    )
+        external
+        view
+        returns (
+            uint256[] memory sourceActionIds,
+            uint256[] memory groupIds,
+            uint256 totalCount
+        );
 
-    function recipientRewardKeys(
+    function recipientRewardKeysByRecipientId(
         address serviceTokenAddress,
         uint256 round,
         uint256 serviceActionId,
@@ -268,7 +267,14 @@ interface IGroupServiceExecutor is
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (GroupRewardKey[] memory keys, uint256 totalCount);
+    )
+        external
+        view
+        returns (
+            uint256[] memory sourceActionIds,
+            uint256[] memory groupIds,
+            uint256 totalCount
+        );
 
     function mintProviderRewards(
         address serviceTokenAddress,
@@ -276,7 +282,7 @@ interface IGroupServiceExecutor is
         uint256 serviceActionId,
         uint256 providerId,
         GroupRewardKey[] calldata keys
-    ) external returns (uint256[] memory amounts);
+    ) external returns (uint256[] memory mintAmounts);
 
     function mintRecipientRewards(
         address serviceTokenAddress,
@@ -284,36 +290,7 @@ interface IGroupServiceExecutor is
         uint256 serviceActionId,
         uint256 recipientId,
         GroupRewardKey[] calldata keys
-    ) external returns (uint256[] memory amounts);
-
-    function rewardDistribution(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 sourceActionId,
-        uint256 groupId
-    )
-        external
-        view
-        returns (
-            uint256[] memory recipientIds,
-            uint256[] memory ratios,
-            uint256[] memory amounts,
-            uint256 totalRecipientAmount,
-            uint256 ownerAmount,
-            uint256 providerReserve
-        );
-
-    function serviceRewardDetail(
-        address serviceTokenAddress,
-        uint256 round,
-        uint256 serviceActionId,
-        uint256 memberId
-    ) external view returns (ServiceRewardDetails memory details);
-    function totalGroupActionReward(
-        address sourceTokenAddress,
-        uint256 round
-    ) external view returns (uint256);
+    ) external returns (uint256[] memory mintAmounts);
 
     function join(
         address serviceTokenAddress,

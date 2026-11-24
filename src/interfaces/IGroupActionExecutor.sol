@@ -92,6 +92,14 @@ interface IGroupActionExecutor is
         uint256 actionId
     ) external view returns (uint256);
 
+    function generatedActionRewardAttributionByProviderId(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId
+    ) external view returns (uint256 attributedRewardAmount);
+
     function totalGeneratedActionReward(
         address tokenAddress,
         uint256 round
@@ -103,11 +111,12 @@ interface IGroupActionExecutor is
         uint256 groupId
     ) external view returns (uint256);
 
-    function groupRewardWeights(
+    function totalGeneratedActionRewardAttributionByProviderId(
         address tokenAddress,
         uint256 round,
-        uint256 groupId
-    ) external view returns (uint256 totalWeight, uint256 ownerProviderWeight);
+        uint256 groupId,
+        uint256 providerId
+    ) external view returns (uint256 attributedRewardAmount);
 
     function totalGeneratedActionRewardByVerifierId(
         address tokenAddress,
@@ -118,6 +127,33 @@ interface IGroupActionExecutor is
     function actionIdsWithGeneratedActionReward(
         address tokenAddress,
         uint256 round,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
+
+    function providerIdsWithPositiveScoreByActionIdByGroupId(
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory providerIds, uint256 totalCount);
+
+    function currentProviderGroupIdsByProviderId(
+        address tokenAddress,
+        uint256 providerId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount);
+
+    function currentProviderActionIdsByProviderIdByGroupId(
+        address tokenAddress,
+        uint256 providerId,
+        uint256 groupId,
         uint256 offset,
         uint256 limit,
         bool reverse
