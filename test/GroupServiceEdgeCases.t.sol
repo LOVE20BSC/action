@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 
 /// @dev Boundary behaviors that do not belong to any single happy path: the
@@ -77,9 +78,10 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         (uint256 ownerMint,) = _settleService(GROUP_ID);
         require(ownerMint == 225e18, "half of the owner half on a divisor of 200");
 
-        (uint256 amount, bool minted) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
-        require(amount == 225e18 && !minted, "earlier contribution is payable");
-        (amount,) = _settleService(GROUP_OWNER_B_ID);
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_OWNER_B_ID);
+        require(pending == 225e18 && minted == 0 && status == MemberRewardStatus.Pending, "earlier contribution is payable");
+        (uint256 amount,) = _settleService(GROUP_OWNER_B_ID);
         require(amount == 225e18, "owner paid for earlier contribution");
     }
 
@@ -154,7 +156,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         require(
-            executor.totalGroupActionReward(address(childToken), SERVICE_ROUND) == GROUP_REWARD,
+            groupAction.totalGeneratedActionReward(address(childToken), SERVICE_ROUND) == GROUP_REWARD,
             "divisor read from the child action token"
         );
 
@@ -247,7 +249,7 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18,
+            groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == 100e18,
             "both verified actions count toward the divisor"
         );
 

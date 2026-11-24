@@ -7,6 +7,7 @@ import {GroupServiceExecutor} from "../../src/GroupServiceExecutor.sol";
 import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
 import {GroupServiceCreationParams} from "../../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
+import {MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 import {DistributorMode} from "@core/interfaces/ILaunch.sol";
 import {LOVE20Token} from "@core/LOVE20Token.sol";
 import {ProposalBody, TargetMode} from "@core/interfaces/ISubmit.sol";
@@ -111,9 +112,11 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
 
         uint256 ownerBudget = mint.proposalReward(address(token), round) / 2;
         uint256 marketBudget = ownerBudget / 2;
-        uint256 ownerMarket = marketBudget / 2;
-        uint256 partnershipSlice =
-            (ownerBudget - marketBudget) / SUBMIT_ROUND_LIMIT + ownerMarket / SUBMIT_ROUND_LIMIT;
+        uint256 sourceReward = group.generatedActionReward(address(sourceToken), round, sourceActionIds[0]);
+        uint256 ownerAttributionPerAction = sourceReward / 2;
+        uint256 ownerMarket = marketBudget * ownerAttributionPerAction / sourceReward;
+        uint256 partnershipSlice = (ownerBudget - marketBudget) / SUBMIT_ROUND_LIMIT
+            + marketBudget * ownerAttributionPerAction / (sourceReward * SUBMIT_ROUND_LIMIT);
         uint256 recipient = partnershipSlice / service.MAX_RECIPIENTS_PER_ACTION();
         uint256 distributed = marketBudget - ownerMarket + recipient * _recipientCount();
         _assertOwnerQuote(round, serviceActionIds[0], distributed);
@@ -162,8 +165,13 @@ contract GroupServiceClaimGasTest is ActionTargetIntegrationFixture {
     }
 
     function _assertOwnerQuote(uint256 round, uint256 serviceActionId, uint256 distributed) private view {
-        (uint256 amount, bool minted) = service.groupOwnerReward(address(token), round, serviceActionId, MEMBER_ID);
-        require(amount == mint.proposalReward(address(token), round) / 2 - distributed && !minted, "owner quote");
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            service.groupOwnerReward(address(token), round, serviceActionId, MEMBER_ID);
+        require(
+            pending == mint.proposalReward(address(token), round) / 2 - distributed && minted == 0
+                && status == MemberRewardStatus.Pending,
+            "owner quote"
+        );
     }
 
     function _createProposers() private returns (uint256[] memory proposerIds) {

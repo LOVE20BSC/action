@@ -9,12 +9,13 @@ import {IActionExecutorErrors} from "../../src/interfaces/IActionExecutor.sol";
 import {GroupActionCreationParams} from "../../src/interfaces/IGroupActionExecutor.sol";
 import {GroupConfig} from "../../src/interfaces/IGroupActionManager.sol";
 import {IGroupActionJoinEvents} from "../../src/interfaces/IGroupActionJoin.sol";
-import {GroupRewardKey, IGroupActionVerifyEvents} from "../../src/interfaces/IGroupActionVerify.sol";
+import {IGroupActionVerifyEvents} from "../../src/interfaces/IGroupActionVerify.sol";
 import {
     GroupServiceCreationParams,
     IGroupServiceExecutorEvents,
     IGroupServiceExecutorErrors
 } from "../../src/interfaces/IGroupServiceExecutor.sol";
+import {MemberRewardStatus} from "../../src/interfaces/IMemberRewardExecutor.sol";
 
 contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture, IGroupServiceExecutorEvents {
     uint256 private constant OWNER_ID = 1;
@@ -33,8 +34,6 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
 
     struct Allocation {
         uint256 budget;
-        uint256 sliceA;
-        uint256 sliceB;
         uint256 provider;
         uint256 recipientA;
         uint256 recipientB;
@@ -65,17 +64,18 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
         Allocation memory expected = _expectedAllocation();
         _assertSourcesAndVerifierShares(expected, false);
         _assertGroupShares(expected, false);
-        (uint256 pendingBurn, uint256 actualBurn) =
-            service.groupOwnerBurn(address(token), round, serviceAction, OWNER_ID);
-        require(pendingBurn == expected.burn && actualBurn == 0, "group burn pending");
-
+        (uint256 ownerBudget, uint256 ownerBudgetBeforeCap) =
+            service.groupOwnerRewardBudget(address(token), round, serviceAction, OWNER_ID);
+        require(ownerBudgetBeforeCap - ownerBudget == expected.burn, "owner burn amount is derived from budget");
         uint256 originalSupply = token.totalSupply();
         uint256 originalOwnerBalance = token.balanceOf(member1);
         uint256 originalProviderBalance = token.balanceOf(member2);
 
         _mintProvider(expected);
-        (pendingBurn, actualBurn) = service.groupOwnerBurn(address(token), round, serviceAction, OWNER_ID);
-        require(pendingBurn == 0 && actualBurn == expected.burn, "provider settled group burn");
+        require(
+            token.totalSupply() - originalSupply == expected.budget,
+            "provider settlement does not burn owner reward"
+        );
         _mintRemainingRoles(expected);
 
         _assertSourcesAndVerifierShares(expected, true);
@@ -93,17 +93,25 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
 
     function testRecipientPageAndAtomicBatchFollowTheCurrentNFTHolder() external {
         Allocation memory expected = _expectedAllocation();
-        (GroupRewardKey[] memory page, uint256 total) =
-            service.recipientRewardKeys(address(token), round, serviceAction, PROVIDER_ID, 0, 1, false);
-        require(total == 2 && page.length == 1 && page[0].sourceActionId == sourceA, "first source page");
-        (page, total) = service.recipientRewardKeys(address(token), round, serviceAction, PROVIDER_ID, 0, 1, true);
-        require(total == 2 && page.length == 1 && page[0].sourceActionId == sourceB, "reverse source page");
-        (page, total) = service.recipientRewardKeys(address(token), round, serviceAction, PROVIDER_ID, 2, 1, false);
-        require(total == 2 && page.length == 0, "exhausted page");
+        (uint256[] memory groupIds, uint256 total) = service.groupIdsWithRecipientRewardByRecipientId(
+            address(token), round, serviceAction, PROVIDER_ID, 0, 1, false
+        );
+        require(total == 1 && groupIds.length == 1 && groupIds[0] == OWNER_ID, "recipient group page");
+        (uint256[] memory page, uint256 actionCount) = service.actionIdsWithRecipientRewardByGroupIdByRecipientId(
+            address(token), round, serviceAction, OWNER_ID, PROVIDER_ID, 0, 1, false
+        );
+        require(actionCount == 2 && page.length == 1 && page[0] == sourceA, "first source page");
+        (page, actionCount) = service.actionIdsWithRecipientRewardByGroupIdByRecipientId(
+            address(token), round, serviceAction, OWNER_ID, PROVIDER_ID, 0, 1, true
+        );
+        require(actionCount == 2 && page.length == 1 && page[0] == sourceB, "reverse source page");
+        (page, actionCount) = service.actionIdsWithRecipientRewardByGroupIdByRecipientId(
+            address(token), round, serviceAction, OWNER_ID, PROVIDER_ID, 2, 1, false
+        );
+        require(actionCount == 2 && page.length == 0, "exhausted page");
 
-        GroupRewardKey[] memory batch = new GroupRewardKey[](2);
-        batch[0] = GroupRewardKey(sourceA, OWNER_ID);
-        batch[1] = batch[0];
+        uint256[] memory batchSourceActionIds = _pair(sourceA, sourceA);
+        uint256[] memory batchGroupIds = _pair(OWNER_ID, OWNER_ID);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.RecipientRewardAlreadyMinted.selector,
@@ -116,33 +124,45 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
             )
         );
         vm.prank(member2);
-        service.mintRecipientRewards(address(token), round, serviceAction, PROVIDER_ID, batch);
+        service.mintRecipientRewards(
+            address(token), round, serviceAction, PROVIDER_ID, batchSourceActionIds, batchGroupIds
+        );
         (, bool budgetMinted) = actionTarget.actionReward(address(token), round, serviceAction);
         require(!budgetMinted, "failed batch did not mint budget");
         _assertGroupShares(expected, false);
 
         _advancePhase();
         _setRecipient(sourceA, OWNER_ID, actorId, 0.75e18);
-        (page, total) = service.recipientRewardKeys(address(token), round, serviceAction, PROVIDER_ID, 0, 2, false);
-        require(total == 2 && page.length == 2, "old shares stay discoverable");
-        (page, total) = service.recipientRewardKeys(address(token), round + 2, serviceAction, PROVIDER_ID, 0, 2, false);
-        require(total == 1 && page[0].sourceActionId == sourceB, "new configuration applies to its round");
+        (page, actionCount) = service.actionIdsWithRecipientRewardByGroupIdByRecipientId(
+            address(token), round, serviceAction, OWNER_ID, PROVIDER_ID, 0, 2, false
+        );
+        require(actionCount == 2 && page.length == 2, "old shares stay discoverable");
+        (page, actionCount) = service.actionIdsWithRecipientRewardByGroupIdByRecipientId(
+            address(token), round + 2, serviceAction, OWNER_ID, PROVIDER_ID, 0, 2, false
+        );
+        require(actionCount == 1 && page[0] == sourceB, "new configuration applies to its round");
         vm.prank(member1);
         service.setRecipients(address(token), sourceB, OWNER_ID, new uint256[](0), new uint256[](0), new string[](0));
-        (page, total) = service.recipientRewardKeys(address(token), round + 2, serviceAction, PROVIDER_ID, 0, 2, false);
-        require(total == 0 && page.length == 0, "explicit clear removes last current key");
+        (page, actionCount) = service.actionIdsWithRecipientRewardByGroupIdByRecipientId(
+            address(token), round + 2, serviceAction, OWNER_ID, PROVIDER_ID, 0, 2, false
+        );
+        require(actionCount == 0 && page.length == 0, "explicit clear removes last current key");
 
-        batch[1] = GroupRewardKey(sourceB, OWNER_ID);
+        batchSourceActionIds = _pair(sourceA, sourceB);
         address newHolder = address(0xCAFE);
         vm.prank(member2);
         memberNFT.transferFrom(member2, newHolder, PROVIDER_ID);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.NotMemberOwner.selector, PROVIDER_ID));
         vm.prank(member2);
-        service.mintRecipientRewards(address(token), round, serviceAction, PROVIDER_ID, batch);
+        service.mintRecipientRewards(
+            address(token), round, serviceAction, PROVIDER_ID, batchSourceActionIds, batchGroupIds
+        );
 
         vm.prank(newHolder);
         uint256[] memory amounts =
-            service.mintRecipientRewards(address(token), round, serviceAction, PROVIDER_ID, batch);
+            service.mintRecipientRewards(
+                address(token), round, serviceAction, PROVIDER_ID, batchSourceActionIds, batchGroupIds
+            );
         require(amounts[0] == expected.recipientA && amounts[1] == expected.recipientB, "batched payout matches quotes");
         require(token.balanceOf(newHolder) == expected.recipientA + expected.recipientB, "new holder paid");
         _assertRecipient(sourceA, expected.recipientA, true);
@@ -236,7 +256,7 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
             round: round,
             verifierId: PROVIDER_ID,
             startIndex: 0,
-            totalFinalScore: 900,
+            totalActionFinalScore: 900,
             verifiedGroupCount: 1,
             roundVerified: false,
             groupVerified: true,
@@ -263,30 +283,28 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
         uint256 cappedBudget = expected.budget * (ownerGovRatio / 2) / PRECISION;
         require(cappedBudget < theoreticalBudget, "fixture triggers group cap");
         expected.burn = theoreticalBudget - cappedBudget;
-        _expectedDistribution(expected, cappedBudget, weightA, rewardB);
+        _expectedDistribution(expected, cappedBudget, rewardA, rewardB);
         expected.verifierA = expected.budget * rewardA / (2 * denominator);
         expected.verifierGroupShareA = expected.verifierA * weightA / rewardA;
         expected.verifierB = expected.budget * rewardB / (2 * denominator);
         require(expected.provider != 0 && expected.recipientB != 0 && expected.burn != 0, "fixture has all shares");
     }
 
-    function _expectedDistribution(Allocation memory expected, uint256 ownerBudget, uint256 weightA, uint256 weightB)
+    function _expectedDistribution(Allocation memory expected, uint256 ownerBudget, uint256 rewardA, uint256 rewardB)
         private pure
     {
-        uint256 ownerWeight = weightA + weightB;
+        uint256 weightA = rewardA * 3 / 5;
+        uint256 ownerWeight = weightA + rewardB;
         uint256 marketBudget = ownerBudget * 3 / 5;
-        uint256 ownerProviderWeightA = weightA * PRECISION * 2 / 3;
-        uint256 ownerProviderWeightB = weightB * PRECISION;
-        uint256 scaledWeight = ownerWeight * PRECISION;
-        expected.provider = marketBudget * (weightA * PRECISION / 3) / scaledWeight;
+        uint256 ordinaryBudget = ownerBudget - marketBudget;
+        uint256 ownerProviderWeightA = rewardA * 2 / 5;
+        expected.provider = marketBudget * (rewardA / 5) / ownerWeight;
         uint256 partnershipA =
-            (ownerBudget - marketBudget) * weightA / ownerWeight + marketBudget * ownerProviderWeightA / scaledWeight;
-        expected.sliceA = partnershipA + expected.provider;
-        expected.sliceB = ownerBudget * weightB / ownerWeight;
+            ordinaryBudget * weightA / ownerWeight + marketBudget * ownerProviderWeightA / ownerWeight;
+        uint256 partnershipB = ordinaryBudget * rewardB / ownerWeight + marketBudget * rewardB / ownerWeight;
         expected.recipientA = partnershipA / 2;
-        expected.recipientB = expected.sliceB / 4;
-        expected.ownerSelf = ownerBudget - marketBudget
-            + marketBudget * (ownerProviderWeightA + ownerProviderWeightB) / scaledWeight
+        expected.recipientB = partnershipB / 4;
+        expected.ownerSelf = ordinaryBudget + marketBudget * (ownerProviderWeightA + rewardB) / ownerWeight
             - expected.recipientA - expected.recipientB;
     }
 
@@ -311,8 +329,9 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
             "absent group weight"
         );
         require(group.totalGeneratedActionRewardByVerifierId(address(token), round, actorId) == 0, "no verifier weight");
-        (uint256 none, bool any) = service.verifierReward(address(token), round, serviceAction, actorId);
-        require(none == 0 && !any, "no verifier allocation");
+        (uint256 pending, uint256 mintedAmount, MemberRewardStatus status) =
+            service.verifierReward(address(token), round, serviceAction, actorId);
+        require(pending == 0 && mintedAmount == 0 && status == MemberRewardStatus.Unavailable, "no verifier allocation");
     }
 
     function _assertVerifierShare(
@@ -324,66 +343,52 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
     ) private view {
         (uint256 verifierId,,) = group.verifier(address(token), round, actionId);
         require(verifierId == expectedVerifier, "source verifier identity");
-        (uint256 amount, bool paid) = service.verifierReward(address(token), round, serviceAction, verifierId);
-        require(amount == expectedTotal && paid == minted, "round verifier quote");
+        {
+            (uint256 pending, uint256 mintedAmount, MemberRewardStatus status) =
+                service.verifierReward(address(token), round, serviceAction, verifierId);
+            _assertPrimaryReward(pending, mintedAmount, status, expectedTotal, minted);
+        }
         uint256 groupWeight = group.generatedActionRewardByGroupId(address(token), round, actionId, OWNER_ID);
         uint256 verifierWeight = group.totalGeneratedActionRewardByVerifierId(address(token), round, verifierId);
         uint256 expectedGroupWeight = actionId == sourceA ? verifierWeight * 3 / 5 : verifierWeight;
         require(groupWeight == expectedGroupWeight, "verified group weight");
-        require(amount * groupWeight / verifierWeight == expectedShare, "group verifier share with slice rounding");
+        require(expectedTotal * groupWeight / verifierWeight == expectedShare, "group verifier share with slice rounding");
     }
 
     function _assertGroupShares(Allocation memory expected, bool minted) private view {
-        _assertDistribution(sourceA, expected.sliceA, 0.5e18, expected.recipientA, expected.provider);
-        _assertDistribution(sourceB, expected.sliceB, 0.25e18, expected.recipientB, 0);
-        (uint256 ownerAmount, bool ownerMinted) =
+        require(service.recipientRatio(address(token), round, sourceA, OWNER_ID, PROVIDER_ID) == 0.5e18, "source A ratio");
+        require(service.recipientRatio(address(token), round, sourceB, OWNER_ID, PROVIDER_ID) == 0.25e18, "source B ratio");
+        (uint256 pending, uint256 mintedAmount, MemberRewardStatus status) =
             service.groupOwnerReward(address(token), round, serviceAction, OWNER_ID);
-        require(ownerAmount == expected.ownerSelf && ownerMinted == minted, "owner self quote");
+        _assertPrimaryReward(pending, mintedAmount, status, expected.ownerSelf, minted);
         (uint256 amount, bool paid) =
-            service.providerReward(address(token), round, serviceAction, sourceA, OWNER_ID, externalProvider);
+            service.providerRewardBySourceActionIdByGroupId(address(token), round, serviceAction, sourceA, OWNER_ID, externalProvider);
         require(amount == expected.provider && paid == minted, "provider quote and status");
-        (amount, paid) = service.providerReward(address(token), round, serviceAction, sourceB, OWNER_ID, OWNER_ID);
+        (amount, paid) = service.providerRewardBySourceActionIdByGroupId(address(token), round, serviceAction, sourceB, OWNER_ID, OWNER_ID);
         require(amount == 0 && !paid, "self-funded source has no owner provider share");
         _assertRecipient(sourceA, expected.recipientA, minted);
         _assertRecipient(sourceB, expected.recipientB, minted);
     }
 
-    function _assertDistribution(
-        uint256 actionId,
-        uint256 slice,
-        uint256 ratio,
-        uint256 recipientAmount,
-        uint256 market
-    ) private view {
-        (
-            uint256[] memory recipientIds,
-            uint256[] memory ratios,
-            uint256[] memory amounts,
-            uint256 totalRecipientAmount,
-            uint256 ownerAmount,
-            uint256 providerReserve
-        ) = service.rewardDistribution(address(token), round, serviceAction, actionId, OWNER_ID);
-        require(recipientIds.length == 1 && ratios.length == 1 && amounts.length == 1, "one partner row");
-        require(recipientIds[0] == PROVIDER_ID && ratios[0] == ratio && amounts[0] == recipientAmount, "partner row");
-        require(totalRecipientAmount == recipientAmount && providerReserve == market, "market and partner reserves");
-        require(totalRecipientAmount + ownerAmount + providerReserve == slice, "source budget conservation");
+    function _assertPrimaryReward(
+        uint256 pendingAmount,
+        uint256 mintedAmount,
+        MemberRewardStatus status,
+        uint256 expectedAmount,
+        bool minted
+    ) private pure {
+        require(pendingAmount == (minted ? 0 : expectedAmount), "round pending amount");
+        require(mintedAmount == (minted ? expectedAmount : 0), "round minted amount");
+        require(status == (minted ? MemberRewardStatus.Settled : MemberRewardStatus.Pending), "round reward status");
     }
 
     function _assertRecipient(uint256 actionId, uint256 expected, bool minted) private view {
         (uint256 amount, bool paid) =
-            service.recipientReward(address(token), round, serviceAction, actionId, OWNER_ID, PROVIDER_ID);
+            service.recipientRewardBySourceActionIdByGroupId(address(token), round, serviceAction, actionId, OWNER_ID, PROVIDER_ID);
         require(amount == expected && paid == minted, "partner quote and status");
     }
 
     function _mintProvider(Allocation memory expected) private {
-        vm.expectEmit(true, true, true, true, address(service));
-        emit IGroupServiceExecutorEvents.ServiceOwnerRewardBurned({
-            serviceTokenAddress: address(token),
-            serviceActionId: serviceAction,
-            round: round,
-            groupId: OWNER_ID,
-            amount: expected.burn
-        });
         vm.expectEmit(true, true, true, true, address(service));
         emit IGroupServiceExecutorEvents.ProviderPaid({
             serviceTokenAddress: address(token),
@@ -397,7 +402,7 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
         });
         vm.prank(member2);
         require(
-            service.mintProviderReward(address(token), round, serviceAction, sourceA, OWNER_ID, externalProvider)
+            service.mintProviderRewardBySourceActionIdByGroupId(address(token), round, serviceAction, sourceA, OWNER_ID, externalProvider)
                 == expected.provider,
             "provider mints first"
         );
@@ -417,16 +422,24 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
         });
         vm.prank(member2);
         require(
-            service.mintRecipientReward(address(token), round, serviceAction, sourceA, OWNER_ID, PROVIDER_ID)
+            service.mintRecipientRewardBySourceActionIdByGroupId(address(token), round, serviceAction, sourceA, OWNER_ID, PROVIDER_ID)
                 == expected.recipientA,
             "partner A"
         );
         vm.prank(member2);
         require(
-            service.mintRecipientReward(address(token), round, serviceAction, sourceB, OWNER_ID, PROVIDER_ID)
+            service.mintRecipientRewardBySourceActionIdByGroupId(address(token), round, serviceAction, sourceB, OWNER_ID, PROVIDER_ID)
                 == expected.recipientB,
             "partner B"
         );
+        vm.expectEmit(true, true, true, true, address(service));
+        emit IGroupServiceExecutorEvents.ServiceOwnerRewardBurned({
+            serviceTokenAddress: address(token),
+            serviceActionId: serviceAction,
+            round: round,
+            groupId: OWNER_ID,
+            amount: expected.burn
+        });
         vm.prank(member1);
         require(
             service.mintGroupOwnerReward(address(token), round, serviceAction, OWNER_ID) == expected.ownerSelf,
@@ -451,6 +464,12 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
 
     function _advancePhase() private {
         vm.roll(block.number + BLOCKS_PER_PHASE);
+    }
+
+    function _pair(uint256 first, uint256 second) private pure returns (uint256[] memory values) {
+        values = new uint256[](2);
+        values[0] = first;
+        values[1] = second;
     }
 
     function _single(uint256 value) private pure returns (uint256[] memory values) {

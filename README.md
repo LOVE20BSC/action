@@ -31,20 +31,22 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 
 按 `memberId` 查奖励时，链群行动用 `memberReward` 就能查到完整的个人奖励。需要额外信息时才加明细入口，单类用 `rewardDetail`，多类用 `xxxRewardDetail`。LP 的 `rewardDetail` 返回铸造量、销毁量和状态，待结算时返回预估量，结算后返回实际量。
 
-[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回单个外部 Provider 的分数和全群总分，`externalProviderScore` 返回所有外部 Provider 的合计分数和全群总分。前者用于计算个人份额，后者用于计算某项来源行动的 Provider 份额合计。
+[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回指定 Provider 的分数和全群总分，群主归属的分数也可查询。`generatedActionRewardAttributionByProviderId` 返回某个来源行动和链群归属该 Provider 的激励。`totalGeneratedActionRewardAttributionByProviderId` 汇总该身份当轮在其他链群的归属激励，`totalGeneratedActionRewardAttributionByGroupOwnerId` 汇总其在自有链群的归属激励。`providerIdsWithPositiveScoreByActionIdByGroupId` 分页返回正分 Provider，单笔激励可能向下取整为零。
 
-[`IGroupServiceExecutor`](src/interfaces/IGroupServiceExecutor.sol) 的 `serviceRewardDetail` 按 `memberId` 查看群主、验证者、合伙人和 Provider 四类激励。`ownerBudgetBeforeCap` 是治理权上限前的群主预算，`ownerBudget` 是上限后的预算，两者之差是应销毁的超额。`rewardDistribution` 按来源行动和链群给出合伙人编号、比例和金额，以及合伙人合计、群主自留和 Provider 预留。`groupOwnerBurn` 按链群预算查询待销毁和已销毁金额。
+`memberRewardDetail` 按 `memberId` 返回群主、验证者、合伙人和 Provider 四组激励，以及治理上限前后的群主预算。`groupOwnerRewardBudget` 也可单独查询这两种预算，差额是应销毁的超额。群主只需销毁时，`groupOwnerReward` 的两个金额均为零，状态从 `Pending` 变为 `Settled`。 [IGroupServiceExecutor](src/interfaces/IGroupServiceExecutor.sol)
 
 群主直接查询或领取分账后的奖励。权重按该链群当轮已验证的行动计算。合约先按整轮预算切出 Provider 激励，再按验证成果计算外部 Provider 份额和归属 owner 的部分。Provider 的取整尾差留在合约。
 
-| 角色 | 查金额与铸造状态 | 单项铸造 | 按身份分页与分批 |
+| 角色 | 按身份汇总查询与领取 | 细分查询与领取 | 查找细分来源 |
 | --- | --- | --- | --- |
-| 公共验证者 | `verifierReward` | `mintVerifierReward` | 按服务行动整轮结算 |
-| 链群 owner | `groupOwnerReward` | `mintGroupOwnerReward` | 按服务行动整轮结算 |
-| 合伙人 | `recipientReward` | `mintRecipientReward` | `recipientRewardKeys`、`mintRecipientRewards` |
-| Provider | `providerReward` | `mintProviderReward` | `providerRewardKeys`、`mintProviderRewards` |
+| 公共验证者 | `verifierReward`、`mintVerifierReward` | 按服务行动整轮结算 | 按服务行动整轮结算 |
+| 链群 owner | `groupOwnerReward`、`mintGroupOwnerReward` | 按服务行动整轮结算 | 按服务行动整轮结算 |
+| 合伙人 | `recipientReward`、`mintRecipientReward` | `recipientRewardBySourceActionIdByGroupId`、`mintRecipientRewardBySourceActionIdByGroupId` | `groupIdsWithRecipientRewardByRecipientId` → `actionIdsWithRecipientRewardByGroupIdByRecipientId`；`mintRecipientRewards` 可批量领取 |
+| Provider | `providerReward`、`mintProviderReward` | `providerRewardBySourceActionIdByGroupId`、`mintProviderRewardBySourceActionIdByGroupId` | `groupIdsWithProviderRewardByProviderId` → `actionIdsWithProviderRewardByGroupIdByProviderId`；`mintProviderRewards` 可批量领取 |
 
-份额键包含来源行动和链群。用单项查询核对候选份额的金额和状态后，可以选定待铸造的份额一起提交。按链群对账时，`joinedActionIdsByGroupId` 给出目标轮的来源行动，验证记录和首次归属可还原有分数的外部 Provider。验证者在某群某项来源行动的分摊额，按这项链群权重占本人所有已验证来源行动权重的比例，从本人整轮验证激励中折算。
+四类角色的整轮查询均直接返回待铸造量、已铸造量和状态，与 `memberReward` 一致。按角色领取会跳过已领的份额。查历史来源时，先分页查询链群，再按链群分页查询来源行动。单笔查询返回金额和 `isMinted`。选定多笔后可用两组并行的来源行动 ID 和链群 ID 批量领取，每笔最多 32 项。
+
+当前合作关系可单独查询。Provider 用 `groupIdsWithQuotaByProviderId` 和 `actionIdsWithQuotaByProviderIdByGroupId` 查询仍有额度的链群和行动，已投入行动的额度也计入。Recipient 用 `currentRecipientGroupIdsByRecipientId` 和 `currentRecipientSourceActionIdsByRecipientIdByGroupId` 查询当前配置，用 `recipientRatio` 查看指定轮次的比例。
 
 ## 构建与测试
 

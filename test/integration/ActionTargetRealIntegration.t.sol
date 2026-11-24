@@ -294,7 +294,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         vm.prank(member1);
         group.deactivateGroup(address(token), sourceActionId, 1);
         require(!group.hasActiveGroups(address(token), 1), "activation list is empty");
-        require(service.totalGroupActionReward(address(token), round) == 0, "no verified action yet");
+        require(group.totalGeneratedActionReward(address(token), round) == 0, "no verified action yet");
         uint256[] memory scores = new uint256[](1);
         scores[0] = 100;
         vm.prank(member2);
@@ -303,7 +303,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         uint256 pool = mint.proposalReward(address(token), round);
         uint256 totalVotes = MEMBER1_VOTES + MEMBER2_VOTES + BELOW_THRESHOLD_VOTES;
         uint256 sourceReward = pool * MEMBER1_VOTES / totalVotes;
-        require(sourceReward > 0 && service.totalGroupActionReward(address(token), round) == sourceReward, "round total");
+        require(sourceReward > 0 && group.totalGeneratedActionReward(address(token), round) == sourceReward, "round total");
         require(
             group.totalGeneratedActionRewardByGroupId(address(token), round, 1) == sourceReward,
             "group weight is available after verification"
@@ -324,7 +324,7 @@ contract ActionTargetRealIntegrationTest is ActionTargetIntegrationFixture {
         (uint256 serviceReward,) = actionTarget.actionReward(address(token), round, serviceActionId);
         require(serviceReward == pool * MEMBER2_VOTES / totalVotes, "service uses total round votes");
         _assertServiceClaims(service, round, serviceActionId, serviceReward);
-        require(service.totalGroupActionReward(address(token), round) == sourceReward, "round total stays fixed");
+        require(group.totalGeneratedActionReward(address(token), round) == sourceReward, "round total stays fixed");
     }
 
     function _assertServiceClaims(

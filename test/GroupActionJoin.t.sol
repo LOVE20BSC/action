@@ -306,11 +306,25 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
         _fundJoinTokenFor(PROVIDER, 50e18);
         _grantQuota(PROVIDER_ID, MEMBER2_ID, 50e18);
 
+        (uint256[] memory groupIds, uint256 groupCount) = executor.groupIdsWithQuotaByProviderId(
+            address(token), PROVIDER_ID, 0, 1, false
+        );
+        require(groupCount == 1 && groupIds[0] == GROUP_ID, "quota indexes its group");
+        (uint256[] memory actionIds, uint256 actionCount) = executor.actionIdsWithQuotaByProviderIdByGroupId(
+            address(token), PROVIDER_ID, GROUP_ID, 0, 1, true
+        );
+        require(actionCount == 1 && actionIds[0] == ACTION_ID, "quota indexes its action");
+
         vm.prank(PROVIDER);
         executor.withdrawProviderQuota(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 50e18);
         (, , , uint256 total) =
             executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
         require(total == 0, "withdrawn unused grant leaves the list");
+        (, groupCount) = executor.groupIdsWithQuotaByProviderId(address(token), PROVIDER_ID, 0, 0, false);
+        (, actionCount) = executor.actionIdsWithQuotaByProviderIdByGroupId(
+            address(token), PROVIDER_ID, GROUP_ID, 0, 0, false
+        );
+        require(groupCount == 0 && actionCount == 0, "withdrawing the last quota removes both entries");
     }
 
     function testProviderQuotaAddAfterRemoveStartsFromZero() external {

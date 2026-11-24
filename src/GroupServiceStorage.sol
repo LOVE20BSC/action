@@ -4,14 +4,13 @@ pragma solidity =0.8.37;
 import {RoundHistoryStringArray} from "@libs/RoundHistoryStringArray.sol";
 import {RoundHistoryUint256Array} from "@libs/RoundHistoryUint256Array.sol";
 import {RoundHistoryUint256Set} from "@libs/RoundHistoryUint256Set.sol";
-import {GroupRewardKey} from "./interfaces/IGroupActionVerify.sol";
 
 library GroupServiceStorage {
     uint256 constant PRECISION = 1e18;
     uint256 constant MAX_RECIPIENTS_PER_ACTION = 8;
     uint256 constant MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP = 16;
     uint256 constant MAX_REMARK_BYTES = 256;
-    uint256 constant MAX_REWARD_KEYS_PER_BATCH = 32;
+    uint256 constant MAX_REWARDS_PER_BATCH = 32;
 
     enum SettlementCause {
         RoundedToZero,
@@ -113,9 +112,10 @@ library GroupServiceStorage {
             )
         ) paidShares;
 
-        // sourceTokenAddress => recipientId => configured source action and group keys by round
-        mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) rewardKeysByRecipientId;
-        // keccak256(sourceActionId, groupId) => source action and group, shared by all recipients
-        mapping(uint256 => GroupRewardKey) recipientRewardKeyById;
+        // sourceTokenAddress => recipientId => groups with configured rewards by round
+        mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) recipientGroupIdsByRecipientId;
+        // sourceTokenAddress => recipientId => groupId => source action ids by round
+        mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Set.Storage)))
+            recipientActionIdsByGroupIdByRecipientId;
     }
 }

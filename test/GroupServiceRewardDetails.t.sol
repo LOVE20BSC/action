@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
-import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
+import {GroupServiceTestBase, TestServiceRewardDetails} from "./GroupServiceTestBase.sol";
 import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
-import {MemberRewardSummary, ServiceRewardDetails} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {MemberRewardSummary} from "../src/interfaces/IGroupServiceExecutor.sol";
 
 contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
     function testZeroProviderRatioKeepsMemberQuoteAndMintWithinGasBudget() external {
@@ -17,9 +17,14 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
         _armServiceReward(1000);
         _atPhase(MINT_PHASE);
 
-        (, uint256 total) =
-            executor.providerRewardKeys(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, 0, 0, false);
-        require(total == sourceActionCount, "source Provider candidates remain discoverable");
+        (uint256[] memory groupIds, uint256 total) = executor.groupIdsWithProviderRewardByProviderId(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, 0, 1, false
+        );
+        require(total == 1 && groupIds[0] == GROUP_ID, "Provider group remains discoverable");
+        (, uint256 actionCount) = executor.actionIdsWithProviderRewardByGroupIdByProviderId(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID, MEMBER1_ID, 0, sourceActionCount, false
+        );
+        require(actionCount == sourceActionCount, "source Provider candidates remain discoverable");
 
         uint256 gasBefore = gasleft();
         (uint256 pending, uint256 minted, MemberRewardStatus status) =
@@ -64,7 +69,7 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
 
         vm.prank(GROUP_OWNER);
         require(
-            executor.mintProviderReward(
+            executor.mintProviderRewardBySourceActionIdByGroupId(
                 address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID_B, GROUP_OWNER_B_ID, GROUP_ID
             ) == 10,
             "provider paid first"
@@ -105,26 +110,25 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
         _atPhase(MINT_PHASE);
 
-        ServiceRewardDetails memory quote =
-            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        TestServiceRewardDetails memory quote =
+            _serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(quote.ownerBudgetBeforeCap == 400 && quote.ownerBudget == 160, "quoted budgets");
         _assertSummary(quote.owner, MemberRewardSummary(80, 0, MemberRewardStatus.Pending));
-        {
-            (uint256 pendingBurn, uint256 burned) =
-                executor.groupOwnerBurn(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
-            require(pendingBurn == 240 && burned == 0, "quoted budget difference is pending burn");
-        }
+        require(quote.ownerBudgetBeforeCap - quote.ownerBudget == 240, "quoted owner budget difference");
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        _assertSummary(MemberRewardSummary(pending, minted, status), quote.owner);
 
         vm.prank(GROUP_OWNER);
         require(executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 100);
 
-        ServiceRewardDetails memory actual =
-            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        TestServiceRewardDetails memory actual =
+            _serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(actual.ownerBudgetBeforeCap == 500 && actual.ownerBudget == 200, "actual budgets");
         _assertSummary(actual.owner, MemberRewardSummary(0, 100, MemberRewardStatus.Settled));
-        (uint256 pendingBurnAfterMint, uint256 burnedAfterMint) =
-            executor.groupOwnerBurn(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
-        require(pendingBurnAfterMint == 0 && burnedAfterMint == 300, "actual budget difference is burned");
+        require(actual.ownerBudgetBeforeCap - actual.ownerBudget == 300, "actual owner budget difference");
+        (pending, minted, status) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        _assertSummary(MemberRewardSummary(pending, minted, status), actual.owner);
         require(token.balanceOf(GROUP_OWNER) == 100 && token.burnedTotal() == 300, "actual payout and burn");
     }
 
@@ -135,14 +139,27 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
         MemberRewardSummary memory provider,
         uint256 expectedOwnerBudget
     ) private view {
-        ServiceRewardDetails memory details =
-            executor.serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        TestServiceRewardDetails memory details =
+            _serviceRewardDetail(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         _assertSummary(details.verifier, verifier);
         _assertSummary(details.owner, owner);
         _assertSummary(details.recipient, recipient);
         _assertSummary(details.provider, provider);
         require(details.ownerBudget == expectedOwnerBudget, "owner budget separated from self reward");
         require(details.ownerBudgetBeforeCap == expectedOwnerBudget, "uncapped budgets agree");
+
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            executor.verifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        _assertSummary(MemberRewardSummary(pending, minted, status), details.verifier);
+
+        (pending, minted, status) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        _assertSummary(MemberRewardSummary(pending, minted, status), details.owner);
+
+        (pending, minted, status) = executor.recipientReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        _assertSummary(MemberRewardSummary(pending, minted, status), details.recipient);
+
+        (pending, minted, status) = executor.providerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        _assertSummary(MemberRewardSummary(pending, minted, status), details.provider);
     }
 
     function _assertSummary(MemberRewardSummary memory actual, MemberRewardSummary memory expected) private pure {

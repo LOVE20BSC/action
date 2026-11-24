@@ -409,7 +409,7 @@ library GroupActionJoin {
 
             uint256 quotaTotal = self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] + amounts[i];
             self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = quotaTotal;
-            self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].add(memberId);
+            _addQuotaIndex(self, tokenAddress, actionId, groupId, providerId, memberId);
             totalAmount += amounts[i];
 
             emit IGroupActionJoinEvents.ProviderQuotaAdded({
@@ -515,7 +515,7 @@ library GroupActionJoin {
             _decreaseProviderAmount(self, tokenAddress, round, actionId, groupId, memberId, providerId, used);
         }
         self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = 0;
-        self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].remove(memberId);
+        _removeQuotaIndex(self, tokenAddress, actionId, groupId, providerId, memberId);
     }
 
     function providerQuotas(
@@ -679,7 +679,7 @@ library GroupActionJoin {
                 return (0, 0, MemberRewardStatus.Unavailable);
             }
         }
-        uint256 totalScore = self.totalFinalScore[key.tokenAddress][key.actionId][key.round];
+        uint256 totalScore = self.totalActionFinalScore[key.tokenAddress][key.actionId][key.round];
         if (totalScore == 0 || !self.roundVerified[key.tokenAddress][key.actionId][key.round]) {
             return (0, 0, MemberRewardStatus.Unavailable);
         }
@@ -748,7 +748,7 @@ library GroupActionJoin {
         address actionTargetAddress,
         MemberRewardKey memory key
     ) private returns (uint256 mintAmount) {
-        uint256 totalScore = self.totalFinalScore[key.tokenAddress][key.actionId][key.round];
+        uint256 totalScore = self.totalActionFinalScore[key.tokenAddress][key.actionId][key.round];
         if (totalScore == 0 || !self.roundVerified[key.tokenAddress][key.actionId][key.round]) {
             revert IActionExecutorErrors.MemberRewardPoolEmpty(key.tokenAddress, key.round);
         }
@@ -1014,7 +1014,7 @@ library GroupActionJoin {
         uint256 quotaAfter = quota - amount;
         self.quotaAmountByGroupIdByProviderIdByMemberId[tokenAddress][actionId][groupId][providerId][memberId] = quotaAfter;
         if (quotaAfter == 0) {
-            self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId].remove(memberId);
+            _removeQuotaIndex(self, tokenAddress, actionId, groupId, providerId, memberId);
         }
 
         _pushJoinToken(self, tokenAddress, actionId, amount);
@@ -1028,5 +1028,44 @@ library GroupActionJoin {
             amount: amount,
             quotaTotal: quotaAfter
         });
+    }
+
+    function _removeQuotaIndex(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId,
+        uint256 memberId
+    ) private {
+        Uint256Set.Storage storage quotaMembers =
+            self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId];
+        quotaMembers.remove(memberId);
+        if (quotaMembers.count() != 0) return;
+
+        Uint256Set.Storage storage quotaActions =
+            self.quotaActionIdsByProviderIdByGroupId[tokenAddress][providerId][groupId];
+        quotaActions.remove(actionId);
+        if (quotaActions.count() == 0) {
+            self.quotaGroupIdsByProviderId[tokenAddress][providerId].remove(groupId);
+        }
+    }
+
+    function _addQuotaIndex(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId,
+        uint256 memberId
+    ) private {
+        Uint256Set.Storage storage quotaMembers =
+            self.quotaMemberIdsByGroupIdByProviderId[tokenAddress][actionId][groupId][providerId];
+        if (!quotaMembers.add(memberId) || quotaMembers.count() != 1) return;
+
+        Uint256Set.Storage storage quotaActions = self.quotaActionIdsByProviderIdByGroupId[tokenAddress][providerId][groupId];
+        if (quotaActions.add(actionId) && quotaActions.count() == 1) {
+            self.quotaGroupIdsByProviderId[tokenAddress][providerId].add(groupId);
+        }
     }
 }

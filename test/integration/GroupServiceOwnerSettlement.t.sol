@@ -92,7 +92,7 @@ contract GroupServiceOwnerSettlementTest is ActionTargetIntegrationFixture {
         _assertRecipientReward(serviceActionId, recipientReward, false);
 
         vm.prank(member2);
-        uint256 paid = service.mintRecipientReward(
+        uint256 paid = service.mintRecipientRewardBySourceActionIdByGroupId(
             address(token), round, serviceActionId, actionA, OWNER_ID, VERIFIER_ID
         );
         require(paid == recipientReward, "recipient claim matches the source share");
@@ -253,8 +253,9 @@ contract GroupServiceOwnerSettlementTest is ActionTargetIntegrationFixture {
             group.totalGeneratedActionRewardByGroupId(address(token), round, OWNER_ID) == expectedWeight,
             "only this group's verified shares counted once"
         );
-        (uint256 weight, uint256 ownerProviderWeight) = group.groupRewardWeights(address(token), round, OWNER_ID);
-        require(weight == expectedWeight && ownerProviderWeight == weight * 1e18, "all scores attributed to owner");
+        uint256 ownerProviderReward =
+            group.totalGeneratedActionRewardAttributionByGroupOwnerId(address(token), round, OWNER_ID);
+        require(ownerProviderReward == expectedWeight, "all scores attributed to owner");
     }
 
     function _assertServiceReward(uint256 actionId, uint256 expected, bool alreadyClaimed) private view {
@@ -264,7 +265,7 @@ contract GroupServiceOwnerSettlementTest is ActionTargetIntegrationFixture {
     }
 
     function _assertRecipientReward(uint256 serviceId, uint256 expected, bool expectedMinted) private view {
-        (uint256 amount, bool isMinted) = service.recipientReward(
+        (uint256 amount, bool isMinted) = service.recipientRewardBySourceActionIdByGroupId(
             address(token), round, serviceId, actionA, OWNER_ID, VERIFIER_ID
         );
         require(amount == expected && isMinted == expectedMinted, "recipient reward and claim status");
@@ -273,12 +274,11 @@ contract GroupServiceOwnerSettlementTest is ActionTargetIntegrationFixture {
     function _claim(uint256 actionId, uint256 expected) private {
         vm.prank(member1);
         uint256 amount = service.mintMemberReward(address(token), round, actionId, OWNER_ID);
-        (uint256 pendingBurn, uint256 burned) = service.groupOwnerBurn(address(token), round, actionId, OWNER_ID);
-        require(amount == expected && pendingBurn == 0 && burned == 0, "claim matches preview");
+        require(amount == expected, "claim matches preview");
     }
 
     function _claimRecipient(uint256 serviceId) private returns (uint256) {
         vm.prank(member2);
-        return service.mintRecipientReward(address(token), round, serviceId, actionA, OWNER_ID, VERIFIER_ID);
+        return service.mintRecipientRewardBySourceActionIdByGroupId(address(token), round, serviceId, actionA, OWNER_ID, VERIFIER_ID);
     }
 }

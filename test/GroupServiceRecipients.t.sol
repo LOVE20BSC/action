@@ -281,27 +281,17 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         require(total == 2 && page.length == 0, "out of range returns an empty page with the total");
     }
 
-    function testGetDistributionProjectsArbitraryAmounts() external {
+    function testRecipientRewardsRoundDownIndependently() external {
         _prepareRecipientsScenario();
+        _armServiceReward(6);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID, MEMBER2_ID), _ratios(PRECISION / 2, PRECISION / 4));
+        _atPhase(MINT_PHASE);
 
-        (uint256[] memory recipientIds, uint256[] memory ratios, uint256[] memory amounts, uint256 ownerAmount) =
-            executor.distribution(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 3);
-        require(recipientIds.length == 2 && recipientIds[0] == MEMBER1_ID, "recipients projected");
-        require(ratios[0] == PRECISION / 2 && ratios[1] == PRECISION / 4, "ratios projected");
-        require(amounts[0] == 1 && amounts[1] == 0, "each item floors independently");
-        require(ownerAmount == 2, "remainder belongs to the owner");
-
-        // 100% allocation of an odd amount does not underflow.
-        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION));
-        (,, amounts, ownerAmount) =
-            executor.distribution(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 3);
-        require(amounts[0] == 3 && ownerAmount == 0, "full allocation keeps the whole budget");
-
-        // No configuration: the owner keeps everything.
-        (,, amounts, ownerAmount) =
-            executor.distribution(address(token), SERVICE_ROUND, GROUP_ACTION_ID_B, GROUP_ID, 5);
-        require(amounts.length == 0 && ownerAmount == 5, "unconfigured action keeps the whole budget");
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 1, false);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER2_ID, 0, false);
+        require(_claimRecipient(GROUP_ACTION_ID, MEMBER1_ID) == 1, "recipient receives the rounded amount");
+        (uint256 ownerAmount, uint256 burnAmount) = _settleService(GROUP_ID);
+        require(ownerAmount == 2 && burnAmount == 0, "the owner receives the remainder");
     }
 
     function testPreMintDistributionProjectionMatchesSettlement() external {
@@ -381,13 +371,9 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _atPhase(MINT_PHASE);
 
         // Projections before settlement follow the same math.
-        (uint256[] memory recipientIds,, uint256[] memory amounts,, uint256 ownerAmount,) =
-            executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
-        require(
-            recipientIds[0] == MEMBER1_ID && amounts[0] == 135e18 && ownerAmount == 135e18, "slice split per action"
-        );
         _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 135e18, false);
         _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER2_ID, 0, false);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID_B, MEMBER2_ID, 45e18, false);
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
         require(mintAmount == 270e18 && burnAmount == 0, "owner receives the remainder");
@@ -438,15 +424,11 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
 
         _atPhase(MINT_PHASE);
 
-        // Both proposals project the same split from that one configuration.
-        (uint256[] memory idsA,, uint256[] memory amountsA,, uint256 ownerA,) =
-            executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
-        (uint256[] memory idsB,, uint256[] memory amountsB,, uint256 ownerB,) =
-            executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ACTION_ID, GROUP_ID);
-        require(idsA.length == 1 && idsA[0] == MEMBER1_ID, "first proposal sees the recipient");
-        require(idsB.length == 1 && idsB[0] == MEMBER1_ID, "second proposal reuses the same recipient");
-        require(amountsA[0] == 225e18 && amountsA[0] == amountsB[0], "both project the same slice");
-        require(ownerA == 225e18 && ownerA == ownerB, "both project the same remainder");
+        _assertRecipientRewardOn(SERVICE_ACTION_ID, GROUP_ACTION_ID, MEMBER1_ID, 225e18, false);
+        _assertRecipientRewardOn(SERVICE_ACTION_ID_B, GROUP_ACTION_ID, MEMBER1_ID, 225e18, false);
+        (uint256 ownerA,,) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        (uint256 ownerB,,) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ID);
+        require(ownerA == 225e18 && ownerA == ownerB, "both proposals quote the same owner amount");
 
         // Each proposal uses the shared configuration and has a separate claim.
         (uint256 mintAmountB, uint256 burnAmountB) = _settleServiceOn(SERVICE_ACTION_ID_B, GROUP_ID);
@@ -493,7 +475,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _claimRecipient(GROUP_ACTION_ID, MEMBER1_ID);
 
         vm.prank(MEMBER2);
-        uint256 paid = executor.mintRecipientReward(
+        uint256 paid = executor.mintRecipientRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(paid == 450e18, "historical entitlement paid");
@@ -647,7 +629,7 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         uint256 expectedAmount,
         bool expectedMinted
     ) private view {
-        (uint256 amount, bool isMinted) = executor.recipientReward(
+        (uint256 amount, bool isMinted) = executor.recipientRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, serviceActionId, sourceActionId, GROUP_ID, recipientId
         );
         require(amount == expectedAmount && isMinted == expectedMinted, "recipient amount and state match");

@@ -3,11 +3,6 @@ pragma solidity =0.8.37;
 
 import {IVerificationInfo} from "./IVerificationInfo.sol";
 
-struct GroupRewardKey {
-    uint256 sourceActionId;
-    uint256 groupId;
-}
-
 struct VerifierApplication {
     uint256 applicationId;
     uint256 verifierId;

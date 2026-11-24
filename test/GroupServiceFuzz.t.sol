@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 
 /// @dev Formula and conservation properties: every settlement is checked against
@@ -132,16 +133,10 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
             "the executor is drained exactly"
         );
 
-        // The projection agrees with the executed split.
-        (uint256[] memory recipientIds,, uint256[] memory amounts,, uint256 ownerAmount,) =
-            executor.rewardDistribution(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID);
-        uint256 projected;
-        for (uint256 i = 0; i < amounts.length; i++) {
-            projected += amounts[i];
-        }
-        require(projected == distributed, "projection matches the executed distribution");
-        require(recipientIds.length == 3, "three recipients");
-        require(ownerAmount == remaining, "projected remainder matches");
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
+            executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        MemberRewardStatus expectedStatus = remaining == 0 ? MemberRewardStatus.Unavailable : MemberRewardStatus.Settled;
+        require(pending == 0 && minted == remaining && status == expectedStatus, "owner quote agrees with the payout");
     }
 
     function _settleFuzzScenario(
@@ -192,13 +187,19 @@ contract GroupServiceFuzzTest is GroupServiceTestBase {
             serviceReward, denominator, ownerWeight, ratio, govMultiplier, validVotes, totalGovVotes
         );
         // For the owner with a recipient, the configured source action contributes half the owner's weight.
-        uint256 recipientAmount = _assertRecipientClaim(MEMBER2_ID, (ownerBudget / 2) * recipientRatio / PRECISION);
+        uint256 recipientAmount;
+        if (recipientRatio != 0) {
+            recipientAmount = _assertRecipientClaim(MEMBER2_ID, (ownerBudget / 2) * recipientRatio / PRECISION);
+        }
         (uint256 mintAmount, uint256 burnAmount) = _settleService(memberId);
-        uint256 expectedMemberBurn = recipientAmount == 0 ? expectedBurned : 0;
-        require(mintAmount == ownerBudget - recipientAmount && burnAmount == expectedMemberBurn, "owner settlement matches the reference");
+        require(mintAmount == ownerBudget - recipientAmount && burnAmount == expectedBurned, "owner settlement matches the reference");
     }
 
     function _assertRecipientClaim(uint256 recipientId, uint256 expectedAmount) internal returns (uint256) {
+        (uint256 quoted, bool isMinted) = executor.recipientRewardBySourceActionIdByGroupId(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, recipientId
+        );
+        require(quoted == expectedAmount && !isMinted, "recipient quote follows the formula");
         if (expectedAmount == 0) {
             return 0;
         }

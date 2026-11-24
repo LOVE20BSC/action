@@ -95,10 +95,10 @@ contract GroupServiceProviderMintGasTest is ActionTargetIntegrationFixture {
         {
             (uint256 targetScore, uint256 groupScore) =
                 group.providerScore(address(token), round, sourceAction, OWNER_ID, TARGET_PROVIDER_ID);
-            (uint256 externalScore, uint256 externalGroupScore) =
-                group.externalProviderScore(address(token), round, sourceAction, OWNER_ID);
-            require(groupScore == 100_000 && externalGroupScore == groupScore, "group score held constant");
-            require(externalScore == 52_000 && targetScore == 20_000, "Provider scores held constant");
+            (uint256 ownerScore, uint256 ownerGroupScore) =
+                group.providerScore(address(token), round, sourceAction, OWNER_ID, OWNER_ID);
+            require(groupScore == 100_000 && ownerGroupScore == groupScore, "group score held constant");
+            require(ownerScore == 48_000 && targetScore == 20_000, "Provider scores held constant");
         }
         if (distinctProviders) {
             for (uint256 i; i < count; ++i) {
@@ -109,12 +109,12 @@ contract GroupServiceProviderMintGasTest is ActionTargetIntegrationFixture {
         }
         (uint256 budget,) = actionTarget.actionReward(address(token), round, serviceAction);
         (uint256 expected, bool minted) =
-            service.providerReward(address(token), round, serviceAction, sourceAction, OWNER_ID, TARGET_PROVIDER_ID);
+            service.providerRewardBySourceActionIdByGroupId(address(token), round, serviceAction, sourceAction, OWNER_ID, TARGET_PROVIDER_ID);
         require(expected == budget / 20 && expected > 0 && !minted, "quote matches manual share");
         uint256 balanceBefore = token.balanceOf(member2);
         _coolContracts();
         vm.prank(member2);
-        paid = service.mintProviderReward(
+        paid = service.mintProviderRewardBySourceActionIdByGroupId(
             address(token), round, serviceAction, sourceAction, OWNER_ID, TARGET_PROVIDER_ID
         );
         gasUsed = vm.lastCallGas().gasTotalUsed;

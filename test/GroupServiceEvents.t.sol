@@ -12,14 +12,6 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         _assertOwnerReward(54e18, 360e18, false);
 
         vm.expectEmit(true, true, true, true, address(executor));
-        emit ServiceOwnerRewardBurned({
-            serviceTokenAddress: address(token),
-            serviceActionId: SERVICE_ACTION_ID,
-            round: SERVICE_ROUND,
-            groupId: GROUP_ID,
-            amount: 360e18
-        });
-        vm.expectEmit(true, true, true, true, address(executor));
         emit RecipientPaid({
             serviceTokenAddress: address(token),
             serviceActionId: SERVICE_ACTION_ID,
@@ -33,14 +25,21 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         vm.recordLogs();
         require(_claimRecipient(GROUP_ACTION_ID, MEMBER1_ID) == 27e18, "first recipient received the capped share");
         GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
-        require(logs.length == 4, "burn and transfer each produce a token and service event");
-        require(logs[0].topics[0] == keccak256("TokenBurned(address,uint256)"), "actual burn precedes its attribution");
-        require(logs[1].topics[0] == IGroupServiceExecutorEvents.ServiceOwnerRewardBurned.selector, "owner overflow");
-        require(logs[2].topics[0] == keccak256("Transfer(address,address,uint256)"), "transfer precedes payout event");
-        require(logs[3].topics[0] == IGroupServiceExecutorEvents.RecipientPaid.selector, "recipient payout");
+        require(logs.length == 2, "recipient transfer and payout event");
+        require(logs[0].topics[0] == keccak256("Transfer(address,address,uint256)"), "transfer precedes payout event");
+        require(logs[1].topics[0] == IGroupServiceExecutorEvents.RecipientPaid.selector, "recipient payout");
 
         require(_claimRecipient(GROUP_ACTION_ID_B, MEMBER2_ID) == 9e18, "second recipient received the capped share");
-        _assertOwnerReward(54e18, 0, false);
+        _assertOwnerReward(54e18, 360e18, false);
+
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit ServiceOwnerRewardBurned({
+            serviceTokenAddress: address(token),
+            serviceActionId: SERVICE_ACTION_ID,
+            round: SERVICE_ROUND,
+            groupId: GROUP_ID,
+            amount: 360e18
+        });
 
         vm.expectEmit(true, true, true, true, address(executor));
         emit MemberRewardMinted({
@@ -49,7 +48,7 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
             memberId: GROUP_ID,
             round: SERVICE_ROUND,
             mintAmount: 54e18,
-            burnAmount: 0
+            burnAmount: 360e18
         });
         vm.expectEmit(true, true, true, true, address(executor));
         emit ServiceRewardsDistributed({
@@ -62,8 +61,16 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
             ownerReward: 90e18,
             ownerRemaining: 54e18
         });
+        vm.recordLogs();
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
-        require(mintAmount == 54e18 && burnAmount == 0, "owner received the remainder and did not burn again");
+        logs = vm.getRecordedLogs();
+        require(logs.length == 5, "owner burn and payout events");
+        require(logs[0].topics[0] == keccak256("TokenBurned(address,uint256)"), "actual burn precedes its attribution");
+        require(logs[1].topics[0] == IGroupServiceExecutorEvents.ServiceOwnerRewardBurned.selector, "owner overflow");
+        require(logs[2].topics[0] == keccak256("Transfer(address,address,uint256)"), "transfer precedes payout event");
+        require(logs[3].topics[0] == IActionExecutorEvents.MemberRewardMinted.selector, "owner payout");
+        require(logs[4].topics[0] == IGroupServiceExecutorEvents.ServiceRewardsDistributed.selector, "owner accounting");
+        require(mintAmount == 54e18 && burnAmount == 360e18, "owner received the remainder and burned the overflow");
         require(token.balanceOf(GROUP_OWNER) - ownerBalance == mintAmount, "reported payout matches the owner's balance increase");
         _assertOwnerReward(54e18, 360e18, true);
 

@@ -65,7 +65,7 @@ contract GroupActionFuzzTest is GroupActionExecutorTestBase {
         require(verified && decoded == score, "origin decode");
         (uint256 finalScore, bool finalVerified) = executor.finalScore(address(token), 2, ACTION_ID, MEMBER1_ID);
         require(finalVerified && finalScore == 100e18 * score, "final score");
-        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == 100e18 * score, "total accumulates");
+        require(executor.totalActionFinalScore(address(token), 2, ACTION_ID) == 100e18 * score, "total accumulates");
     }
 
     function testFuzzSettleSplitsMatchFinalScore(uint8 score1Seed, uint8 score2Seed) external {

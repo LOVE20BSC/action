@@ -86,7 +86,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         (uint256 finalScore, bool finalVerified) = GroupActionVerify.finalScore(_layout, TOKEN, ROUND, ACTION_ID, 1);
         require(finalScore == MEMBER_AMOUNT_A * 100 && finalVerified, "final score at max");
         require(
-            GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND, ACTION_ID) == MEMBER_AMOUNT_A * 100,
+            GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND, ACTION_ID) == MEMBER_AMOUNT_A * 100,
             "total accumulated"
         );
         require(GroupActionVerify.verifiedMemberCount(_layout, TOKEN, ROUND, ACTION_ID, GROUP_A) == 1, "cursor advanced");
@@ -100,7 +100,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         require(score == 0 && verified, "zero score is verified");
         (uint256 finalScore, ) = GroupActionVerify.finalScore(_layout, TOKEN, ROUND, ACTION_ID, 1);
         require(finalScore == 0, "zero final score");
-        require(GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND, ACTION_ID) == 0, "zero total");
+        require(GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND, ACTION_ID) == 0, "zero total");
         require(GroupActionVerify.verifiedMemberCount(_layout, TOKEN, ROUND, ACTION_ID, GROUP_A) == 1, "cursor advanced");
     }
 
@@ -116,7 +116,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         require(score2 == 90 && verified2, "member 2 second");
         require(score3 == 80 && verified3, "member 3 third");
         require(
-            GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
+            GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
             "total accumulated across batches"
         );
@@ -143,7 +143,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         require(score1 == 100 && verified1, "full score decodes");
         require(score2 == 60 && verified2, "deduction decodes");
         require(
-            GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
+            GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 60,
             "totals unchanged"
         );
@@ -190,7 +190,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         require(score2 == 60 && verified2, "departing member keeps round score");
         require(score3 == 30 && verified3, "displaced member keeps round score");
         require(
-            GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
+            GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 60 + MEMBER_AMOUNT_C * 30 + 40e18 * 50,
             "totals frozen across later rounds"
         );
@@ -224,7 +224,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
             round: ROUND,
             verifierId: VERIFIER_ID,
             startIndex: 0,
-            totalFinalScore: MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
+            totalActionFinalScore: MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80,
             verifiedGroupCount: 1,
             roundVerified: false,
             groupVerified: true,
@@ -241,7 +241,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
             round: ROUND,
             verifierId: VERIFIER_ID,
             startIndex: 0,
-            totalFinalScore: MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80 + 40e18 * 50,
+            totalActionFinalScore: MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_B * 90 + MEMBER_AMOUNT_C * 80 + 40e18 * 50,
             verifiedGroupCount: 2,
             roundVerified: true,
             groupVerified: true,
@@ -274,7 +274,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         require(score3 == 90 && verified3, "displaced member scored in new slot");
         require(score2 == 80 && verified2, "re-added member scored last");
         require(
-            GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
+            GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND, ACTION_ID)
                 == MEMBER_AMOUNT_A * 100 + MEMBER_AMOUNT_C * 90 + MEMBER_AMOUNT_B * 80,
             "totals follow the final arrangement"
         );
@@ -330,7 +330,7 @@ contract GroupActionVerifyTest is IGroupActionVerifyEvents {
         require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND][1] == 40, "round 1 slot");
         require(_layout.originScoreDeductionByMemberId[TOKEN][ACTION_ID][ROUND + 1][1] == 0, "round 2 no slot");
         require(
-            GroupActionVerify.totalFinalScore(_layout, TOKEN, ROUND + 1, ACTION_ID) == MEMBER_AMOUNT_A * 100,
+            GroupActionVerify.totalActionFinalScore(_layout, TOKEN, ROUND + 1, ACTION_ID) == MEMBER_AMOUNT_A * 100,
             "round 2 totals"
         );
     }

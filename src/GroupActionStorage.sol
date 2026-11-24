@@ -2,7 +2,6 @@
 pragma solidity =0.8.37;
 
 import {GroupConfig} from "./interfaces/IGroupActionManager.sol";
-import {GroupRewardKey} from "./interfaces/IGroupActionVerify.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
@@ -45,7 +44,6 @@ library GroupActionStorage {
     }
 
     struct ProviderScores {
-        uint256 externalProviderScore;
         mapping(uint256 => uint256) scoreByProviderId;
     }
 
@@ -143,7 +141,7 @@ library GroupActionStorage {
         // tokenAddress => actionId => round => groupId => accumulated final score
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))) finalScoreByGroupId;
         // tokenAddress => actionId => round => total final score across groups
-        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) totalFinalScore;
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) totalActionFinalScore;
         // tokenAddress => actionId => latest application id
         mapping(address => mapping(uint256 => uint256)) applicationIdCount;
         // tokenAddress => actionId => applicationId => the verifier holding it
@@ -211,12 +209,23 @@ library GroupActionStorage {
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) generatedActionReward;
         // groupId => memberId => permanent first-join attribution across actions and tokens
         mapping(uint256 => mapping(uint256 => ProviderAttribution)) providerAttribution;
-        // tokenAddress => actionId => round => groupId => external Provider scores
+        // tokenAddress => actionId => round => groupId => Provider scores
         mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => ProviderScores)))) providerScoresByGroupId;
         // tokenAddress => round => groupId => actions for which the group finished verification with a positive score
         mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) verifiedActionIdsByGroupId;
-        // tokenAddress => round => providerId => source action and group pairs with positive scores
-        mapping(address => mapping(uint256 => mapping(uint256 => GroupRewardKey[]))) providerRewardKeys;
+        // tokenAddress => round => providerId => other groups with positive Provider scores
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256[]))) providerGroupIdsByProviderId;
+        // tokenAddress => round => providerId => groupId => actions with positive external Provider scores
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256[]))))
+            providerActionIdsByGroupIdByProviderId;
+        // tokenAddress => round => actionId => groupId => positive-score provider ids
+        mapping(address => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256[]))))
+            providerIdsByGroupIdByActionId;
+        // tokenAddress => providerId => group ids with outstanding quota grants
+        mapping(address => mapping(uint256 => Uint256Set.Storage)) quotaGroupIdsByProviderId;
+        // tokenAddress => providerId => groupId => action ids with outstanding quota grants
+        mapping(address => mapping(uint256 => mapping(uint256 => Uint256Set.Storage)))
+            quotaActionIdsByProviderIdByGroupId;
     }
 
     function generatedActionRewardByGroupId(
@@ -232,7 +241,22 @@ library GroupActionStorage {
         uint256 proposalReward = self.generatedActionReward[tokenAddress][actionId][round];
         if (proposalReward == 0) return 0;
 
-        return Math.mulDiv(proposalReward, groupFinalScore, self.totalFinalScore[tokenAddress][actionId][round]);
+        return Math.mulDiv(proposalReward, groupFinalScore, self.totalActionFinalScore[tokenAddress][actionId][round]);
+    }
+
+    function generatedActionRewardAttributionByProviderId(
+        Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 actionId,
+        uint256 groupId,
+        uint256 providerId
+    ) internal view returns (uint256) {
+        uint256 actionReward = self.generatedActionReward[tokenAddress][actionId][round];
+        if (actionReward == 0) return 0;
+        uint256 providerScore = self.providerScoresByGroupId[tokenAddress][actionId][round][groupId]
+            .scoreByProviderId[providerId];
+        return Math.mulDiv(actionReward, providerScore, self.totalActionFinalScore[tokenAddress][actionId][round]);
     }
 
     function memberAmountAt(

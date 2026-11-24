@@ -6,7 +6,6 @@ import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {IGroupActionExecutorErrors} from "./interfaces/IGroupActionExecutor.sol";
 import {IActionTarget} from "./interfaces/IActionTarget.sol";
 import {
-    GroupRewardKey,
     VerifierApplication,
     IGroupActionVerifyEvents,
     IGroupActionVerifyErrors
@@ -121,13 +120,31 @@ library GroupActionVerify {
         return self.finalScoreAt(tokenAddress, round, actionId, memberId);
     }
 
-    function totalFinalScore(
+    function totalActionFinalScore(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
         uint256 round,
         uint256 actionId
     ) external view returns (uint256) {
-        return self.totalFinalScore[tokenAddress][actionId][round];
+        return self.totalActionFinalScore[tokenAddress][actionId][round];
+    }
+
+    function totalGeneratedActionRewardAttributionByProviderId(
+        GroupActionStorage.Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 providerId
+    ) external view returns (uint256 attributedRewardAmount) {
+        uint256[] storage groupIds = self.providerGroupIdsByProviderId[tokenAddress][round][providerId];
+        for (uint256 i = 0; i < groupIds.length; ++i) {
+            uint256 groupId = groupIds[i];
+            uint256[] storage actionIds = self.providerActionIdsByGroupIdByProviderId[tokenAddress][round][providerId][groupId];
+            for (uint256 j = 0; j < actionIds.length; ++j) {
+                attributedRewardAmount += self.generatedActionRewardAttributionByProviderId(
+                    tokenAddress, round, actionIds[j], groupId, providerId
+                );
+            }
+        }
     }
 
     function verifiedMemberCount(
@@ -610,16 +627,11 @@ library GroupActionVerify {
     ) internal returns (bool groupVerified) {
         (uint256[] memory memberIds, ) =
             _memberIds(self, submission.tokenAddress, round, submission.actionId, submission.groupId, verifiedCount, originScores.length);
-        (uint256 batchTotal, uint256 batchExternalProviderScore) =
-            _scoreMembers(self, submission, round, memberIds, originScores);
+        uint256 batchTotal = _scoreMembers(self, submission, round, memberIds, originScores);
         uint256 groupScore =
             self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] + batchTotal;
         self.finalScoreByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] = groupScore;
-        self.totalFinalScore[submission.tokenAddress][submission.actionId][round] += batchTotal;
-        if (batchExternalProviderScore != 0) {
-            self.providerScoresByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId]
-                .externalProviderScore += batchExternalProviderScore;
-        }
+        self.totalActionFinalScore[submission.tokenAddress][submission.actionId][round] += batchTotal;
         uint256 newVerifiedCount = verifiedCount + originScores.length;
         self.verifiedMemberCountByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId] = newVerifiedCount;
         groupVerified = _markGroupVerified(self, submission.tokenAddress, round, submission.actionId, newVerifiedCount, memberCount);
@@ -634,12 +646,12 @@ library GroupActionVerify {
         uint256 round,
         uint256[] memory memberIds,
         uint256[] calldata originScores
-    ) private returns (uint256 batchTotal, uint256 batchExternalProviderScore) {
+    ) private returns (uint256 batchTotal) {
         for (uint256 i = 0; i < originScores.length; i++) {
             uint256 score = _scoreMember(self, submission.tokenAddress, round, submission.actionId, memberIds[i], originScores[i]);
             batchTotal += score;
             if (score != 0) {
-                batchExternalProviderScore += _recordProviderScore(self, submission, round, memberIds[i], score);
+                _recordProviderScore(self, submission, round, memberIds[i], score);
             }
         }
     }
@@ -650,19 +662,32 @@ library GroupActionVerify {
         uint256 round,
         uint256 memberId,
         uint256 score
-    ) private returns (uint256) {
+    ) private {
         uint256 providerId = self.providerAttribution[submission.groupId][memberId].providerId;
-        if (providerId == 0 || providerId == submission.groupId) return 0;
+        if (providerId == 0) providerId = submission.groupId;
         GroupActionStorage.ProviderScores storage scores =
             self.providerScoresByGroupId[submission.tokenAddress][submission.actionId][round][submission.groupId];
         uint256 previousScore = scores.scoreByProviderId[providerId];
         if (previousScore == 0) {
-            self.providerRewardKeys[submission.tokenAddress][round][providerId].push(
-                GroupRewardKey({sourceActionId: submission.actionId, groupId: submission.groupId})
-            );
+            if (providerId != submission.groupId) _recordProviderRewardSource(self, submission, round, providerId);
+            self.providerIdsByGroupIdByActionId[submission.tokenAddress][round][submission.actionId][submission.groupId]
+                .push(providerId);
         }
         scores.scoreByProviderId[providerId] = previousScore + score;
-        return score;
+    }
+
+    function _recordProviderRewardSource(
+        GroupActionStorage.Layout storage self,
+        OriginSubmission memory submission,
+        uint256 round,
+        uint256 providerId
+    ) private {
+        uint256[] storage actionIds =
+            self.providerActionIdsByGroupIdByProviderId[submission.tokenAddress][round][providerId][submission.groupId];
+        if (actionIds.length == 0) {
+            self.providerGroupIdsByProviderId[submission.tokenAddress][round][providerId].push(submission.groupId);
+        }
+        actionIds.push(submission.actionId);
     }
 
     function _markGroupVerified(
@@ -846,7 +871,7 @@ library GroupActionVerify {
             round: round,
             verifierId: submission.verifierId,
             startIndex: submission.startIndex,
-            totalFinalScore: self.totalFinalScore[submission.tokenAddress][submission.actionId][round],
+            totalActionFinalScore: self.totalActionFinalScore[submission.tokenAddress][submission.actionId][round],
             verifiedGroupCount: self.verifiedGroupCountByRound[submission.tokenAddress][submission.actionId][round],
             roundVerified: self.roundVerified[submission.tokenAddress][submission.actionId][round],
             groupVerified: groupVerified,
@@ -862,7 +887,7 @@ library GroupActionVerify {
     ) private {
         address tokenAddress = submission.tokenAddress;
         uint256 actionId = submission.actionId;
-        if (self.totalFinalScore[tokenAddress][actionId][round] == 0) return;
+        if (self.totalActionFinalScore[tokenAddress][actionId][round] == 0) return;
 
         // Load-bearing: Vote totals must be frozen and the proposal pool reserved before this reward is recorded.
         (uint256 reward, ) = IActionTarget(actionTargetAddress).actionReward(tokenAddress, round, actionId);

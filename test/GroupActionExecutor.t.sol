@@ -37,7 +37,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         uint256 memberFinal1 = 100e18 * 100;
         uint256 memberFinal2 = PROVIDER_QUOTA * 60;
         uint256 totalFinal = memberFinal1 + memberFinal2;
-        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == totalFinal, "total final score");
+        require(executor.totalActionFinalScore(address(token), 2, ACTION_ID) == totalFinal, "total final score");
         require(
             executor.joinedAmountByMemberId(address(token), 2, ACTION_ID, MEMBER2_ID) == PROVIDER_QUOTA,
             "provider quota counted as join amount"
@@ -108,7 +108,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _submitScores(_scores(100));
 
         require(
-            executor.totalFinalScore(address(token), 2, ACTION_ID) == 100e18 * 100,
+            executor.totalActionFinalScore(address(token), 2, ACTION_ID) == 100e18 * 100,
             "scored member counted"
         );
         require(!executor.isRoundVerified(address(token), 2, ACTION_ID), "round not complete");
@@ -345,7 +345,7 @@ contract GroupActionExecutorTest is GroupActionExecutorTestBase {
         _submitScores(_scores(0, 0));
 
         require(executor.isRoundVerified(address(token), 2, ACTION_ID), "verified");
-        require(executor.totalFinalScore(address(token), 2, ACTION_ID) == 0, "zero total");
+        require(executor.totalActionFinalScore(address(token), 2, ACTION_ID) == 0, "zero total");
 
         _atPhase(5);
         vm.prank(MEMBER1);

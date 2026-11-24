@@ -3,7 +3,16 @@ pragma solidity =0.8.37;
 
 import {GroupServiceExecutor} from "../src/GroupServiceExecutor.sol";
 import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
-import {GroupServiceCreationParams, ServiceRewardDetails} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {GroupServiceCreationParams, MemberRewardSummary} from "../src/interfaces/IGroupServiceExecutor.sol";
+
+struct TestServiceRewardDetails {
+    MemberRewardSummary owner;
+    MemberRewardSummary verifier;
+    MemberRewardSummary recipient;
+    MemberRewardSummary provider;
+    uint256 ownerBudget;
+    uint256 ownerBudgetBeforeCap;
+}
 import {
     MockGroupServicePhase,
     MockGroupServiceMemberNFT,
@@ -304,10 +313,10 @@ abstract contract GroupServiceTestBase {
         internal
         returns (uint256 mintAmount, uint256 burnAmount)
     {
-        (, uint256 previouslyBurned) = executor.groupOwnerBurn(address(token), SERVICE_ROUND, actionId, memberId);
+        uint256 previouslyBurned = token.burnedTotal();
         vm.prank(_memberAddress(memberId));
         mintAmount = executor.mintMemberReward(address(token), SERVICE_ROUND, actionId, memberId);
-        (, uint256 currentBurned) = executor.groupOwnerBurn(address(token), SERVICE_ROUND, actionId, memberId);
+        uint256 currentBurned = token.burnedTotal();
         burnAmount = currentBurned - previouslyBurned;
     }
 
@@ -315,22 +324,35 @@ abstract contract GroupServiceTestBase {
         internal view returns (uint256 amount, uint256 burn, bool settled)
     {
         (uint256 pending, uint256 paid, MemberRewardStatus status) = executor.memberReward(serviceToken, round, actionId, memberId);
-        (uint256 pendingBurn, uint256 burned) = executor.groupOwnerBurn(serviceToken, round, actionId, memberId);
         settled = status == MemberRewardStatus.Settled;
-        (amount, burn) = settled ? (paid, burned) : (pending, pendingBurn);
+        (uint256 ownerBudget, uint256 ownerBudgetBeforeCap) =
+            executor.groupOwnerRewardBudget(serviceToken, round, actionId, memberId);
+        (amount, burn) = settled ? (paid, ownerBudgetBeforeCap - ownerBudget) : (pending, ownerBudgetBeforeCap - ownerBudget);
     }
 
     function _primaryAccounting(address serviceToken, uint256 round, uint256 actionId, uint256 memberId)
         internal view returns (uint256 verifier, uint256 budget, uint256 burn, uint256 distributed, uint256 owner, bool settled)
     {
-        ServiceRewardDetails memory details = executor.serviceRewardDetail(serviceToken, round, actionId, memberId);
-        (uint256 pendingBurn, uint256 burned) = executor.groupOwnerBurn(serviceToken, round, actionId, memberId);
+        TestServiceRewardDetails memory details = _serviceRewardDetail(serviceToken, round, actionId, memberId);
         verifier = details.verifier.pendingAmount + details.verifier.mintedAmount;
         budget = details.ownerBudget;
-        burn = pendingBurn + burned;
+        burn = details.ownerBudgetBeforeCap - details.ownerBudget;
         owner = details.owner.pendingAmount + details.owner.mintedAmount;
         distributed = budget - owner;
         settled = details.owner.status == MemberRewardStatus.Settled || details.verifier.status == MemberRewardStatus.Settled;
+    }
+
+    function _serviceRewardDetail(address serviceToken, uint256 round, uint256 actionId, uint256 memberId)
+        internal
+        view
+        returns (TestServiceRewardDetails memory details)
+    {
+        MemberRewardSummary memory verifier;
+        MemberRewardSummary memory owner;
+        (verifier, owner, details.recipient, details.provider, details.ownerBudget, details.ownerBudgetBeforeCap) =
+            executor.memberRewardDetail(serviceToken, round, actionId, memberId);
+        details.owner = owner;
+        details.verifier = verifier;
     }
 
     function _claimRecipient(uint256 sourceActionId, uint256 recipientId) internal returns (uint256) {
@@ -342,7 +364,9 @@ abstract contract GroupServiceTestBase {
         returns (uint256)
     {
         vm.prank(_memberAddress(recipientId));
-        return executor.mintRecipientReward(address(token), SERVICE_ROUND, serviceActionId, sourceActionId, GROUP_ID, recipientId);
+        return executor.mintRecipientRewardBySourceActionIdByGroupId(
+            address(token), SERVICE_ROUND, serviceActionId, sourceActionId, GROUP_ID, recipientId
+        );
     }
 
     function _setRecipients(

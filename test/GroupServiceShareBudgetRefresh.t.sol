@@ -3,27 +3,27 @@ pragma solidity =0.8.37;
 
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
-import {GroupRewardKey} from "../src/interfaces/IGroupActionVerify.sol";
 import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
+import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 
 contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
     function testProviderClaimRepricesZeroPreviewUsingActualBudget() external {
         _prepareSingleGroup(1, 200, 1, PRECISION, 1, 1);
         _atPhase(MINT_PHASE);
 
-        (uint256 quoted, bool isMinted) = executor.providerReward(
+        (uint256 quoted, bool isMinted) = executor.providerRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(quoted == 0 && !isMinted, "provider preview rounds to zero");
 
         vm.prank(MEMBER1);
         require(
-            executor.mintProviderReward(
+            executor.mintProviderRewardBySourceActionIdByGroupId(
                 address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
             ) == 100,
             "provider is repriced from actual budget"
         );
-        (uint256 paid, bool settled) = executor.providerReward(
+        (uint256 paid, bool settled) = executor.providerRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(paid == 100 && settled, "provider query records actual payment");
@@ -35,19 +35,19 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
         _atPhase(MINT_PHASE);
 
-        (uint256 quoted, bool isMinted) = executor.recipientReward(
+        (uint256 quoted, bool isMinted) = executor.recipientRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(quoted == 0 && !isMinted, "recipient preview rounds to zero");
 
         vm.prank(MEMBER1);
         require(
-            executor.mintRecipientReward(
+            executor.mintRecipientRewardBySourceActionIdByGroupId(
                 address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
             ) == 50,
             "recipient is repriced from actual budget"
         );
-        (uint256 paid, bool settled) = executor.recipientReward(
+        (uint256 paid, bool settled) = executor.recipientRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(paid == 50 && settled, "recipient query records actual payment");
@@ -68,17 +68,16 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         );
         _atPhase(MINT_PHASE);
 
-        GroupRewardKey[] memory keys = new GroupRewardKey[](2);
-        keys[0] = GroupRewardKey(GROUP_ACTION_ID, GROUP_ID);
-        keys[1] = GroupRewardKey(GROUP_ACTION_ID_B, GROUP_ID);
-        (uint256 firstQuote, bool firstMinted) = executor.providerReward(
-            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, keys[0].sourceActionId, keys[0].groupId, MEMBER1_ID
+        uint256[] memory sourceActionIds = _ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B);
+        uint256[] memory groupIds = _ids(GROUP_ID, GROUP_ID);
+        (uint256 firstQuote, bool firstMinted) = executor.providerRewardBySourceActionIdByGroupId(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, sourceActionIds[0], groupIds[0], MEMBER1_ID
         );
         require(firstQuote == 0 && !firstMinted, "first batch item previews as zero");
 
         vm.prank(MEMBER1);
         uint256[] memory amounts =
-            executor.mintProviderRewards(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, keys);
+            executor.mintProviderRewards(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, sourceActionIds, groupIds);
         require(amounts.length == 2 && amounts[0] == 50 && amounts[1] == 50, "batch reprices every key");
         require(token.balanceOf(MEMBER1) == 100, "batch pays both actual shares");
         require(actionTarget.mintRewardCalls() == 1, "batch mints one service budget");
@@ -88,9 +87,8 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         _prepareSingleGroup(1, 200, 1, PRECISION, 1, 1);
         _atPhase(MINT_PHASE);
 
-        GroupRewardKey[] memory keys = new GroupRewardKey[](2);
-        keys[0] = GroupRewardKey(GROUP_ACTION_ID, GROUP_ID);
-        keys[1] = GroupRewardKey(GROUP_ACTION_ID_B, GROUP_ID);
+        uint256[] memory sourceActionIds = _ids(GROUP_ACTION_ID, GROUP_ACTION_ID_B);
+        uint256[] memory groupIds = _ids(GROUP_ID, GROUP_ID);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IGroupServiceExecutorErrors.ZeroProviderReward.selector,
@@ -100,9 +98,9 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
             )
         );
         vm.prank(MEMBER1);
-        executor.mintProviderRewards(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, keys);
+        executor.mintProviderRewards(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, sourceActionIds, groupIds);
 
-        (uint256 firstAmount, bool firstMinted) = executor.providerReward(
+        (uint256 firstAmount, bool firstMinted) = executor.providerRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(firstAmount == 0 && !firstMinted, "failed batch restores first share");
@@ -112,9 +110,9 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
 
     function testGroupOwnerClaimRepricesZeroPreviewUsingActualBudget() external {
         _preparePrimaryOnly(1, 2, VERIFIER_ID);
-        (uint256 quoted, bool isMinted) =
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
             executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
-        require(quoted == 0 && !isMinted, "owner preview rounds to zero");
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Unavailable, "owner preview rounds to zero");
 
         vm.prank(GROUP_OWNER);
         require(
@@ -126,9 +124,9 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
 
     function testVerifierClaimRepricesZeroPreviewUsingActualBudget() external {
         _preparePrimaryOnly(1, 2, VERIFIER_ID);
-        (uint256 quoted, bool isMinted) =
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
             executor.verifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
-        require(quoted == 0 && !isMinted, "verifier preview rounds to zero");
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Unavailable, "verifier preview rounds to zero");
 
         vm.prank(VERIFIER);
         require(
@@ -183,10 +181,22 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
             )
         );
         vm.prank(MEMBER1);
-        executor.mintProviderReward(
+        executor.mintProviderRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(actionTarget.mintRewardCalls() == 1, "already-minted budget is not retried");
+    }
+
+    function testProviderRoleMintRollsBackBudgetWhenAllSharesRoundToZero() external {
+        _prepareSingleGroup(4, 4, 3, PRECISION, 1, 1);
+        _atPhase(MINT_PHASE);
+
+        vm.expectRevert(abi.encodeWithSelector(
+            IActionExecutorErrors.MemberRewardRoundedToZero.selector, address(token), SERVICE_ROUND, MEMBER1_ID
+        ));
+        vm.prank(MEMBER1);
+        executor.mintProviderReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        require(actionTarget.mintRewardCalls() == 0 && token.balanceOf(MEMBER1) == 0, "zero role reward rolls back");
     }
 
     function _prepareSingleGroup(

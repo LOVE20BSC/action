@@ -19,7 +19,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(token.balanceOf(GROUP_OWNER) - ownerBefore == 450e18, "owner paid out");
         require(actionTarget.mintRewardCalls() == 1, "reward minted once");
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18,
+            groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == 100e18,
             "denominator uses the source round total"
         );
 
@@ -70,22 +70,20 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, 20, false);
         _atPhase(MINT_PHASE);
 
-        (uint256 quotedOwnerReward, bool ownerMinted) =
+        (uint256 pending, uint256 minted, MemberRewardStatus status) =
             executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
-        require(quotedOwnerReward == 10 && !ownerMinted, "view uses the pre-mint quote");
+        require(pending == 10 && minted == 0 && status == MemberRewardStatus.Pending, "view uses the pre-mint quote");
 
         vm.prank(GROUP_OWNER);
         require(
             executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID) == 100,
             "owner receives the share of the actual budget"
         );
-        (uint256 ownerPaid, bool ownerSettled) =
-            executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
-        require(ownerPaid == 100 && ownerSettled, "owner query reports the actual payment");
+        (pending, minted, status) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(pending == 0 && minted == 100 && status == MemberRewardStatus.Settled, "owner query reports the actual payment");
 
-        (uint256 quotedVerifierReward, bool verifierMinted) =
-            executor.verifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
-        require(quotedVerifierReward == 100 && !verifierMinted, "verifier query reads the minted budget");
+        (pending, minted, status) = executor.verifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
+        require(pending == 100 && minted == 0 && status == MemberRewardStatus.Pending, "verifier query reads the minted budget");
         vm.prank(VERIFIER);
         require(
             executor.mintVerifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID) == 100,
@@ -240,6 +238,8 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         (uint256 pending, uint256 minted, MemberRewardStatus status) =
             executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Pending, "member burn is pending");
+        (pending, minted, status) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(pending == 0 && minted == 0 && status == MemberRewardStatus.Pending, "owner burn is pending");
 
         (uint256 mintAmount, uint256 burnAmount) = _settleService(GROUP_ID);
@@ -247,8 +247,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         require(burnAmount == 450e18, "theoretical owner reward burned");
         require(token.burnedTotal() == 450e18, "burn executed");
 
-        (pending, minted, status) = executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        (pending, minted, status) = executor.groupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
         require(pending == 0 && minted == 0 && status == MemberRewardStatus.Settled, "owner burn settled");
+
+        (pending, minted, status) = executor.memberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(pending == 0 && minted == 0 && status == MemberRewardStatus.Settled, "member burn settled");
     }
 
     function testSettlementSumsVerifierWeightAcrossActions() external {
@@ -265,7 +268,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _atPhase(MINT_PHASE);
 
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 100e18,
+            groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == 100e18,
             "denominator aggregates every served action"
         );
 
@@ -281,7 +284,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _standardScenario();
         groupAction.setGroupSliceReadsBlocked(true);
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
+            groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
             "divisor read from the source round total"
         );
         (uint256 projected,,) = _memberAccounting(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
@@ -306,8 +309,11 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         _armServiceRewardOn(SERVICE_ACTION_ID, SERVICE_REWARD);
         _atPhase(MINT_PHASE);
 
-        require(executor.totalGroupActionReward(actionTokenAddress, SERVICE_ROUND) == GROUP_REWARD, "child total");
-        require(executor.totalGroupActionReward(serviceTokenAddress, SERVICE_ROUND) == 400e18, "independent parent total");
+        require(groupAction.totalGeneratedActionReward(actionTokenAddress, SERVICE_ROUND) == GROUP_REWARD, "child total");
+        require(
+            groupAction.totalGeneratedActionReward(serviceTokenAddress, SERVICE_ROUND) == 400e18,
+            "independent parent total"
+        );
 
         // Cross-token settlement: the two address fields must not be interchangeable.
         vm.recordLogs();
@@ -380,7 +386,7 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
 
         groupAction.setGroupSliceReadsBlocked(true);
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == groupCount * GROUP_REWARD,
+            groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == groupCount * GROUP_REWARD,
             "divisor covers every group without walking them"
         );
         groupAction.setGroupSliceReadsBlocked(false);
@@ -416,10 +422,10 @@ contract GroupServiceSettlementTest is GroupServiceTestBase {
         );
         executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
 
-        require(executor.totalGroupActionReward(address(token), SERVICE_ROUND) == 0, "zero denominator");
+        require(groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == 0, "zero denominator");
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(GROUP_REWARD), VERIFIER_ID);
         require(
-            executor.totalGroupActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
+            groupAction.totalGeneratedActionReward(address(token), SERVICE_ROUND) == GROUP_REWARD,
             "recorded total after the ledger gains an action"
         );
 
