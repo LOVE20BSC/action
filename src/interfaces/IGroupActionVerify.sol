@@ -49,7 +49,7 @@ interface IGroupActionVerifyEvents {
         uint256 round,
         uint256 verifierId,
         uint256 startIndex,
-        uint256 totalFinalScore,
+        uint256 totalActionFinalScore,
         uint256 verifiedGroupCount,
         bool roundVerified,
         bool groupVerified,
@@ -152,21 +152,24 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 providerId
     ) external view returns (uint256 score, uint256 groupFinalScore);
 
-    function providerRewardKeysByProviderId(
+    function groupIdsWithProviderRewardByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 providerId,
         uint256 offset,
         uint256 limit,
         bool reverse
-    )
-        external
-        view
-        returns (
-            uint256[] memory sourceActionIds,
-            uint256[] memory groupIds,
-            uint256 totalCount
-        );
+    ) external view returns (uint256[] memory groupIds, uint256 totalCount);
+
+    function actionIdsWithProviderRewardByGroupIdByProviderId(
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 providerId,
+        uint256 offset,
+        uint256 limit,
+        bool reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
 
     function submitOriginScores(
         address tokenAddress,
@@ -197,7 +200,7 @@ interface IGroupActionVerify is IVerificationInfo, IGroupActionVerifyEvents, IGr
         uint256 memberId
     ) external view returns (uint256 score, bool verified);
 
-    function totalFinalScore(
+    function totalActionFinalScore(
         address tokenAddress,
         uint256 round,
         uint256 actionId

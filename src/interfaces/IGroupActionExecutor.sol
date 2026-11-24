@@ -114,7 +114,6 @@ interface IGroupActionExecutor is
     function totalGeneratedActionRewardAttributionByProviderId(
         address tokenAddress,
         uint256 round,
-        uint256 groupId,
         uint256 providerId
     ) external view returns (uint256 attributedRewardAmount);
 
@@ -142,7 +141,7 @@ interface IGroupActionExecutor is
         bool reverse
     ) external view returns (uint256[] memory providerIds, uint256 totalCount);
 
-    function currentProviderGroupIdsByProviderId(
+    function groupIdsWithQuotaByProviderId(
         address tokenAddress,
         uint256 providerId,
         uint256 offset,
@@ -150,7 +149,7 @@ interface IGroupActionExecutor is
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 totalCount);
 
-    function currentProviderActionIdsByProviderIdByGroupId(
+    function actionIdsWithQuotaByProviderIdByGroupId(
         address tokenAddress,
         uint256 providerId,
         uint256 groupId,
