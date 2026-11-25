@@ -58,7 +58,7 @@ library GroupRecipients {
             settlementInfo.ownerWeight =
                 source.totalGeneratedActionRewardByGroupId(settlementInfo.actionTokenAddress, key.round, key.memberId);
             if (includeOwnerProviderWeight && settlementInfo.providerIncentiveRatio != 0) {
-                settlementInfo.ownerProviderWeight = source.totalGeneratedActionRewardAttributionByGroupIdByProviderId(
+                settlementInfo.ownerProviderWeight = source.totalGeneratedActionRewardByGroupIdByProviderId(
                     settlementInfo.actionTokenAddress, key.round, key.memberId, key.memberId
                 );
             }
@@ -651,7 +651,7 @@ library GroupRecipients {
         if (share.memberId == 0 || share.memberId == share.groupId) return 0;
         IGroupActionExecutor source = IGroupActionExecutor(protocol.groupActionExecutorAddress);
         if (provider) {
-            return source.generatedActionRewardAttributionByGroupIdByProviderId(
+            return source.generatedActionRewardByGroupIdByProviderId(
                 sourceTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
             );
         }
@@ -698,7 +698,7 @@ library GroupRecipients {
         }
 
         uint256 ownerAttribution = IGroupActionExecutor(groupActionExecutorAddress)
-            .generatedActionRewardAttributionByGroupIdByProviderId(
+            .generatedActionRewardByGroupIdByProviderId(
                 settlementInfo.actionTokenAddress, round, sourceActionId, groupId, groupId
             );
         partnershipBudget = Math.mulDiv(settlementInfo.ownerReward - marketBudget, groupWeight, settlementInfo.ownerWeight);

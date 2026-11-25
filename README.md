@@ -31,7 +31,7 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 
 按 `memberId` 查奖励时，链群行动用 `memberReward` 就能查到完整的个人奖励。需要额外信息时才加明细入口，单类用 `rewardDetail`，多类用 `xxxRewardDetail`。LP 的 `rewardDetail` 返回铸造量、销毁量和状态，待结算时返回预估量，结算后返回实际量。
 
-[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回指定 Provider 的分数和全群总分，群主归属的分数也可查询。`generatedActionRewardAttributionByGroupIdByProviderId` 返回指定行动和链群归属给某个 Provider 的金额。`totalGeneratedActionRewardAttributionByGroupIdByProviderId` 按链群汇总该 Provider 的整轮归属，`totalGeneratedActionRewardAttributionByProviderId` 汇总该 Provider 在所有链群的归属，包括自有链群。`providerIdsWithPositiveScoreByActionIdByGroupId` 分页返回正分 Provider，单笔激励可能向下取整为零。
+[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回指定 Provider 的分数和全群总分，群主归属的分数也可查询。`generatedActionRewardByGroupIdByProviderId` 返回指定行动和链群归属给某个 Provider 的金额。`totalGeneratedActionRewardByGroupIdByProviderId` 按链群汇总该 Provider 的整轮归属，`totalGeneratedActionRewardByProviderId` 汇总该 Provider 在所有链群的归属，包括自有链群。`providerIdsWithPositiveScoreByActionIdByGroupId` 分页返回正分 Provider，单笔激励可能向下取整为零。
 
 `memberRewardDetail` 按 `memberId` 返回群主、验证者、合伙人和 Provider 四组激励，以及治理上限前后的群主预算。`groupOwnerRewardBudget` 也可单独查询这两种预算，差额是应销毁的超额。群主只需销毁时，`groupOwnerReward` 的两个金额均为零，状态从 `Pending` 变为 `Settled`。 [IGroupServiceExecutor](src/interfaces/IGroupServiceExecutor.sol)
 

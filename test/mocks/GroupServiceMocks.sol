@@ -445,7 +445,7 @@ contract MockGroupServiceGroupActionExecutor {
         score = providerId == groupId ? groupFinalScore - scores.externalProviderScore : scores.scoreByProviderId[providerId];
     }
 
-    function generatedActionRewardAttributionByGroupIdByProviderId(
+    function generatedActionRewardByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
@@ -535,7 +535,7 @@ contract MockGroupServiceGroupActionExecutor {
         (weight,) = _groupRewardWeights(tokenAddress, round, groupId, false);
     }
 
-    function totalGeneratedActionRewardAttributionByGroupIdByProviderId(
+    function totalGeneratedActionRewardByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 groupId,
@@ -543,7 +543,7 @@ contract MockGroupServiceGroupActionExecutor {
     ) external view returns (uint256 attributedRewardAmount) {
         uint256[] storage actionIds = _joinedActions[tokenAddress][round][groupId].items;
         for (uint256 i = 0; i < actionIds.length; ++i) {
-            attributedRewardAmount += generatedActionRewardAttributionByGroupIdByProviderId(
+            attributedRewardAmount += generatedActionRewardByGroupIdByProviderId(
                 tokenAddress, round, actionIds[i], groupId, providerId
             );
         }

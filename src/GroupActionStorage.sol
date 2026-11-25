@@ -244,7 +244,7 @@ library GroupActionStorage {
         return Math.mulDiv(proposalReward, groupFinalScore, self.totalActionFinalScore[tokenAddress][actionId][round]);
     }
 
-    function generatedActionRewardAttributionByGroupIdByProviderId(
+    function generatedActionRewardByGroupIdByProviderId(
         Layout storage self,
         address tokenAddress,
         uint256 round,
@@ -259,7 +259,7 @@ library GroupActionStorage {
         return Math.mulDiv(actionReward, providerScore, self.totalActionFinalScore[tokenAddress][actionId][round]);
     }
 
-    function totalGeneratedActionRewardAttribution(
+    function totalGeneratedActionRewardByGroupIdByProviderId(
         Layout storage self,
         address tokenAddress,
         uint256 round,
@@ -268,7 +268,7 @@ library GroupActionStorage {
         uint256[] storage actionIds
     ) internal view returns (uint256 attributedRewardAmount) {
         for (uint256 i = 0; i < actionIds.length; ++i) {
-            attributedRewardAmount += generatedActionRewardAttributionByGroupIdByProviderId(
+            attributedRewardAmount += generatedActionRewardByGroupIdByProviderId(
                 self, tokenAddress, round, actionIds[i], groupId, providerId
             );
         }

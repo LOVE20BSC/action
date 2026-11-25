@@ -253,9 +253,8 @@ contract GroupServiceOwnerSettlementTest is ActionTargetIntegrationFixture {
             group.totalGeneratedActionRewardByGroupId(address(token), round, OWNER_ID) == expectedWeight,
             "only this group's verified shares counted once"
         );
-        uint256 ownerProviderReward = group.totalGeneratedActionRewardAttributionByGroupIdByProviderId(
-            address(token), round, OWNER_ID, OWNER_ID
-        );
+        uint256 ownerProviderReward =
+            group.totalGeneratedActionRewardByGroupIdByProviderId(address(token), round, OWNER_ID, OWNER_ID);
         require(ownerProviderReward == expectedWeight, "all scores attributed to owner");
     }
 

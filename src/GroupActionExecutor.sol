@@ -176,34 +176,33 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         }
     }
 
-    function totalGeneratedActionRewardAttributionByGroupIdByProviderId(
+    function totalGeneratedActionRewardByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 groupId,
         uint256 providerId
     ) external view returns (uint256 attributedRewardAmount) {
         uint256[] storage actionIds = _layout.verifiedActionIdsByGroupId[tokenAddress][round][groupId];
-        return _layout.totalGeneratedActionRewardAttribution(tokenAddress, round, groupId, providerId, actionIds);
+        return
+            _layout.totalGeneratedActionRewardByGroupIdByProviderId(tokenAddress, round, groupId, providerId, actionIds);
     }
 
-    function generatedActionRewardAttributionByGroupIdByProviderId(
+    function generatedActionRewardByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId
     ) external view returns (uint256 attributedRewardAmount) {
-        return _layout.generatedActionRewardAttributionByGroupIdByProviderId(
-            tokenAddress, round, actionId, groupId, providerId
-        );
+        return _layout.generatedActionRewardByGroupIdByProviderId(tokenAddress, round, actionId, groupId, providerId);
     }
 
-    function totalGeneratedActionRewardAttributionByProviderId(
-        address tokenAddress,
-        uint256 round,
-        uint256 providerId
-    ) external view returns (uint256 attributedRewardAmount) {
-        return GroupActionVerify.totalGeneratedActionRewardAttributionByProviderId(_layout, tokenAddress, round, providerId);
+    function totalGeneratedActionRewardByProviderId(address tokenAddress, uint256 round, uint256 providerId)
+        external
+        view
+        returns (uint256 attributedRewardAmount)
+    {
+        return GroupActionVerify.totalGeneratedActionRewardByProviderId(_layout, tokenAddress, round, providerId);
     }
 
     function groupIdsWithQuotaByProviderId(

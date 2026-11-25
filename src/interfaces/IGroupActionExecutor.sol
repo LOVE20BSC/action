@@ -92,7 +92,7 @@ interface IGroupActionExecutor is
         uint256 actionId
     ) external view returns (uint256);
 
-    function generatedActionRewardAttributionByGroupIdByProviderId(
+    function generatedActionRewardByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
@@ -111,18 +111,17 @@ interface IGroupActionExecutor is
         uint256 groupId
     ) external view returns (uint256 rewardAmount);
 
-    function totalGeneratedActionRewardAttributionByGroupIdByProviderId(
+    function totalGeneratedActionRewardByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 groupId,
         uint256 providerId
     ) external view returns (uint256 attributedRewardAmount);
 
-    function totalGeneratedActionRewardAttributionByProviderId(
-        address tokenAddress,
-        uint256 round,
-        uint256 providerId
-    ) external view returns (uint256 attributedRewardAmount);
+    function totalGeneratedActionRewardByProviderId(address tokenAddress, uint256 round, uint256 providerId)
+        external
+        view
+        returns (uint256 attributedRewardAmount);
 
     function totalGeneratedActionRewardByVerifierId(
         address tokenAddress,

@@ -31,16 +31,16 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         require(providerCount == 2 && providerIds[0] == PROVIDER_ID, "reverse provider page includes the external provider");
         uint256 attributed = PROPOSAL_REWARD * 3 / 7;
         require(
-            executor.generatedActionRewardAttributionByGroupIdByProviderId(address(token), 2, ACTION_ID, GROUP_ID, PROVIDER_ID)
+            executor.generatedActionRewardByGroupIdByProviderId(address(token), 2, ACTION_ID, GROUP_ID, PROVIDER_ID)
                 == attributed,
             "source attribution uses the total action score"
         );
         require(
-            executor.totalGeneratedActionRewardAttributionByProviderId(address(token), 2, PROVIDER_ID) == attributed,
+            executor.totalGeneratedActionRewardByProviderId(address(token), 2, PROVIDER_ID) == attributed,
             "aggregated attribution matches the indexed source"
         );
         require(
-            executor.totalGeneratedActionRewardAttributionByGroupIdByProviderId(address(token), 2, GROUP_ID, GROUP_ID)
+            executor.totalGeneratedActionRewardByGroupIdByProviderId(address(token), 2, GROUP_ID, GROUP_ID)
                 == PROPOSAL_REWARD * 4 / 7,
             "owner attribution is tracked separately"
         );
@@ -63,16 +63,14 @@ contract GroupActionProviderIncentivesTest is GroupActionExecutorTestBase {
         vm.prank(VERIFIER);
         executor.submitOriginScores(address(token), ACTION_ID, VERIFIER_ID, PROVIDER_ID, 0, _ids(100));
 
-        uint256 ownGroupAttribution = executor.totalGeneratedActionRewardAttributionByGroupIdByProviderId(
-            address(token), 2, PROVIDER_ID, PROVIDER_ID
-        );
-        uint256 otherGroupAttribution = executor.totalGeneratedActionRewardAttributionByGroupIdByProviderId(
-            address(token), 2, GROUP_ID, PROVIDER_ID
-        );
+        uint256 ownGroupAttribution =
+            executor.totalGeneratedActionRewardByGroupIdByProviderId(address(token), 2, PROVIDER_ID, PROVIDER_ID);
+        uint256 otherGroupAttribution =
+            executor.totalGeneratedActionRewardByGroupIdByProviderId(address(token), 2, GROUP_ID, PROVIDER_ID);
         require(ownGroupAttribution == PROPOSAL_REWARD * 2 / 5, "own group attribution");
         require(otherGroupAttribution == PROPOSAL_REWARD * 3 / 5, "external provider attribution");
         require(
-            executor.totalGeneratedActionRewardAttributionByProviderId(address(token), 2, PROVIDER_ID)
+            executor.totalGeneratedActionRewardByProviderId(address(token), 2, PROVIDER_ID)
                 == ownGroupAttribution + otherGroupAttribution,
             "round total counts both groups once"
         );
