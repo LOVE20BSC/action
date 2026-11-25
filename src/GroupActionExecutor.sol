@@ -176,27 +176,26 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         }
     }
 
-    function totalGeneratedActionRewardAttributionByGroupOwnerId(
+    function totalGeneratedActionRewardAttributionByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
-        uint256 groupOwnerId
+        uint256 groupId,
+        uint256 providerId
     ) external view returns (uint256 attributedRewardAmount) {
-        uint256[] storage actionIds = _layout.verifiedActionIdsByGroupId[tokenAddress][round][groupOwnerId];
-        for (uint256 i = 0; i < actionIds.length; ++i) {
-            attributedRewardAmount += _layout.generatedActionRewardAttributionByProviderId(
-                tokenAddress, round, actionIds[i], groupOwnerId, groupOwnerId
-            );
-        }
+        uint256[] storage actionIds = _layout.verifiedActionIdsByGroupId[tokenAddress][round][groupId];
+        return _layout.totalGeneratedActionRewardAttribution(tokenAddress, round, groupId, providerId, actionIds);
     }
 
-    function generatedActionRewardAttributionByProviderId(
+    function generatedActionRewardAttributionByGroupIdByProviderId(
         address tokenAddress,
         uint256 round,
         uint256 actionId,
         uint256 groupId,
         uint256 providerId
     ) external view returns (uint256 attributedRewardAmount) {
-        return _layout.generatedActionRewardAttributionByProviderId(tokenAddress, round, actionId, groupId, providerId);
+        return _layout.generatedActionRewardAttributionByGroupIdByProviderId(
+            tokenAddress, round, actionId, groupId, providerId
+        );
     }
 
     function totalGeneratedActionRewardAttributionByProviderId(

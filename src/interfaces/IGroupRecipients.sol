@@ -59,8 +59,8 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
     function MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP() external view returns (uint256);
 
     function setRecipients(
-        address sourceTokenAddress,
-        uint256 sourceActionId,
+        address tokenAddress,
+        uint256 actionId,
         uint256 groupId,
         uint256[] calldata recipientIds,
         uint256[] calldata ratios,
@@ -68,22 +68,22 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
     ) external;
 
     function recipients(
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory remarks);
 
     function recipientRatio(
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId,
         uint256 recipientId
     ) external view returns (uint256 ratio);
 
     function actionIdsWithRecipients(
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 groupId,
         uint256 round,
         uint256 offset,
@@ -91,20 +91,20 @@ interface IGroupRecipients is IGroupRecipientsEvents, IGroupRecipientsErrors {
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount);
 
-    function currentRecipientGroupIdsByRecipientId(
-        address sourceTokenAddress,
+    function groupIdsByRecipientId(
+        address tokenAddress,
         uint256 recipientId,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 totalCount);
 
-    function currentRecipientSourceActionIdsByRecipientIdByGroupId(
-        address sourceTokenAddress,
-        uint256 recipientId,
+    function actionIdsByGroupIdByRecipientId(
+        address tokenAddress,
         uint256 groupId,
+        uint256 recipientId,
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory sourceActionIds, uint256 totalCount);
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount);
 }

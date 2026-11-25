@@ -541,8 +541,8 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
 
     // forge-lint: disable-next-item(missing-events-access-control)
     function setRecipients(
-        address sourceTokenAddress,
-        uint256 sourceActionId,
+        address tokenAddress,
+        uint256 actionId,
         uint256 groupId,
         uint256[] calldata recipientIds,
         uint256[] calldata ratios,
@@ -551,9 +551,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         GroupRecipients.setRecipients(
             _layout,
             _protocol(),
-            sourceTokenAddress,
+            tokenAddress,
             currentVerifyRound(),
-            sourceActionId,
+            actionId,
             groupId,
             recipientIds,
             ratios,
@@ -562,9 +562,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     }
 
     function recipients(
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId
     )
         external
@@ -575,54 +575,52 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
             string[] memory remarks
         )
     {
-        return GroupRecipients.recipients(_layout, sourceTokenAddress, round, sourceActionId, groupId);
+        return GroupRecipients.recipients(_layout, tokenAddress, round, actionId, groupId);
     }
 
     function recipientRatio(
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId,
         uint256 recipientId
     ) external view returns (uint256 ratio) {
-        return GroupRecipients.recipientRatio(
-            _layout, sourceTokenAddress, round, sourceActionId, groupId, recipientId
-        );
+        return GroupRecipients.recipientRatio(_layout, tokenAddress, round, actionId, groupId, recipientId);
     }
 
     function actionIdsWithRecipients(
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 groupId,
         uint256 round,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return GroupRecipients.actionIdsWithRecipients(_layout, sourceTokenAddress, groupId, round, offset, limit, reverse);
+        return GroupRecipients.actionIdsWithRecipients(_layout, tokenAddress, groupId, round, offset, limit, reverse);
     }
 
-    function currentRecipientGroupIdsByRecipientId(
-        address sourceTokenAddress,
+    function groupIdsByRecipientId(
+        address tokenAddress,
         uint256 recipientId,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
-        return GroupRecipients.currentRecipientGroupIdsByRecipientId(
-            _layout, sourceTokenAddress, currentVerifyRound(), recipientId, offset, limit, reverse
+        return GroupRecipients.groupIdsByRecipientId(
+            _layout, tokenAddress, currentVerifyRound(), recipientId, offset, limit, reverse
         );
     }
 
-    function currentRecipientSourceActionIdsByRecipientIdByGroupId(
-        address sourceTokenAddress,
-        uint256 recipientId,
+    function actionIdsByGroupIdByRecipientId(
+        address tokenAddress,
         uint256 groupId,
+        uint256 recipientId,
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory sourceActionIds, uint256 totalCount) {
-        return GroupRecipients.currentRecipientSourceActionIdsByRecipientIdByGroupId(
-            _layout, sourceTokenAddress, currentVerifyRound(), recipientId, groupId, offset, limit, reverse
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return GroupRecipients.actionIdsByGroupIdByRecipientId(
+            _layout, tokenAddress, currentVerifyRound(), groupId, recipientId, offset, limit, reverse
         );
     }
 

@@ -100,4 +100,4 @@ owner 预算减去市场预算得到普通预算。每项来源行动的合伙�
 
 Provider 和合伙人的历史来源可先按链群分页，再按来源行动分页。候选来源的金额受取整、验证结果及服务配置影响。用带 `BySourceActionIdByGroupId` 后缀的接口查询单笔金额和 `isMinted`。`recipients` 给出指定轮次的合伙人配置，`recipientRatio` 可直接读其中一人的比例。
 
-合伙人可用 `currentRecipientGroupIdsByRecipientId` 和 `currentRecipientSourceActionIdsByRecipientIdByGroupId` 查当前合作的链群和行动。配置删除后，`actionIdsWithRecipients` 和按合伙人查询的链群、行动列表可能用末项补位。`reverse` 只反转所查快照的存储顺序。跨页读取当前配置应固定在同一区块，刷新时从第一页重新读取。目标轮验证结束后，按轮查询的配置快照固定，可以继续翻页。
+合伙人可用 `groupIdsByRecipientId` 和 `actionIdsByGroupIdByRecipientId` 查当前验证轮生效的合作链群和行动。配置删除后，`actionIdsWithRecipients` 和按合伙人查询的链群、行动列表可能用末项补位。`reverse` 只反转所查快照的存储顺序。跨页读取当前配置应固定在同一区块，刷新时从第一页重新读取。目标轮验证结束后，按轮查询的配置快照固定，可以继续翻页。

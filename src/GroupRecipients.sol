@@ -58,8 +58,8 @@ library GroupRecipients {
             settlementInfo.ownerWeight =
                 source.totalGeneratedActionRewardByGroupId(settlementInfo.actionTokenAddress, key.round, key.memberId);
             if (includeOwnerProviderWeight && settlementInfo.providerIncentiveRatio != 0) {
-                settlementInfo.ownerProviderWeight = source.totalGeneratedActionRewardAttributionByGroupOwnerId(
-                    settlementInfo.actionTokenAddress, key.round, key.memberId
+                settlementInfo.ownerProviderWeight = source.totalGeneratedActionRewardAttributionByGroupIdByProviderId(
+                    settlementInfo.actionTokenAddress, key.round, key.memberId, key.memberId
                 );
             }
         }
@@ -651,7 +651,7 @@ library GroupRecipients {
         if (share.memberId == 0 || share.memberId == share.groupId) return 0;
         IGroupActionExecutor source = IGroupActionExecutor(protocol.groupActionExecutorAddress);
         if (provider) {
-            return source.generatedActionRewardAttributionByProviderId(
+            return source.generatedActionRewardAttributionByGroupIdByProviderId(
                 sourceTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
             );
         }
@@ -698,7 +698,7 @@ library GroupRecipients {
         }
 
         uint256 ownerAttribution = IGroupActionExecutor(groupActionExecutorAddress)
-            .generatedActionRewardAttributionByProviderId(
+            .generatedActionRewardAttributionByGroupIdByProviderId(
                 settlementInfo.actionTokenAddress, round, sourceActionId, groupId, groupId
             );
         partnershipBudget = Math.mulDiv(settlementInfo.ownerReward - marketBudget, groupWeight, settlementInfo.ownerWeight);
@@ -719,9 +719,9 @@ library GroupRecipients {
     function setRecipients(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId,
         uint256[] calldata recipientIds,
         uint256[] calldata ratios,
@@ -730,9 +730,9 @@ library GroupRecipients {
         _setRecipients(
             self,
             protocol,
-            sourceTokenAddress,
+            tokenAddress,
             round,
-            sourceActionId,
+            actionId,
             groupId,
             RecipientTable({recipientIds: recipientIds, ratios: ratios, remarks: remarks})
         );
@@ -741,9 +741,9 @@ library GroupRecipients {
     function _setRecipients(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId,
         RecipientTable memory table
     ) private {
@@ -751,45 +751,36 @@ library GroupRecipients {
 
         // Load-bearing: settlement only reads configs for actions this executor created, so any other
         // key is silently ignored and the owner keeps the whole slice.
-        if (
-            IGroupActionExecutor(protocol.groupActionExecutorAddress)
-                    .joinTokenAddress(sourceTokenAddress, sourceActionId) == address(0)
-        ) {
-            revert IGroupRecipientsErrors.UnknownSourceAction(sourceTokenAddress, sourceActionId);
+        if (IGroupActionExecutor(protocol.groupActionExecutorAddress).joinTokenAddress(tokenAddress, actionId) == address(0)) {
+            revert IGroupRecipientsErrors.UnknownSourceAction(tokenAddress, actionId);
         }
 
-        uint256[] memory prevRecipientIds =
-            self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
-        _updateRecipientRewardKeys(
-            self, sourceTokenAddress, round, sourceActionId, groupId, prevRecipientIds, table.recipientIds
-        );
+        uint256[] memory prevRecipientIds = self.recipientIdsHistory[tokenAddress][actionId][groupId].values(round);
+        _updateRecipientRewardKeys(self, tokenAddress, round, actionId, groupId, prevRecipientIds, table.recipientIds);
 
-        uint256[] memory prevRatios = self.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
-        string[] memory prevRemarks = self.remarksHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        uint256[] memory prevRatios = self.ratiosHistory[tokenAddress][actionId][groupId].values(round);
+        string[] memory prevRemarks = self.remarksHistory[tokenAddress][actionId][groupId].values(round);
 
-        self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.recipientIds);
-        self.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.ratios);
-        self.remarksHistory[sourceTokenAddress][sourceActionId][groupId].record(round, table.remarks);
+        self.recipientIdsHistory[tokenAddress][actionId][groupId].record(round, table.recipientIds);
+        self.ratiosHistory[tokenAddress][actionId][groupId].record(round, table.ratios);
+        self.remarksHistory[tokenAddress][actionId][groupId].record(round, table.remarks);
 
         if (table.recipientIds.length != 0) {
-            RoundHistoryUint256Set.Storage storage actionSet = self.actionIdsWithRecipients[sourceTokenAddress][groupId];
+            RoundHistoryUint256Set.Storage storage actionSet = self.actionIdsWithRecipients[tokenAddress][groupId];
             uint256 actual = actionSet.count();
-            if (
-                !actionSet.contains(sourceActionId)
-                    && actual >= GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP
-            ) {
+            if (!actionSet.contains(actionId) && actual >= GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP) {
                 revert IGroupRecipientsErrors.RecipientActionsLimitExceeded(
-                    sourceTokenAddress, groupId, actual, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP
+                    tokenAddress, groupId, actual, GroupServiceStorage.MAX_RECIPIENT_ACTIONS_PER_TOKEN_GROUP
                 );
             }
-            actionSet.add(round, sourceActionId);
+            actionSet.add(round, actionId);
         } else {
-            self.actionIdsWithRecipients[sourceTokenAddress][groupId].remove(round, sourceActionId);
+            self.actionIdsWithRecipients[tokenAddress][groupId].remove(round, actionId);
         }
 
         emit IGroupRecipientsEvents.RecipientsChanged({
-            sourceTokenAddress: sourceTokenAddress,
-            sourceActionId: sourceActionId,
+            sourceTokenAddress: tokenAddress,
+            sourceActionId: actionId,
             round: round,
             groupId: groupId,
             recipientIds: table.recipientIds,
@@ -803,9 +794,9 @@ library GroupRecipients {
 
     function _updateRecipientRewardKeys(
         GroupServiceStorage.Layout storage self,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId,
         uint256[] memory previousIds,
         uint256[] memory currentIds
@@ -816,10 +807,10 @@ library GroupRecipients {
             uint256 recipientId = previousIds[i];
             if (!_containsRecipient(currentIds, recipientId)) {
                 RoundHistoryUint256Set.Storage storage actionIds =
-                    self.recipientActionIdsByGroupIdByRecipientId[sourceTokenAddress][recipientId][groupId];
-                actionIds.remove(round, sourceActionId);
+                    self.recipientActionIdsByGroupIdByRecipientId[tokenAddress][recipientId][groupId];
+                actionIds.remove(round, actionId);
                 if (actionIds.count() == 0) {
-                    self.recipientGroupIdsByRecipientId[sourceTokenAddress][recipientId].remove(round, groupId);
+                    self.recipientGroupIdsByRecipientId[tokenAddress][recipientId].remove(round, groupId);
                 }
             }
         }
@@ -827,11 +818,11 @@ library GroupRecipients {
             uint256 recipientId = currentIds[i];
             if (!_containsRecipient(previousIds, recipientId)) {
                 RoundHistoryUint256Set.Storage storage actionIds =
-                    self.recipientActionIdsByGroupIdByRecipientId[sourceTokenAddress][recipientId][groupId];
+                    self.recipientActionIdsByGroupIdByRecipientId[tokenAddress][recipientId][groupId];
                 if (actionIds.count() == 0) {
-                    self.recipientGroupIdsByRecipientId[sourceTokenAddress][recipientId].add(round, groupId);
+                    self.recipientGroupIdsByRecipientId[tokenAddress][recipientId].add(round, groupId);
                 }
-                actionIds.add(round, sourceActionId);
+                actionIds.add(round, actionId);
             }
         }
     }
@@ -845,67 +836,67 @@ library GroupRecipients {
 
     function recipients(
         GroupServiceStorage.Layout storage self,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId
     ) external view returns (uint256[] memory recipientIds, uint256[] memory ratios, string[] memory remarks) {
-        recipientIds = self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
-        ratios = self.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
-        remarks = self.remarksHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        recipientIds = self.recipientIdsHistory[tokenAddress][actionId][groupId].values(round);
+        ratios = self.ratiosHistory[tokenAddress][actionId][groupId].values(round);
+        remarks = self.remarksHistory[tokenAddress][actionId][groupId].values(round);
     }
 
     function actionIdsWithRecipients(
         GroupServiceStorage.Layout storage self,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 groupId,
         uint256 round,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return self.actionIdsWithRecipients[sourceTokenAddress][groupId].valuesByRound(round, offset, limit, reverse);
+        return self.actionIdsWithRecipients[tokenAddress][groupId].valuesByRound(round, offset, limit, reverse);
     }
 
     function recipientRatio(
         GroupServiceStorage.Layout storage self,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 sourceActionId,
+        uint256 actionId,
         uint256 groupId,
         uint256 recipientId
     ) external view returns (uint256 ratio) {
-        uint256[] memory recipientIds = self.recipientIdsHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
-        uint256[] memory ratios = self.ratiosHistory[sourceTokenAddress][sourceActionId][groupId].values(round);
+        uint256[] memory recipientIds = self.recipientIdsHistory[tokenAddress][actionId][groupId].values(round);
+        uint256[] memory ratios = self.ratiosHistory[tokenAddress][actionId][groupId].values(round);
         for (uint256 i = 0; i < recipientIds.length; ++i) {
             if (recipientIds[i] == recipientId) return ratios[i];
         }
     }
 
-    function currentRecipientGroupIdsByRecipientId(
+    function groupIdsByRecipientId(
         GroupServiceStorage.Layout storage self,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
         uint256 recipientId,
         uint256 offset,
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
-        return self.recipientGroupIdsByRecipientId[sourceTokenAddress][recipientId]
+        return self.recipientGroupIdsByRecipientId[tokenAddress][recipientId]
             .valuesByRound(round, offset, limit, reverse);
     }
 
-    function currentRecipientSourceActionIdsByRecipientIdByGroupId(
+    function actionIdsByGroupIdByRecipientId(
         GroupServiceStorage.Layout storage self,
-        address sourceTokenAddress,
+        address tokenAddress,
         uint256 round,
-        uint256 recipientId,
         uint256 groupId,
+        uint256 recipientId,
         uint256 offset,
         uint256 limit,
         bool reverse
-    ) external view returns (uint256[] memory sourceActionIds, uint256 totalCount) {
-        return self.recipientActionIdsByGroupIdByRecipientId[sourceTokenAddress][recipientId][groupId]
+    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
+        return self.recipientActionIdsByGroupIdByRecipientId[tokenAddress][recipientId][groupId]
             .valuesByRound(round, offset, limit, reverse);
     }
 

@@ -31,7 +31,7 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 
 按 `memberId` 查奖励时，链群行动用 `memberReward` 就能查到完整的个人奖励。需要额外信息时才加明细入口，单类用 `rewardDetail`，多类用 `xxxRewardDetail`。LP 的 `rewardDetail` 返回铸造量、销毁量和状态，待结算时返回预估量，结算后返回实际量。
 
-[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回指定 Provider 的分数和全群总分，群主归属的分数也可查询。`generatedActionRewardAttributionByProviderId` 返回某个来源行动和链群归属该 Provider 的激励。`totalGeneratedActionRewardAttributionByProviderId` 汇总该身份当轮在其他链群的归属激励，`totalGeneratedActionRewardAttributionByGroupOwnerId` 汇总其在自有链群的归属激励。`providerIdsWithPositiveScoreByActionIdByGroupId` 分页返回正分 Provider，单笔激励可能向下取整为零。
+[`IGroupActionExecutor`](src/interfaces/IGroupActionExecutor.sol) 的 `providerAttribution` 按链群和行动者返回首次归属身份和区块高度。`providerScore` 返回指定 Provider 的分数和全群总分，群主归属的分数也可查询。`generatedActionRewardAttributionByGroupIdByProviderId` 返回指定行动和链群归属给某个 Provider 的金额。`totalGeneratedActionRewardAttributionByGroupIdByProviderId` 按链群汇总该 Provider 的整轮归属，`totalGeneratedActionRewardAttributionByProviderId` 汇总该 Provider 在所有链群的归属，包括自有链群。`providerIdsWithPositiveScoreByActionIdByGroupId` 分页返回正分 Provider，单笔激励可能向下取整为零。
 
 `memberRewardDetail` 按 `memberId` 返回群主、验证者、合伙人和 Provider 四组激励，以及治理上限前后的群主预算。`groupOwnerRewardBudget` 也可单独查询这两种预算，差额是应销毁的超额。群主只需销毁时，`groupOwnerReward` 的两个金额均为零，状态从 `Pending` 变为 `Settled`。 [IGroupServiceExecutor](src/interfaces/IGroupServiceExecutor.sol)
 
@@ -46,7 +46,7 @@ Core 的接口以 `core` 代码库为准：生产代码通过 `@core/` 别名（
 
 四类角色的整轮查询均直接返回待铸造量、已铸造量和状态，与 `memberReward` 一致。按角色领取会跳过已领的份额。查历史来源时，先分页查询链群，再按链群分页查询来源行动。单笔查询返回金额和 `isMinted`。选定多笔后可用两组并行的来源行动 ID 和链群 ID 批量领取，每笔最多 32 项。
 
-当前合作关系可单独查询。Provider 用 `groupIdsWithQuotaByProviderId` 和 `actionIdsWithQuotaByProviderIdByGroupId` 查询仍有额度的链群和行动，已投入行动的额度也计入。Recipient 用 `currentRecipientGroupIdsByRecipientId` 和 `currentRecipientSourceActionIdsByRecipientIdByGroupId` 查询当前配置，用 `recipientRatio` 查看指定轮次的比例。
+当前合作关系可单独查询。Provider 用 `groupIdsWithQuotaByProviderId` 和 `actionIdsWithQuotaByProviderIdByGroupId` 查询仍有额度的链群和行动，已投入行动的额度也计入。Recipient 用 `groupIdsByRecipientId` 和 `actionIdsByGroupIdByRecipientId` 查询当前验证轮生效的链群和行动配置，用 `recipientRatio` 查看指定轮次的比例。
 
 ## 构建与测试
 

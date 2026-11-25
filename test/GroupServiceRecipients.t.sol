@@ -242,19 +242,29 @@ contract GroupServiceRecipientsTest is GroupServiceTestBase, IGroupRecipientsEve
         _prepareRecipientsScenario();
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(PRECISION / 2));
 
+        (uint256[] memory page, uint256 total) =
+            executor.groupIdsByRecipientId(address(token), MEMBER1_ID, 0, 1, false);
+        require(total == 1 && page.length == 1 && page[0] == GROUP_ID, "current recipient group");
+        (page, total) = executor.actionIdsByGroupIdByRecipientId(address(token), GROUP_ID, MEMBER1_ID, 0, 1, false);
+        require(total == 1 && page.length == 1 && page[0] == GROUP_ACTION_ID, "current recipient action");
+
         _atPhase(VERIFY_PHASE + 2);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, new uint256[](0), new uint256[](0));
 
-        (uint256[] memory actionIds, uint256 total) =
-            executor.actionIdsWithRecipients(address(token), GROUP_ID, VERIFY_PHASE + 1, 0, 10, false);
-        require(total == 0 && actionIds.length == 0, "cleared round no longer enumerates");
+        (page, total) = executor.groupIdsByRecipientId(address(token), MEMBER1_ID, 0, 1, false);
+        require(total == 0 && page.length == 0, "cleared recipient group");
+        (page, total) = executor.actionIdsByGroupIdByRecipientId(address(token), GROUP_ID, MEMBER1_ID, 0, 1, false);
+        require(total == 0 && page.length == 0, "cleared recipient action");
+
+        (page, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, VERIFY_PHASE + 1, 0, 10, false);
+        require(total == 0 && page.length == 0, "cleared round no longer enumerates");
         (uint256[] memory recipientIds,,) =
             executor.recipients(address(token), VERIFY_PHASE + 1, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds.length == 0, "cleared configuration is empty");
 
         // The earlier round keeps its snapshot.
-        (actionIds, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 10, false);
-        require(total == 1 && actionIds[0] == GROUP_ACTION_ID, "history survives the later clear");
+        (page, total) = executor.actionIdsWithRecipients(address(token), GROUP_ID, SERVICE_ROUND, 0, 10, false);
+        require(total == 1 && page[0] == GROUP_ACTION_ID, "history survives the later clear");
         (recipientIds,,) = executor.recipients(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID);
         require(recipientIds[0] == MEMBER1_ID, "recipient history survives");
     }

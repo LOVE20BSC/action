@@ -135,15 +135,16 @@ library GroupActionVerify {
         uint256 round,
         uint256 providerId
     ) external view returns (uint256 attributedRewardAmount) {
-        uint256[] storage groupIds = self.providerGroupIdsByProviderId[tokenAddress][round][providerId];
-        for (uint256 i = 0; i < groupIds.length; ++i) {
-            uint256 groupId = groupIds[i];
+        uint256[] storage ownGroupActionIds = self.verifiedActionIdsByGroupId[tokenAddress][round][providerId];
+        attributedRewardAmount =
+            self.totalGeneratedActionRewardAttribution(tokenAddress, round, providerId, providerId, ownGroupActionIds);
+
+        uint256[] storage externalGroupIds = self.providerGroupIdsByProviderId[tokenAddress][round][providerId];
+        for (uint256 i = 0; i < externalGroupIds.length; ++i) {
+            uint256 groupId = externalGroupIds[i];
             uint256[] storage actionIds = self.providerActionIdsByGroupIdByProviderId[tokenAddress][round][providerId][groupId];
-            for (uint256 j = 0; j < actionIds.length; ++j) {
-                attributedRewardAmount += self.generatedActionRewardAttributionByProviderId(
-                    tokenAddress, round, actionIds[j], groupId, providerId
-                );
-            }
+            attributedRewardAmount +=
+                self.totalGeneratedActionRewardAttribution(tokenAddress, round, groupId, providerId, actionIds);
         }
     }
 

@@ -244,7 +244,7 @@ library GroupActionStorage {
         return Math.mulDiv(proposalReward, groupFinalScore, self.totalActionFinalScore[tokenAddress][actionId][round]);
     }
 
-    function generatedActionRewardAttributionByProviderId(
+    function generatedActionRewardAttributionByGroupIdByProviderId(
         Layout storage self,
         address tokenAddress,
         uint256 round,
@@ -257,6 +257,21 @@ library GroupActionStorage {
         uint256 providerScore = self.providerScoresByGroupId[tokenAddress][actionId][round][groupId]
             .scoreByProviderId[providerId];
         return Math.mulDiv(actionReward, providerScore, self.totalActionFinalScore[tokenAddress][actionId][round]);
+    }
+
+    function totalGeneratedActionRewardAttribution(
+        Layout storage self,
+        address tokenAddress,
+        uint256 round,
+        uint256 groupId,
+        uint256 providerId,
+        uint256[] storage actionIds
+    ) internal view returns (uint256 attributedRewardAmount) {
+        for (uint256 i = 0; i < actionIds.length; ++i) {
+            attributedRewardAmount += generatedActionRewardAttributionByGroupIdByProviderId(
+                self, tokenAddress, round, actionIds[i], groupId, providerId
+            );
+        }
     }
 
     function memberAmountAt(
