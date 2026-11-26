@@ -3,8 +3,6 @@ pragma solidity =0.8.37;
 
 import {ActionRoundAxis} from "../src/ActionRoundAxis.sol";
 import {GroupActionRoundAxis} from "../src/GroupActionRoundAxis.sol";
-import {GroupActionManager} from "../src/GroupActionManager.sol";
-import {GroupActionVerify} from "../src/GroupActionVerify.sol";
 import {LpRoundAxis} from "../src/LpRoundAxis.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
 
@@ -24,6 +22,10 @@ contract ActionRoundAxisHarness {
     function joinRound(address phaseAddress) external view returns (uint256) {
         return ActionRoundAxis.joinRound(phaseAddress);
     }
+
+    function currentJoinRound(address phaseAddress) external view returns (uint256) {
+        return ActionRoundAxis.currentJoinRound(phaseAddress);
+    }
 }
 
 contract GroupActionRoundAxisHarness {
@@ -31,20 +33,12 @@ contract GroupActionRoundAxisHarness {
         return GroupActionRoundAxis.verifyRound(phaseAddress);
     }
 
+    function currentVerifyRound(address phaseAddress) external view returns (uint256) {
+        return GroupActionRoundAxis.currentVerifyRound(phaseAddress);
+    }
+
     function mintRound(address phaseAddress) external view returns (uint256) {
         return GroupActionRoundAxis.mintRound(phaseAddress);
-    }
-}
-
-contract GroupActionManagerGuardHarness {
-    function currentJoinRound(address phaseAddress) external view returns (uint256) {
-        return GroupActionManager.currentJoinRound(phaseAddress);
-    }
-}
-
-contract GroupActionVerifyGuardHarness {
-    function currentVerifyRound(address phaseAddress) external view returns (uint256) {
-        return GroupActionVerify.currentVerifyRound(phaseAddress);
     }
 }
 
@@ -60,16 +54,12 @@ contract RoundAxisTest {
     MockRoundAxisPhase private phase;
     ActionRoundAxisHarness private axis;
     GroupActionRoundAxisHarness private group;
-    GroupActionManagerGuardHarness private manager;
-    GroupActionVerifyGuardHarness private verify;
     LpRoundAxisHarness private lp;
 
     function setUp() public {
         phase = new MockRoundAxisPhase();
         axis = new ActionRoundAxisHarness();
         group = new GroupActionRoundAxisHarness();
-        manager = new GroupActionManagerGuardHarness();
-        verify = new GroupActionVerifyGuardHarness();
         lp = new LpRoundAxisHarness();
     }
 
@@ -117,28 +107,28 @@ contract RoundAxisTest {
 
     function testJoinGuard() external {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
-        manager.currentJoinRound(address(phase));
+        axis.currentJoinRound(address(phase));
         phase.setPhase(1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
-        manager.currentJoinRound(address(phase));
+        axis.currentJoinRound(address(phase));
         phase.setPhase(2);
-        require(manager.currentJoinRound(address(phase)) == 1, "join guard opens at phase 2");
+        require(axis.currentJoinRound(address(phase)) == 1, "join guard opens at phase 2");
         phase.setPhase(5);
-        require(manager.currentJoinRound(address(phase)) == 4, "join guard follows phase");
+        require(axis.currentJoinRound(address(phase)) == 4, "join guard follows phase");
     }
 
     function testVerifyGuard() external {
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
-        verify.currentVerifyRound(address(phase));
+        group.currentVerifyRound(address(phase));
         phase.setPhase(1);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
-        verify.currentVerifyRound(address(phase));
+        group.currentVerifyRound(address(phase));
         phase.setPhase(2);
         vm.expectRevert(abi.encodeWithSelector(IActionExecutorErrors.RoundNotStarted.selector, 1, 0));
-        verify.currentVerifyRound(address(phase));
+        group.currentVerifyRound(address(phase));
         phase.setPhase(3);
-        require(verify.currentVerifyRound(address(phase)) == 1, "verify guard opens at phase 3");
+        require(group.currentVerifyRound(address(phase)) == 1, "verify guard opens at phase 3");
         phase.setPhase(5);
-        require(verify.currentVerifyRound(address(phase)) == 3, "verify guard follows phase");
+        require(group.currentVerifyRound(address(phase)) == 3, "verify guard follows phase");
     }
 }

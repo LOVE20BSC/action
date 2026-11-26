@@ -5,7 +5,6 @@ import {GroupServiceStorage} from "./GroupServiceStorage.sol";
 import {GroupServiceRecipients} from "./GroupServiceRecipients.sol";
 import {GroupServiceMemberRewards} from "./GroupServiceMemberRewards.sol";
 import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
-import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {
@@ -63,7 +62,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
     // no verification of its own: it settles the finished GroupAction totals and group slices
     // at phase - 3, after the source verification window has closed.
     function currentVerifyRound() public view returns (uint256) {
-        return GroupActionVerify.currentVerifyRound(PHASE_ADDRESS);
+        return GroupActionRoundAxis.currentVerifyRound(PHASE_ADDRESS);
     }
 
     function govRatioMultiplier(

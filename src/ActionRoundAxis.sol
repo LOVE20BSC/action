@@ -2,6 +2,7 @@
 pragma solidity =0.8.37;
 
 import {IPhase} from "@core/interfaces/IPhase.sol";
+import {IActionExecutorErrors} from "./interfaces/IActionExecutor.sol";
 
 library ActionRoundAxis {
     uint256 private constant OFFSET_JOIN_ROUND = 1;
@@ -9,5 +10,10 @@ library ActionRoundAxis {
     function joinRound(address phaseAddress) internal view returns (uint256) {
         uint256 phase = IPhase(phaseAddress).currentPhase();
         return phase <= OFFSET_JOIN_ROUND ? 0 : phase - OFFSET_JOIN_ROUND;
+    }
+
+    function currentJoinRound(address phaseAddress) internal view returns (uint256 round) {
+        round = joinRound(phaseAddress);
+        if (round == 0) revert IActionExecutorErrors.RoundNotStarted(1, 0);
     }
 }

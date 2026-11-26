@@ -5,7 +5,6 @@ import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
 import {GroupActionRewards} from "./GroupActionRewards.sol";
 import {Pagination} from "@libs/Pagination.sol";
-import {Uint256Set} from "@libs/Uint256Set.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {GroupActionManager} from "./GroupActionManager.sol";
 import {GroupActionJoin} from "./GroupActionJoin.sol";
@@ -23,7 +22,6 @@ import {LowLevelCall} from "@openzeppelin/contracts/utils/LowLevelCall.sol";
 contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     using GroupActionStorage for GroupActionStorage.Layout;
     using RoundHistoryUint256 for RoundHistoryUint256.History;
-    using Uint256Set for Uint256Set.Storage;
 
     GroupActionStorage.Layout internal _layout;
 
@@ -70,7 +68,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
     }
 
     function currentVerifyRound() external view returns (uint256) {
-        return GroupActionVerify.currentVerifyRound(PHASE_ADDRESS);
+        return GroupActionRoundAxis.currentVerifyRound(PHASE_ADDRESS);
     }
 
     function generatedActionRewardByGroupId(
@@ -213,7 +211,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory groupIds, uint256 totalCount) {
-        return _layout.quotaGroupIdsByProviderId[tokenAddress][providerId].values(offset, limit, reverse);
+        return GroupActionJoin.groupIdsWithQuotaByProviderId(_layout, tokenAddress, providerId, offset, limit, reverse);
     }
 
     function actionIdsWithQuotaByProviderIdByGroupId(
@@ -224,8 +222,9 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return _layout.quotaActionIdsByProviderIdByGroupId[tokenAddress][providerId][groupId]
-            .values(offset, limit, reverse);
+        return GroupActionJoin.actionIdsWithQuotaByProviderIdByGroupId(
+            _layout, tokenAddress, providerId, groupId, offset, limit, reverse
+        );
     }
 
     function totalGeneratedActionRewardByVerifierId(
@@ -869,11 +868,11 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 actionId,
         uint256 memberId
     ) external view returns (uint256 pendingAmount, uint256 mintedAmount, MemberRewardStatus status) {
-        return GroupActionJoin.memberReward(
+        return GroupActionRewards.memberReward(
             _layout,
             ACTION_TARGET_ADDRESS,
             PHASE_ADDRESS,
-            GroupActionJoin.MemberRewardKey({tokenAddress: tokenAddress, round: round, actionId: actionId, memberId: memberId})
+            GroupActionRewards.MemberRewardKey({tokenAddress: tokenAddress, round: round, actionId: actionId, memberId: memberId})
         );
     }
 
@@ -887,10 +886,10 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256[] calldata actionIds,
         uint256 memberId
     ) internal override returns (uint256[] memory mintAmounts) {
-        GroupActionJoin.MemberRewardBatch memory batch = GroupActionJoin.MemberRewardBatch({
+        GroupActionRewards.MemberRewardBatch memory batch = GroupActionRewards.MemberRewardBatch({
             tokenAddress: tokenAddress, memberId: memberId, rounds: rounds, actionIds: actionIds
         });
-        return GroupActionJoin.mintMemberRewards(_layout, _protocol(), batch);
+        return GroupActionRewards.mintMemberRewards(_layout, ACTION_TARGET_ADDRESS, PHASE_ADDRESS, batch);
     }
 
     function _mintMemberReward(
@@ -899,19 +898,11 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 actionId,
         uint256 memberId
     ) internal override returns (uint256 mintAmount, uint256 burnAmount) {
-        _checkMintWindow(
-            tokenAddress,
-            round,
-            actionId,
-            memberId,
-            _layout.createdRoundByActionId[tokenAddress][actionId],
-            _layout.memberMinted[tokenAddress][actionId][round][memberId]
-        );
-
-        mintAmount = GroupActionJoin.mintMemberReward(
+        mintAmount = GroupActionRewards.mintMemberReward(
             _layout,
             ACTION_TARGET_ADDRESS,
-            GroupActionJoin.MemberRewardKey({tokenAddress: tokenAddress, round: round, actionId: actionId, memberId: memberId})
+            PHASE_ADDRESS,
+            GroupActionRewards.MemberRewardKey({tokenAddress: tokenAddress, round: round, actionId: actionId, memberId: memberId})
         );
         burnAmount = 0;
     }

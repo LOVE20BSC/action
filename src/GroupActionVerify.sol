@@ -720,14 +720,6 @@ library GroupActionVerify {
         return memberSet.valuesByRound(round, offset, limit, false);
     }
 
-    function currentVerifyRound(address phaseAddress) internal view returns (uint256) {
-        uint256 round = GroupActionRoundAxis.verifyRound(phaseAddress);
-        if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted(1, 0);
-        }
-        return round;
-    }
-
     function _checkElectedVerifier(
         GroupActionStorage.Layout storage self,
         address tokenAddress,
@@ -818,7 +810,7 @@ library GroupActionVerify {
             }
         }
 
-        uint256 round = currentVerifyRound(protocol.phaseAddress);
+        uint256 round = GroupActionRoundAxis.currentVerifyRound(protocol.phaseAddress);
         bool groupVerified;
         {
             _checkElectedVerifier(self, submission.tokenAddress, round, submission.actionId, submission.verifierId);

@@ -109,11 +109,7 @@ abstract contract ExecutorBase is IActionExecutor, IMemberRewardExecutor, Reentr
     }
 
     function currentJoinRound() public view override returns (uint256) {
-        uint256 round = _joinRound();
-        if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted(1, 0);
-        }
-        return round;
+        return ActionRoundAxis.currentJoinRound(PHASE_ADDRESS);
     }
 
     function currentMintRound() external view override returns (uint256) {

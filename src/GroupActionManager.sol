@@ -506,14 +506,6 @@ library GroupActionManager {
         });
     }
 
-    function currentJoinRound(address phaseAddress) internal view returns (uint256) {
-        uint256 round = ActionRoundAxis.joinRound(phaseAddress);
-        if (round == 0) {
-            revert IActionExecutorErrors.RoundNotStarted(1, 0);
-        }
-        return round;
-    }
-
     function _emitGroupActivated(
         address tokenAddress,
         uint256 round,

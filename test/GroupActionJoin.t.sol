@@ -290,6 +290,15 @@ contract GroupActionJoinTest is GroupActionExecutorTestBase {
             executor.providerQuotas(address(token), ACTION_ID, GROUP_ID, PROVIDER_ID, 0, 10, false);
         require(total == 1 && quotaAmounts[0] == 40e18 && used[0] == 40e18, "fully used grant stays listed");
 
+        (uint256[] memory groupIds, uint256 groupCount) = executor.groupIdsWithQuotaByProviderId(
+            address(token), PROVIDER_ID, 0, 1, false
+        );
+        require(groupCount == 1 && groupIds[0] == GROUP_ID, "fully used grant keeps its group");
+        (uint256[] memory actionIds, uint256 actionCount) = executor.actionIdsWithQuotaByProviderIdByGroupId(
+            address(token), PROVIDER_ID, GROUP_ID, 0, 1, true
+        );
+        require(actionCount == 1 && actionIds[0] == ACTION_ID, "fully used grant keeps its action");
+
         vm.prank(PROVIDER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionJoinErrors.InsufficientProviderQuota.selector, PROVIDER_ID, 1, 0));
         executor.withdrawProviderQuota(address(token), ACTION_ID, GROUP_ID, MEMBER2_ID, PROVIDER_ID, 1);
