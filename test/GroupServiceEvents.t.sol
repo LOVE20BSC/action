@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.37;
 
+import {Vm} from "@forge-std/Vm.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IActionExecutorEvents} from "../src/interfaces/IActionExecutor.sol";
 import {IGroupServiceExecutorEvents} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {GroupServiceTestBase, GroupServiceVm} from "./GroupServiceTestBase.sol";
 
 contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEvents, IActionExecutorEvents {
+    Vm private constant forgeVm = Vm(address(vm));
+
     function testSettlementEventsReconstructAssetChanges() external {
         _prepareCappedTwoActionScenario();
         uint256 ownerBalance = token.balanceOf(GROUP_OWNER);
@@ -114,6 +118,54 @@ contract GroupServiceEventsTest is GroupServiceTestBase, IGroupServiceExecutorEv
         require(claimed, "verifier claimed");
         require(verifierReward == 450e18 && ownerReward == 0, "verifier roles");
         require(ownerDistributed == 0 && ownerRemaining == 0, "no owner share to split");
+    }
+
+    function testOwnerClaimRollsBackWhenTransferReturnsFalse() external {
+        _prepareCappedTwoActionScenario();
+        forgeVm.mockCall(address(token), abi.encodeCall(token.transfer, (GROUP_OWNER, 54e18)), abi.encode(false));
+
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(token)));
+        vm.prank(GROUP_OWNER);
+        executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        forgeVm.clearMockedCalls();
+
+        require(actionTarget.mintRewardCalls() == 0, "budget mint rolled back");
+        require(token.burnedTotal() == 0, "owner burn rolled back");
+        _assertOwnerReward(54e18, 360e18, false);
+
+        vm.prank(GROUP_OWNER);
+        uint256 paid = executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        require(paid == 54e18 && token.balanceOf(GROUP_OWNER) == paid, "retry paid the owner");
+        require(actionTarget.mintRewardCalls() == 1 && token.burnedTotal() == 360e18, "budget and burn settled once");
+        _assertOwnerReward(54e18, 360e18, true);
+    }
+
+    function testOwnerClaimWithOnlyBurnEmitsDistribution() external {
+        _prepareCappedTwoActionScenario();
+        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_ID, 0);
+
+        vm.expectEmit(true, true, true, true, address(executor));
+        emit ServiceRewardsDistributed({
+            serviceTokenAddress: address(token),
+            serviceActionId: SERVICE_ACTION_ID,
+            round: SERVICE_ROUND,
+            actionTokenAddress: address(token),
+            memberId: GROUP_ID,
+            verifierReward: 0,
+            ownerReward: 0,
+            ownerRemaining: 0
+        });
+        vm.recordLogs();
+        vm.prank(GROUP_OWNER);
+        uint256 paid = executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        GroupServiceVm.Log[] memory logs = vm.getRecordedLogs();
+
+        require(paid == 0 && token.balanceOf(GROUP_OWNER) == 0, "owner received zero");
+        require(logs.length == 3, "token burn, owner burn and distribution");
+        require(logs[1].topics[0] == IGroupServiceExecutorEvents.ServiceOwnerRewardBurned.selector, "owner burn first");
+        require(logs[2].topics[0] == IGroupServiceExecutorEvents.ServiceRewardsDistributed.selector, "distribution last");
+        require(token.burnedTotal() == 450e18, "the full owner allocation burned");
+        _assertOwnerReward(0, 450e18, true);
     }
 
     function testExitEvent() external {

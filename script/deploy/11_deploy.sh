@@ -75,7 +75,7 @@ fi
 echo "=== Deploying Action Contracts to $network ==="
 echo "  CHAIN_ID: $CHAIN_ID"
 
-LIBRARY_NAMES="GroupActionJoin GroupActionManager GroupActionVerify GroupRecipients"
+LIBRARY_NAMES="GroupActionJoin GroupActionManager GroupActionVerify GroupActionRewards GroupServiceMemberRewards GroupServiceRecipients"
 
 library_address_field() {
     printf '%s_LIBRARY_ADDRESS' \

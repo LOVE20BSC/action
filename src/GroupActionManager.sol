@@ -5,7 +5,6 @@ import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {ActionRoundAxis} from "./ActionRoundAxis.sol";
 import {MemberOwner} from "./MemberOwner.sol";
 import {AddressSet} from "@libs/AddressSet.sol";
-import {Pagination} from "@libs/Pagination.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
 import {RoundHistoryString} from "@libs/RoundHistoryString.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
@@ -348,17 +347,6 @@ library GroupActionManager {
         uint256 memberId
     ) external view returns (bool) {
         return self.actionIdsByGroupId[tokenAddress][memberId].count() != 0;
-    }
-
-    function actionIdsWithGeneratedActionReward(
-        GroupActionStorage.Layout storage self,
-        address tokenAddress,
-        uint256 round,
-        uint256 offset,
-        uint256 limit,
-        bool reverse
-    ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return Pagination.paginate(self.actionIdsWithGeneratedActionReward[tokenAddress][round], offset, limit, reverse);
     }
 
     function _checkVerificationInfo(

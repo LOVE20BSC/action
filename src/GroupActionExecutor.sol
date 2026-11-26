@@ -3,6 +3,7 @@ pragma solidity =0.8.37;
 
 import {GroupActionStorage} from "./GroupActionStorage.sol";
 import {GroupActionRoundAxis} from "./GroupActionRoundAxis.sol";
+import {GroupActionRewards} from "./GroupActionRewards.sol";
 import {Pagination} from "@libs/Pagination.sol";
 import {Uint256Set} from "@libs/Uint256Set.sol";
 import {RoundHistoryUint256} from "@libs/RoundHistoryUint256.sol";
@@ -202,7 +203,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         view
         returns (uint256 attributedRewardAmount)
     {
-        return GroupActionVerify.totalGeneratedActionRewardByProviderId(_layout, tokenAddress, round, providerId);
+        return GroupActionRewards.totalGeneratedActionRewardByProviderId(_layout, tokenAddress, round, providerId);
     }
 
     function groupIdsWithQuotaByProviderId(
@@ -242,7 +243,7 @@ contract GroupActionExecutor is IGroupActionExecutor, ExecutorBase {
         uint256 limit,
         bool reverse
     ) external view returns (uint256[] memory actionIds, uint256 totalCount) {
-        return GroupActionManager.actionIdsWithGeneratedActionReward(_layout, tokenAddress, round, offset, limit, reverse);
+        return GroupActionRewards.actionIdsWithGeneratedActionReward(_layout, tokenAddress, round, offset, limit, reverse);
     }
 
     function onProposalCreated(

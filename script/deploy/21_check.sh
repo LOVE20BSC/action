@@ -53,9 +53,11 @@ GROUP_ACTION_LIBRARY_SPECS=(
     "GroupActionJoin src/GroupActionJoin.sol GROUP_ACTION_JOIN_LIBRARY_ADDRESS"
     "GroupActionManager src/GroupActionManager.sol GROUP_ACTION_MANAGER_LIBRARY_ADDRESS"
     "GroupActionVerify src/GroupActionVerify.sol GROUP_ACTION_VERIFY_LIBRARY_ADDRESS"
+    "GroupActionRewards src/GroupActionRewards.sol GROUP_ACTION_REWARDS_LIBRARY_ADDRESS"
 )
 GROUP_SERVICE_LIBRARY_SPECS=(
-    "GroupRecipients src/GroupServiceRecipients.sol GROUP_RECIPIENTS_LIBRARY_ADDRESS"
+    "GroupServiceMemberRewards src/GroupServiceMemberRewards.sol GROUP_SERVICE_MEMBER_REWARDS_LIBRARY_ADDRESS"
+    "GroupServiceRecipients src/GroupServiceRecipients.sol GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS"
 )
 
 GROUP_ACTION_LIBRARY_FIELDS=""
@@ -86,6 +88,9 @@ if [ "$actual_keys" != "$(printf '%s\n' $expected_keys | sort | tr '\n' ' ')" ];
     echo "Error: $address_file key set mismatch"
     echo "  expected: $(printf '%s\n' $expected_keys | sort | tr '\n' ' ')"
     echo "  actual:   $actual_keys"
+    if [[ " $actual_keys" == *" GROUP_RECIPIENTS_LIBRARY_ADDRESS "* ]]; then
+        printf '  To regenerate this legacy address file, run script/deploy/one_click_deploy.sh %q\n' "$network"
+    fi
     exit 1
 fi
 
@@ -267,7 +272,7 @@ verify_library_runtime_matches_artifact() {
     expected=$(printf '%s' "$expected" | tr 'A-F' 'a-f')
     actual=$(printf '%s' "$actual" | tr 'A-F' 'a-f')
     placeholder="73$(printf '%040d' 0)"
-    # Replace the first occurrence only: every one of the four libraries has exactly one today. A
+    # Replace the first occurrence only: every linked library has exactly one today. A
     # different count means the compiler layout changed, and silently substituting the first would
     # flag correct on-chain code as mismatched, so fail loudly.
     local occurrences

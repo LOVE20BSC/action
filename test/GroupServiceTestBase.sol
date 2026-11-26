@@ -34,6 +34,8 @@ interface GroupServiceVm {
     function prank(address sender) external;
     function expectRevert(bytes calldata data) external;
     function expectRevert() external;
+    function expectCall(address callee, bytes calldata data, uint64 count) external;
+    function mockCallRevert(address callee, bytes calldata data, bytes calldata revertData) external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
     function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData, address emitter) external;
     function recordLogs() external;

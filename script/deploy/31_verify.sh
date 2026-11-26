@@ -74,9 +74,11 @@ GROUP_ACTION_LIBRARY_SPECS=(
     "GroupActionJoin src/GroupActionJoin.sol GROUP_ACTION_JOIN_LIBRARY_ADDRESS"
     "GroupActionManager src/GroupActionManager.sol GROUP_ACTION_MANAGER_LIBRARY_ADDRESS"
     "GroupActionVerify src/GroupActionVerify.sol GROUP_ACTION_VERIFY_LIBRARY_ADDRESS"
+    "GroupActionRewards src/GroupActionRewards.sol GROUP_ACTION_REWARDS_LIBRARY_ADDRESS"
 )
 GROUP_SERVICE_LIBRARY_SPECS=(
-    "GroupRecipients src/GroupServiceRecipients.sol GROUP_RECIPIENTS_LIBRARY_ADDRESS"
+    "GroupServiceMemberRewards src/GroupServiceMemberRewards.sol GROUP_SERVICE_MEMBER_REWARDS_LIBRARY_ADDRESS"
+    "GroupServiceRecipients src/GroupServiceRecipients.sol GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS"
 )
 
 # Library addresses are embedded in the Executor runtime bytecode: without --libraries the

@@ -3,8 +3,10 @@ pragma solidity =0.8.37;
 
 import {GroupServiceTestBase} from "./GroupServiceTestBase.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
+import {IGroupActionExecutor} from "../src/interfaces/IGroupActionExecutor.sol";
 import {IGroupServiceExecutorErrors} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
+import {IStake} from "@core/interfaces/IStake.sol";
 
 contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
     function testProviderClaimRepricesZeroPreviewUsingActualBudget() external {
@@ -83,6 +85,35 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         require(actionTarget.mintRewardCalls() == 1, "batch mints one service budget");
     }
 
+    function testProviderBatchUsesEachGroupsBudgetWhenGroupsInterleave() external {
+        _createServiceAction(SERVICE_ACTION_ID, PRECISION, 0.5e18, PRECISION);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(100, 100), VERIFIER_ID);
+        _setGroupLedger(GROUP_ACTION_ID_B, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 100, MEMBER1_ID, 100);
+        groupAction.setMarketScores(
+            address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_OWNER_B_ID, 100, MEMBER1_ID, 100
+        );
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID_B, GROUP_ID, 100, MEMBER1_ID, 100);
+        stake.setTotalGovVotes(address(token), VERIFY_PHASE, 100);
+        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_ID, 10);
+        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_OWNER_B_ID, 30);
+        _armServiceReward(600);
+        _atPhase(MINT_PHASE);
+
+        uint256[] memory sourceActionIds = _ids(GROUP_ACTION_ID, GROUP_ACTION_ID, GROUP_ACTION_ID_B);
+        uint256[] memory groupIds = _ids(GROUP_ID, GROUP_OWNER_B_ID, GROUP_ID);
+        vm.expectCall(
+            address(groupAction),
+            abi.encodeCall(IGroupActionExecutor.totalGeneratedActionRewardByGroupId, (address(token), SERVICE_ROUND, GROUP_ID)),
+            1
+        );
+        vm.prank(MEMBER1);
+        uint256[] memory amounts =
+            executor.mintProviderRewards(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, sourceActionIds, groupIds);
+        require(amounts[0] == 30 && amounts[1] == 100 && amounts[2] == 30, "each batch item uses its group's cap");
+        require(token.balanceOf(MEMBER1) == 160, "batch pays all three shares");
+    }
+
     function testProviderBatchRollsBackActualBudgetWhenLaterKeyHasNoShare() external {
         _prepareSingleGroup(1, 200, 1, PRECISION, 1, 1);
         _atPhase(MINT_PHASE);
@@ -100,12 +131,96 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         vm.prank(MEMBER1);
         executor.mintProviderRewards(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, sourceActionIds, groupIds);
 
+        vm.expectCall(
+            address(groupAction),
+            abi.encodeCall(IGroupActionExecutor.totalGeneratedActionRewardByGroupId, (address(token), SERVICE_ROUND, GROUP_ID)),
+            1
+        );
         (uint256 firstAmount, bool firstMinted) = executor.providerRewardBySourceActionIdByGroupId(
             address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
         );
         require(firstAmount == 0 && !firstMinted, "failed batch restores first share");
         require(token.balanceOf(MEMBER1) == 0, "failed batch restores first transfer");
         require(actionTarget.mintRewardCalls() == 0, "failed batch restores service budget mint");
+    }
+
+    function testProviderFirstClaimCachesSourceAcrossProposals() external {
+        uint256 childServiceActionId = SERVICE_ACTION_ID_B + 1;
+        _createServiceAction(SERVICE_ACTION_ID, 0, 0.5e18, 0.5e18);
+        _createServiceAction(SERVICE_ACTION_ID_B, 0, 0.25e18);
+        _createServiceActionOn(address(token), address(childToken), childServiceActionId, 0, 0.25e18);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(100, 300), VERIFIER_ID);
+        groupAction.setGroupLedger(
+            address(childToken), SERVICE_ROUND, GROUP_ACTION_ID,
+            _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(300, 100), VERIFIER_ID
+        );
+        groupAction.setGroupLedger(
+            address(token), SERVICE_ROUND + 1, GROUP_ACTION_ID,
+            _ids(GROUP_ID, GROUP_OWNER_B_ID), _amounts(200, 200), VERIFIER_ID
+        );
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 100, MEMBER1_ID, 100);
+        _armServiceReward(400);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, 400, false);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, childServiceActionId, 400, false);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND + 1, SERVICE_ACTION_ID_B, 400, false);
+        _atPhase(MINT_PHASE);
+
+        vm.prank(MEMBER1);
+        uint256 paid = executor.mintProviderRewardBySourceActionIdByGroupId(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ACTION_ID, GROUP_ID, MEMBER1_ID
+        );
+        require(paid == 25, "provider settles before owner");
+
+        vm.mockCallRevert(
+            address(groupAction),
+            abi.encodeCall(IGroupActionExecutor.totalGeneratedActionRewardByGroupId, (address(token), SERVICE_ROUND, GROUP_ID)),
+            abi.encodeWithSignature("Error(string)", "unexpected repeat of source aggregation")
+        );
+        (uint256 ownerBudget,) = executor.groupOwnerRewardBudget(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_ID);
+        require(ownerBudget == 75, "another proposal reuses the source total with its own ratios");
+        (ownerBudget,) = executor.groupOwnerRewardBudget(address(token), SERVICE_ROUND, SERVICE_ACTION_ID_B, GROUP_OWNER_B_ID);
+        require(ownerBudget == 225, "different group uses its own total");
+        (ownerBudget,) = executor.groupOwnerRewardBudget(address(token), SERVICE_ROUND, childServiceActionId, GROUP_ID);
+        require(ownerBudget == 225, "different source token uses its own total");
+        _atPhase(MINT_PHASE + 1);
+        (ownerBudget,) = executor.groupOwnerRewardBudget(address(token), SERVICE_ROUND + 1, SERVICE_ACTION_ID_B, GROUP_ID);
+        require(ownerBudget == 150, "different round uses its own total");
+    }
+
+    function testCombinedRecipientAndProviderReuseActualCappedBudget() external {
+        _createServiceAction(SERVICE_ACTION_ID, PRECISION, 0.5e18, 0.4e18);
+        _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
+        groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 50, MEMBER1_ID, 50);
+        stake.setTotalGovVotes(address(token), VERIFY_PHASE, 100);
+        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_ID, 25);
+        _armServiceReward(400);
+        actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, 1, false);
+        _atPhase(VERIFY_PHASE);
+        _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
+        _atPhase(MINT_PHASE);
+
+        vm.expectCall(address(stake), abi.encodeCall(IStake.totalGovVotes, (address(token), VERIFY_PHASE)), 1);
+        vm.prank(MEMBER1);
+        uint256 paid = executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
+        require(paid == 60, "combined claim pays 40 recipient and 20 Provider from actual budget");
+        require(actionTarget.mintRewardCalls() == 1, "combined claim mints one service budget");
+        require(token.burnedTotal() == 0, "owner still settles the overflow");
+    }
+
+    function testPrimaryRoleClaimsWaitForMintWindow() external {
+        _preparePrimaryOnly(200, 200, VERIFIER_ID);
+        _atPhase(VERIFY_PHASE);
+        bytes memory expected = abi.encodeWithSelector(
+            IActionExecutorErrors.RoundAfterMintWindow.selector, SERVICE_ROUND, SERVICE_ROUND - 1
+        );
+
+        vm.expectRevert(expected);
+        vm.prank(GROUP_OWNER);
+        executor.mintGroupOwnerReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, GROUP_ID);
+        vm.expectRevert(expected);
+        vm.prank(VERIFIER);
+        executor.mintVerifierReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, VERIFIER_ID);
+        require(actionTarget.mintRewardCalls() == 0, "verification phase cannot mint service rewards");
     }
 
     function testGroupOwnerClaimRepricesZeroPreviewUsingActualBudget() external {

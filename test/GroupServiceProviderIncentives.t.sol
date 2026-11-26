@@ -5,9 +5,32 @@ import {GroupServiceTestBase, TestServiceRewardDetails} from "./GroupServiceTest
 import {MemberRewardStatus} from "../src/interfaces/IMemberRewardExecutor.sol";
 import {IGroupServiceExecutorErrors, MemberRewardSummary} from "../src/interfaces/IGroupServiceExecutor.sol";
 import {IActionExecutorErrors} from "../src/interfaces/IActionExecutor.sol";
+import {IGroupActionExecutor} from "../src/interfaces/IGroupActionExecutor.sol";
 
 contract GroupServiceProviderIncentivesTest is GroupServiceTestBase {
     uint256 private constant MAX_REWARDS_PER_BATCH = 32;
+
+    function testRewardBatchRejectsMismatchedArrayLengths() external {
+        uint256[] memory sourceActionIds = _ids(GROUP_ACTION_ID, GROUP_ACTION_ID + 1);
+        uint256[] memory groupIds = _ids(GROUP_ID);
+        bytes memory errorData = abi.encodeWithSelector(
+            IGroupServiceExecutorErrors.RewardArraysLengthMismatch.selector,
+            sourceActionIds.length,
+            groupIds.length
+        );
+
+        vm.expectRevert(errorData);
+        vm.prank(MEMBER1);
+        executor.mintProviderRewards(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, sourceActionIds, groupIds
+        );
+
+        vm.expectRevert(errorData);
+        vm.prank(MEMBER1);
+        executor.mintRecipientRewards(
+            address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID, sourceActionIds, groupIds
+        );
+    }
 
     function testRewardBatchLimitRejectsMoreThanThirtyTwoKeys() external {
         uint256[] memory sourceActionIds = new uint256[](MAX_REWARDS_PER_BATCH + 1);
@@ -71,6 +94,11 @@ contract GroupServiceProviderIncentivesTest is GroupServiceTestBase {
         uint256[] memory batchGroupIds = new uint256[](sourceActionIds.length);
         for (uint256 i; i < batchGroupIds.length; ++i) batchGroupIds[i] = GROUP_ID;
 
+        vm.expectCall(
+            address(groupAction),
+            abi.encodeCall(IGroupActionExecutor.totalGeneratedActionRewardByGroupId, (address(token), SERVICE_ROUND, GROUP_ID)),
+            1
+        );
         uint256 beforeGas = gasleft();
         vm.prank(MEMBER1);
         uint256[] memory amounts =

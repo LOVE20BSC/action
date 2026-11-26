@@ -12,12 +12,6 @@ library GroupServiceStorage {
     uint256 constant MAX_REMARK_BYTES = 256;
     uint256 constant MAX_REWARDS_PER_BATCH = 32;
 
-    enum SettlementCause {
-        RoundedToZero,
-        NoEligibleWeight,
-        PoolEmpty
-    }
-
     struct Protocol {
         address memberNFTAddress;
         address groupActionExecutorAddress;
@@ -25,40 +19,11 @@ library GroupServiceStorage {
         address stakeAddress;
     }
 
-    enum PrimaryRole {
-        Owner,
-        Verifier,
-        Both
-    }
-
-    struct Settlement {
-        address actionTokenAddress;
-        uint256 publicVerifierRatio;
-        uint256 providerIncentiveRatio;
-        uint256 govRatioMultiplier;
-        uint256 verifierWeight;
-        uint256 ownerWeight;
-        uint256 ownerProviderWeight;
-        uint256 denominator;
-        uint256 serviceReward;
-        bool actionMinted;
-        uint256 verifierReward;
-        uint256 ownerReward;
-        uint256 ownerBurned;
-        SettlementCause cause;
-    }
-
     struct MemberRewardKey {
         address tokenAddress;
         uint256 round;
         uint256 actionId;
         uint256 memberId;
-    }
-
-    struct PrimaryAmounts {
-        uint256 owner;
-        uint256 verifier;
-        uint256 burn;
     }
 
     struct Share {
@@ -73,12 +38,6 @@ library GroupServiceStorage {
     struct PaidShare {
         uint256 recipient;
         uint256 provider;
-    }
-
-    struct ShareMintResult {
-        uint256 mintAmount;
-        bool previouslyMinted;
-        bool hasEligibleWeight;
     }
 
     struct Layout {
@@ -123,5 +82,18 @@ library GroupServiceStorage {
         // sourceTokenAddress => recipientId => groupId => source action ids by round
         mapping(address => mapping(uint256 => mapping(uint256 => RoundHistoryUint256Set.Storage)))
             recipientActionIdsByGroupIdByRecipientId;
+
+        // sourceTokenAddress => round => groupId => positive source reward total (zero if uncached)
+        mapping(address => mapping(uint256 => mapping(uint256 => uint256))) totalSourceRewardByGroupId;
+    }
+
+    function sourceTokenAddressForRound(
+        Layout storage self,
+        address serviceTokenAddress,
+        uint256 round,
+        uint256 serviceActionId
+    ) internal view returns (address) {
+        if (round < self.createdRoundByActionId[serviceTokenAddress][serviceActionId]) return address(0);
+        return self.actionTokenAddressByActionId[serviceTokenAddress][serviceActionId];
     }
 }

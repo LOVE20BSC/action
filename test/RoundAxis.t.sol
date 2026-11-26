@@ -75,6 +75,7 @@ contract RoundAxisTest {
 
     function testGroupActionAxis() external {
         require(axis.joinRound(address(phase)) == 0);
+        require(group.verifyRound(address(phase)) == 0);
         phase.setPhase(1);
         require(axis.joinRound(address(phase)) == 0);
         phase.setPhase(2);

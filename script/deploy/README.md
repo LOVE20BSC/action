@@ -19,7 +19,7 @@ script/
         ├── .account               # 账户与私密配置（已 gitignore）
         ├── network.params         # 网络参数
         ├── addresses.core.params  # core 已部署地址（跨库依赖，从 core 复制）
-        └── addresses.action.params # 本协议已部署地址（含 4 个链接库），部署成功后自动写入
+        └── addresses.action.params # 本协议已部署地址（含 6 个链接库），部署成功后自动写入
 ```
 
 ## 部署前准备
@@ -86,9 +86,9 @@ cd action
 
 该脚本依次调用下列单步骤脚本（各步骤只做自己那一步、互不调用、自行载入输入；单独执行见「分步部署」）：
 
-1. `11_deploy.sh` —— 自载入部署输入并调用 forge 部署初始化 4 个合约，原子写入地址；Foundry 自动以 CREATE2 部署的 4 个链接库地址从本次 broadcast 产物提取、核对后一并写入
+1. `11_deploy.sh` —— 自载入部署输入并调用 forge 部署初始化 4 个合约，原子写入地址；Foundry 自动以 CREATE2 部署的 6 个链接库地址从本次 broadcast 产物提取、核对后一并写入
 2. `21_check.sh` —— 自载入校验文件，校验部署与初始化结果
-3. `31_verify.sh` —— 自载入地址文件，对 4 个合约与 4 个链接库做合约开源验证；默认执行（需 `.account` 的 `ETHERSCAN_API_KEY`），只有 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 列出的链才跳过
+3. `31_verify.sh` —— 自载入地址文件，对 4 个合约与 6 个链接库做合约开源验证；默认执行（需 `.account` 的 `ETHERSCAN_API_KEY`），只有 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 列出的链才跳过
 
 链 ID、core 依赖地址、初始化绑定任一不一致，部署入口返回失败，并回滚到上一次已保存的地址（校验失败不覆盖旧地址）。网络名必填，缺参直接报错。广播前校验全部在 `DeployAction.s.sol` 内完成。
 
@@ -107,7 +107,7 @@ cd action
 ./script/deploy/31_verify.sh anvil31337_dev
 ```
 
-`21_check.sh` 缺失 `addresses.action.params` 时提示先跑一键部署，不会静默通过。
+`21_check.sh` 在 `addresses.action.params` 缺失或含旧版 `GROUP_RECIPIENTS_LIBRARY_ADDRESS` 时会提示运行一键部署。确认 `addresses.core.params` 对应目标链后，用当前版本的一键部署生成六个链接库的地址。
 
 ## 合约开源验证
 
@@ -118,7 +118,7 @@ cd action
 ./script/deploy/31_verify.sh anvil31337_dev
 ```
 
-四个链接库没有构造函数参数，直接提交验证；`ActionTarget` 的构造函数只收 `Mint`，验证时用 `addresses.core.params` 的 `MINT_ADDRESS` 回填 `--constructor-args`。`LpExecutor` / `GroupActionExecutor` 的构造函数收 ActionTarget，`GroupServiceExecutor` 收 GroupActionExecutor；验证时由 `31_verify.sh` 用 `cast abi-encode` 回填 `--constructor-args`（另依赖 `addresses.action.params` 的 `ACTION_TARGET_ADDRESS`、`GROUP_ACTION_EXECUTOR_ADDRESS`），编码失败在任何验证请求之前中止。`GroupActionExecutor` 与 `GroupServiceExecutor` 的运行时字节码内嵌链接库地址，验证时按 `addresses.action.params` 里的库地址传 `--libraries`；不传会让 standard-json 的 `settings.libraries` 为空，链上字节码无法匹配。链接库本身也逐一提交验证。使用 Etherscan V2 API Key；缺少 Key 或任何一份合约/库验证失败均返回非零；链列在 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 时跳过并返回 0（`ETHERSCAN_VERIFIER_URL` 决定端点，`56`/`97` 不允许进跳过名单）。`ETHERSCAN_API_KEY` 是 `.account` 的一个键，只从文件取值——步骤脚本载入该文件时文件值（包括空值）覆盖调用方的同名环境变量，所以 `ETHERSCAN_API_KEY=xxx ./31_verify.sh` 不生效。
+六个链接库没有构造函数参数，直接提交验证；`ActionTarget` 的构造函数只收 `Mint`，验证时用 `addresses.core.params` 的 `MINT_ADDRESS` 回填 `--constructor-args`。`LpExecutor` / `GroupActionExecutor` 的构造函数收 ActionTarget，`GroupServiceExecutor` 收 GroupActionExecutor；验证时由 `31_verify.sh` 用 `cast abi-encode` 回填 `--constructor-args`（另依赖 `addresses.action.params` 的 `ACTION_TARGET_ADDRESS`、`GROUP_ACTION_EXECUTOR_ADDRESS`），编码失败在任何验证请求之前中止。`GroupActionExecutor` 与 `GroupServiceExecutor` 的运行时字节码内嵌链接库地址，验证时按 `addresses.action.params` 里的库地址传 `--libraries`；不传会让 standard-json 的 `settings.libraries` 为空，链上字节码无法匹配。链接库本身也逐一提交验证。使用 Etherscan V2 API Key；缺少 Key 或任何一份合约/库验证失败均返回非零；链列在 `verifier.params` 的 `VERIFY_SKIP_CHAIN_IDS` 时跳过并返回 0（`ETHERSCAN_VERIFIER_URL` 决定端点，`56`/`97` 不允许进跳过名单）。`ETHERSCAN_API_KEY` 是 `.account` 的一个键，只从文件取值——步骤脚本载入该文件时文件值（包括空值）覆盖调用方的同名环境变量，所以 `ETHERSCAN_API_KEY=xxx ./31_verify.sh` 不生效。
 
 ## 部署输出
 
@@ -132,10 +132,12 @@ GROUP_SERVICE_EXECUTOR_ADDRESS=0x...
 GROUP_ACTION_JOIN_LIBRARY_ADDRESS=0x...
 GROUP_ACTION_MANAGER_LIBRARY_ADDRESS=0x...
 GROUP_ACTION_VERIFY_LIBRARY_ADDRESS=0x...
-GROUP_RECIPIENTS_LIBRARY_ADDRESS=0x...
+GROUP_ACTION_REWARDS_LIBRARY_ADDRESS=0x...
+GROUP_SERVICE_MEMBER_REWARDS_LIBRARY_ADDRESS=0x...
+GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS=0x...
 ```
 
-后 4 项是 `GroupActionExecutor` / `GroupServiceExecutor` 通过 `delegatecall` 调用的外部库，由 Foundry 在广播阶段自动以 CREATE2 部署。它们不在部署日志中，`11_deploy.sh` 从本次运行写出的 `broadcast/DeployAction.s.sol/<chain-id>/run-latest.json` 的 `libraries` 字段提取；产物须由本次运行生成，且回填的 Executor 地址须与部署日志一致，缺项、过期或不一致时不写地址文件。这些校验都在广播之后：此时合约已经上链，脚本会保留部署日志并打印日志与 broadcast 产物路径，便于人工恢复地址记录。
+后 6 项是 `GroupActionExecutor` / `GroupServiceExecutor` 通过 `delegatecall` 调用的外部库，由 Foundry 在广播阶段自动以 CREATE2 部署。它们不在部署日志中，`11_deploy.sh` 从本次运行写出的 `broadcast/DeployAction.s.sol/<chain-id>/run-latest.json` 的 `libraries` 字段提取；产物须由本次运行生成，且回填的 Executor 地址须与部署日志一致，缺项、过期或不一致时不写地址文件。这些校验都在广播之后：此时合约已经上链，脚本会保留部署日志并打印日志与 broadcast 产物路径，便于人工恢复地址记录。
 
 `DeployAction.s.sol` 的部署顺序：`ActionTarget`（构造函数从 Mint 派生四个绑定）→ `LpExecutor` / `GroupActionExecutor`（构造函数只收 ActionTarget，其余地址从 ActionTarget→Vote→Stake 派生）→ `GroupServiceExecutor`（构造函数只收 GroupActionExecutor，ActionTarget 从它反查）。三个 Executor 的协议地址全部在构造函数里固化为 immutable，没有额外的初始化步骤。
 
@@ -146,7 +148,7 @@ GROUP_RECIPIENTS_LIBRARY_ADDRESS=0x...
 - 4 个合约均已部署（`cast code` 非空）、运行时代码与构建产物在 immutable 槽回填后逐字节一致；四个合约的依赖均由构造函数固化，不存在初始化入口
 - `ActionTarget` 的 `MINT_ADDRESS / VOTE_ADDRESS / SUBMIT_ADDRESS / MEMBER_NFT_ADDRESS / PHASE_ADDRESS` 与 core 地址一致
 - 三个 Executor 的 `ACTION_TARGET_ADDRESS()`、`STAKE_ADDRESS()`、`MEMBER_NFT_ADDRESS()`、`PHASE_ADDRESS()` 与 core 地址一致；`LpExecutor.PAIR_FACTORY_ADDRESS()`、`GroupActionExecutor.VOTE_ADDRESS()`、`GroupServiceExecutor.LAUNCH_ADDRESS()`/`MINT_ADDRESS()` 与派生源一致；`GroupServiceExecutor.GROUP_ACTION_EXECUTOR_ADDRESS()` 指向本次部署的 `GroupActionExecutor`
-- 4 个链接库地址均已入账、链上有代码，且运行时字节码与构建产物一致（库的 runtime 内嵌自身地址，比对时按入账地址替换该处）；两个 Executor 的比对按入账地址传 `--libraries`（地址文件键集合必须恰好是 4 个合约 + 4 个库）
+- 6 个链接库地址均已入账、链上有代码，且运行时字节码与构建产物一致（库的 runtime 内嵌自身地址，比对时按入账地址替换该处）；两个 Executor 的比对按入账地址传 `--libraries`（地址文件键集合必须恰好是 4 个合约 + 6 个库）
 
 部署后若修改过源码，`forge inspect` 会用当前产物比对，校验会失败——这是预期结果（链上代码与工作区源码不符），不是部署缺陷。
 

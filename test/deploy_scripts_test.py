@@ -346,8 +346,12 @@ def main():
              "field": "GROUP_ACTION_MANAGER_LIBRARY_ADDRESS", "executor": "GROUP_ACTION_EXECUTOR"},
             {"name": "GroupActionVerify", "path": "src/GroupActionVerify.sol",
              "field": "GROUP_ACTION_VERIFY_LIBRARY_ADDRESS", "executor": "GROUP_ACTION_EXECUTOR"},
-            {"name": "GroupRecipients", "path": "src/GroupServiceRecipients.sol",
-             "field": "GROUP_RECIPIENTS_LIBRARY_ADDRESS", "executor": "GROUP_SERVICE_EXECUTOR"},
+            {"name": "GroupActionRewards", "path": "src/GroupActionRewards.sol",
+             "field": "GROUP_ACTION_REWARDS_LIBRARY_ADDRESS", "executor": "GROUP_ACTION_EXECUTOR"},
+            {"name": "GroupServiceMemberRewards", "path": "src/GroupServiceMemberRewards.sol",
+             "field": "GROUP_SERVICE_MEMBER_REWARDS_LIBRARY_ADDRESS", "executor": "GROUP_SERVICE_EXECUTOR"},
+            {"name": "GroupServiceRecipients", "path": "src/GroupServiceRecipients.sol",
+             "field": "GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS", "executor": "GROUP_SERVICE_EXECUTOR"},
         ]
         env.update({lib["field"]: f"0x{index + 20:040x}" for index, lib in enumerate(libraries)})
         env.update({"CHAIN_ID": "97", "RPC_URL": "http://invalid.local", "ETHERSCAN_API_KEY": "test-key",
@@ -455,7 +459,8 @@ def main():
 
         def write_broadcast(omit=None, executor_addresses=None, extra_return=False, extra_library=False):
             # 故意打乱顺序：任何按位置切片解析库的回归都会与期望映射不符。
-            order = ["GroupRecipients", "GroupActionVerify", "GroupActionJoin", "GroupActionManager"]
+            order = ["GroupServiceRecipients", "GroupActionRewards", "GroupServiceMemberRewards",
+                     "GroupActionVerify", "GroupActionJoin", "GroupActionManager"]
             entries = [fqn(lib) + ":" + env[lib["field"]]
                        for name in order for lib in libraries
                        if lib["name"] == name and lib["field"] != omit]
@@ -545,10 +550,17 @@ def main():
 
         run("21_check.sh", args=("test",))
         # 地址文件键集合不符（漏改键名，包括漏掉库地址）必须显式失败。
-        saved.write_text(address_file_text(omit="GROUP_RECIPIENTS_LIBRARY_ADDRESS")
+        saved.write_text(address_file_text(omit="GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS")
                          + "GROUPSERVICE_ADDR=" + env["GROUP_SERVICE_EXECUTOR_ADDRESS"] + "\n")
         result, _ = run("21_check.sh", False, ("test",))
         assert "key set mismatch" in result.stdout + result.stderr, result.stdout + result.stderr
+        legacy_fields = contracts + [lib["field"] for lib in libraries[:3]]
+        saved.write_text("".join(f"{field}={env[field]}\n" for field in legacy_fields)
+                         + "GROUP_RECIPIENTS_LIBRARY_ADDRESS=0x" + "11" * 20 + "\n")
+        result, log = run("21_check.sh", False, ("test",))
+        output = result.stdout + result.stderr
+        assert "key set mismatch" in output and "script/deploy/one_click_deploy.sh test" in output, output
+        assert not log, log
         # 地址格式非法（这里是零地址）：在逐项 cast 之前显式失败，不误报成「未部署」。
         saved.write_text(address_file_text(overrides={"GROUP_ACTION_JOIN_LIBRARY_ADDRESS": "0x0"}))
         result, _ = run("21_check.sh", False, ("test",))
@@ -563,9 +575,9 @@ def main():
             result.stdout + result.stderr
         # 库自身 runtime 与构建产物不符（地址指向别的实现）：同样必须失败。
         saved.write_text(address_file_text(overrides={
-            "GROUP_RECIPIENTS_LIBRARY_ADDRESS": "0x" + "77" * 20}))
+            "GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS": "0x" + "77" * 20}))
         result, _ = run("21_check.sh", False, ("test",))
-        assert "GroupRecipients runtime does not match" in result.stdout + result.stderr, \
+        assert "GroupServiceRecipients runtime does not match" in result.stdout + result.stderr, \
             result.stdout + result.stderr
         saved.write_text(address_file_text())
         # 非 immutable 槽位仍须逐字节一致：回填逻辑不能掩盖其它差异。
@@ -588,10 +600,10 @@ def main():
                 ("LAUNCH", "PAIR_FACTORY_ADDRESS()(address)")]:
             wrong_value = "0x" + "98" * 20 if signature.endswith("(address)") else "false" if signature.endswith("(bool)") else "[999]"
             run("21_check.sh", False, ("test",), BAD_CALL=env[contract + "_ADDRESS"].lower() + "/" + signature, BAD_VALUE=wrong_value)
-        # 地址无代码时每个对象只计一次失败（4 合约 + 4 库 + Stake 派生源 3 = 11），
+        # 地址无代码时每个对象只计一次失败（4 合约 + 6 库 + Stake 派生源 3 = 13），
         # 不因 runtime 比对重复计数。
         result, _ = run("21_check.sh", False, ("test",), RPC_CODE_ERROR="1")
-        assert "11 verification(s) failed" in result.stdout, result.stdout
+        assert "13 verification(s) failed" in result.stdout, result.stdout
         run("21_check.sh", False, ("test",), INSPECT_FAIL="1")
         run("21_check.sh", False, ("test",), RPC_CHAIN="56")
         # 地址比较大小写不敏感：配置写大写、链上读到小写，仍应通过（配置值由步骤自行载入）。
@@ -676,9 +688,9 @@ def main():
         kept_log.unlink()
         assert saved.read_text() == saved_before, saved.read_text()
         # broadcast 缺库条目或整个文件缺失：部署后也不得写半截地址文件。
-        write_broadcast(omit="GROUP_RECIPIENTS_LIBRARY_ADDRESS")
+        write_broadcast(omit="GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS")
         result, _ = run("11_deploy.sh", False, ("test",))
-        assert "GROUP_RECIPIENTS_LIBRARY_ADDRESS" in result.stdout + result.stderr, result.stdout + result.stderr
+        assert "GROUP_SERVICE_RECIPIENTS_LIBRARY_ADDRESS" in result.stdout + result.stderr, result.stdout + result.stderr
         assert saved.read_text() == saved_before, saved.read_text()
         write_broadcast()
         broadcast.unlink()
@@ -700,7 +712,7 @@ def main():
         # 产物出现未知库：不能静默忽略。
         write_broadcast(extra_library=True)
         result, _ = run("11_deploy.sh", False, ("test",))
-        assert "Expected 4 linked libraries, found 5" in result.stdout + result.stderr, \
+        assert "Expected 6 linked libraries, found 7" in result.stdout + result.stderr, \
             result.stdout + result.stderr
         assert saved.read_text() == saved_before, saved.read_text()
         # 广播已上链后校验失败：日志必须保留，地址记录只能从它恢复。
