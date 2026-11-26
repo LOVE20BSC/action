@@ -81,10 +81,9 @@ library GroupServiceMemberRewards {
         if (rewardAmount != 0) return (rewardAmount, true);
         if (key.memberId == groupId || !_isSettleableRound(self, key, mintRound)) return (0, isMinted);
 
-        GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
         ServiceBudget memory service;
-        _loadServiceBudget(self, protocol, groupKey, service);
-        GroupBudget memory group = _groupBudget(self, protocol, groupKey, service);
+        _loadServiceBudget(self, protocol, key, service);
+        GroupBudget memory group = _groupBudget(self, protocol, _groupKey(key, groupId), service);
         rewardAmount = _recipientRewardAmount(self, protocol, service, group, key, sourceActionId, groupId);
     }
 
@@ -101,10 +100,9 @@ library GroupServiceMemberRewards {
         if (rewardAmount != 0) return (rewardAmount, true);
         if (key.memberId == groupId || !_isSettleableRound(self, key, mintRound)) return (0, isMinted);
 
-        GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
         ServiceBudget memory service;
-        _loadServiceBudget(self, protocol, groupKey, service);
-        GroupBudget memory group = _groupBudget(self, protocol, groupKey, service);
+        _loadServiceBudget(self, protocol, key, service);
+        GroupBudget memory group = _groupBudget(self, protocol, _groupKey(key, groupId), service);
         rewardAmount = _providerRewardAmount(protocol, service, group, key, sourceActionId, groupId);
     }
 
@@ -867,9 +865,10 @@ library GroupServiceMemberRewards {
             );
         }
 
+        _loadServiceBudget(self, protocol, key, service);
+        _checkServiceBudget(service, key);
+
         GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
-        _loadServiceBudget(self, protocol, groupKey, service);
-        _checkServiceBudget(service, groupKey);
         GroupBudget memory group = _groupBudgetForMint(self, protocol, groupKey, service);
         _checkSourceReward(group.totalSourceReward, groupKey);
         amount = _recipientRewardAmount(self, protocol, service, group, key, sourceActionId, groupId);
@@ -899,9 +898,10 @@ library GroupServiceMemberRewards {
             );
         }
 
+        _loadServiceBudget(self, protocol, key, service);
+        _checkServiceBudget(service, key);
+
         GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
-        _loadServiceBudget(self, protocol, groupKey, service);
-        _checkServiceBudget(service, groupKey);
         GroupBudget memory group = _groupBudgetForMint(self, protocol, groupKey, service);
         _checkSourceReward(group.totalSourceReward, groupKey);
         amount = _providerRewardAmount(protocol, service, group, key, sourceActionId, groupId);
