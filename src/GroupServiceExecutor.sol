@@ -129,7 +129,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return GroupServiceMemberRewards.recipientRewardForSource(
             _layout,
             _protocol(),
-            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, recipientId),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, recipientId),
+            sourceActionId,
+            groupId,
             _mintRound()
         );
     }
@@ -145,7 +147,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return GroupServiceMemberRewards.providerRewardForSource(
             _layout,
             _protocol(),
-            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, providerId),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, providerId),
+            sourceActionId,
+            groupId,
             _mintRound()
         );
     }
@@ -162,7 +166,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return GroupServiceMemberRewards.mintRecipientRewardForSource(
             _layout,
             _protocol(),
-            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, recipientId),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, recipientId),
+            sourceActionId,
+            groupId,
             _mintRound()
         );
     }
@@ -179,7 +185,9 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return GroupServiceMemberRewards.mintProviderRewardForSource(
             _layout,
             _protocol(),
-            GroupServiceStorage.Share(serviceTokenAddress, round, serviceActionId, sourceActionId, groupId, providerId),
+            GroupServiceStorage.MemberRewardKey(serviceTokenAddress, round, serviceActionId, providerId),
+            sourceActionId,
+            groupId,
             _mintRound()
         );
     }
@@ -323,7 +331,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256[] calldata sourceActionIds,
         uint256[] calldata groupIds
     ) external nonReentrant onlyMemberOwner(providerId) returns (uint256[] memory mintAmounts) {
-        _checkShareBatchLength(sourceActionIds.length, groupIds.length);
+        _checkSourceRewardBatchLength(sourceActionIds.length, groupIds.length);
         return GroupServiceMemberRewards.mintProviderRewards(
             _layout,
             _protocol(),
@@ -343,7 +351,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         uint256[] calldata sourceActionIds,
         uint256[] calldata groupIds
     ) external nonReentrant onlyMemberOwner(recipientId) returns (uint256[] memory mintAmounts) {
-        _checkShareBatchLength(sourceActionIds.length, groupIds.length);
+        _checkSourceRewardBatchLength(sourceActionIds.length, groupIds.length);
         return GroupServiceMemberRewards.mintRecipientRewards(
             _layout,
             _protocol(),
@@ -697,7 +705,7 @@ contract GroupServiceExecutor is IGroupServiceExecutor, ExecutorBase {
         return GroupActionRoundAxis.mintRound(PHASE_ADDRESS);
     }
 
-    function _checkShareBatchLength(
+    function _checkSourceRewardBatchLength(
         uint256 actionCount,
         uint256 groupCount
     ) private pure {

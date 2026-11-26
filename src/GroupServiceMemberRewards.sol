@@ -71,37 +71,41 @@ library GroupServiceMemberRewards {
     function recipientRewardForSource(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 mintRound
     ) external view returns (uint256 rewardAmount, bool isMinted) {
-        rewardAmount = _paidShare(self, share).recipient;
+        rewardAmount = _mintedRecipientRewards(self, key, sourceActionId, groupId)[key.memberId];
         // forge-lint: disable-next-line(boolean-cst)
         if (rewardAmount != 0) return (rewardAmount, true);
-        if (share.memberId == share.groupId || !_isSettleableRound(self, share, mintRound)) return (0, isMinted);
+        if (key.memberId == groupId || !_isSettleableRound(self, key, mintRound)) return (0, isMinted);
 
-        GroupServiceStorage.MemberRewardKey memory key = _groupKey(share);
+        GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
         ServiceBudget memory service;
-        _loadServiceBudget(self, protocol, key, service);
-        GroupBudget memory group = _groupBudget(self, protocol, key, service);
-        rewardAmount = _recipientRewardAmount(self, protocol, service, group, share);
+        _loadServiceBudget(self, protocol, groupKey, service);
+        GroupBudget memory group = _groupBudget(self, protocol, groupKey, service);
+        rewardAmount = _recipientRewardAmount(self, protocol, service, group, key, sourceActionId, groupId);
     }
 
     function providerRewardForSource(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 mintRound
     ) external view returns (uint256 rewardAmount, bool isMinted) {
-        rewardAmount = _paidShare(self, share).provider;
+        rewardAmount = _mintedProviderRewards(self, key, sourceActionId, groupId)[key.memberId];
         // forge-lint: disable-next-line(boolean-cst)
         if (rewardAmount != 0) return (rewardAmount, true);
-        if (share.memberId == share.groupId || !_isSettleableRound(self, share, mintRound)) return (0, isMinted);
+        if (key.memberId == groupId || !_isSettleableRound(self, key, mintRound)) return (0, isMinted);
 
-        GroupServiceStorage.MemberRewardKey memory key = _groupKey(share);
+        GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
         ServiceBudget memory service;
-        _loadServiceBudget(self, protocol, key, service);
-        GroupBudget memory group = _groupBudget(self, protocol, key, service);
-        rewardAmount = _providerRewardAmount(protocol, service, group, share);
+        _loadServiceBudget(self, protocol, groupKey, service);
+        GroupBudget memory group = _groupBudget(self, protocol, groupKey, service);
+        rewardAmount = _providerRewardAmount(protocol, service, group, key, sourceActionId, groupId);
     }
 
     function recipientReward(
@@ -205,25 +209,29 @@ library GroupServiceMemberRewards {
     function mintRecipientRewardForSource(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 mintRound
     ) external returns (uint256 mintAmount) {
-        _checkCreatedRound(self, share.tokenAddress, share.round, share.serviceActionId);
-        _checkMintRound(share.round, mintRound);
+        _checkCreatedRound(self, key.tokenAddress, key.round, key.actionId);
+        _checkMintRound(key.round, mintRound);
         ServiceBudget memory service;
-        return _mintRequiredRecipientReward(self, protocol, share, service);
+        return _mintRequiredRecipientReward(self, protocol, key, sourceActionId, groupId, service);
     }
 
     function mintProviderRewardForSource(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 mintRound
     ) external returns (uint256 mintAmount) {
-        _checkCreatedRound(self, share.tokenAddress, share.round, share.serviceActionId);
-        _checkMintRound(share.round, mintRound);
+        _checkCreatedRound(self, key.tokenAddress, key.round, key.actionId);
+        _checkMintRound(key.round, mintRound);
         ServiceBudget memory service;
-        return _mintRequiredProviderReward(self, protocol, share, service);
+        return _mintRequiredProviderReward(self, protocol, key, sourceActionId, groupId, service);
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)
@@ -241,8 +249,9 @@ library GroupServiceMemberRewards {
         _checkMintRound(key.round, mintRound);
         ServiceBudget memory service;
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
-            mintAmounts[i] =
-                _mintRequiredRecipientReward(self, protocol, _share(key, sourceActionIds[i], groupIds[i]), service);
+            mintAmounts[i] = _mintRequiredRecipientReward(
+                self, protocol, key, sourceActionIds[i], groupIds[i], service
+            );
         }
     }
 
@@ -261,8 +270,9 @@ library GroupServiceMemberRewards {
         _checkMintRound(key.round, mintRound);
         ServiceBudget memory service;
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
-            mintAmounts[i] =
-                _mintRequiredProviderReward(self, protocol, _share(key, sourceActionIds[i], groupIds[i]), service);
+            mintAmounts[i] = _mintRequiredProviderReward(
+                self, protocol, key, sourceActionIds[i], groupIds[i], service
+            );
         }
     }
 
@@ -543,8 +553,9 @@ library GroupServiceMemberRewards {
     ) private view returns (uint256 distributed) {
         uint256 sourceReward = IGroupActionExecutor(protocol.groupActionExecutorAddress)
             .generatedActionRewardByGroupId(service.sourceTokenAddress, key.round, sourceActionId, key.memberId);
-        uint256 partnershipBudget =
-            _actionPartnershipBudget(protocol, service, group, _share(key, sourceActionId, key.memberId), sourceReward);
+        uint256 partnershipBudget = _actionPartnershipBudget(
+            protocol, service, group, key.round, sourceActionId, key.memberId, sourceReward
+        );
         if (partnershipBudget == 0) return 0;
 
         uint256[] memory ratios = GroupServiceRecipients.recipientRatios(
@@ -649,22 +660,24 @@ library GroupServiceMemberRewards {
 
     function _recipientSourceActionIds(
         GroupServiceStorage.Layout storage self,
-        GroupServiceStorage.Share memory share,
-        address sourceTokenAddress
+        GroupServiceStorage.MemberRewardKey memory key,
+        address sourceTokenAddress,
+        uint256 groupId
     ) private view returns (uint256[] memory actionIds) {
         (actionIds,) = GroupServiceRecipients.actionIdsByGroupIdByRecipientId(
-            self, sourceTokenAddress, share.round, share.groupId, share.memberId, 0, type(uint256).max, false
+            self, sourceTokenAddress, key.round, groupId, key.memberId, 0, type(uint256).max, false
         );
     }
 
     function _providerSourceActionIds(
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
-        address sourceTokenAddress
+        GroupServiceStorage.MemberRewardKey memory key,
+        address sourceTokenAddress,
+        uint256 groupId
     ) private view returns (uint256[] memory actionIds) {
         (actionIds,) = IGroupActionExecutor(protocol.groupActionExecutorAddress)
             .actionIdsWithProviderRewardByGroupIdByProviderId(
-                sourceTokenAddress, share.round, share.groupId, share.memberId, 0, type(uint256).max, false
+                sourceTokenAddress, key.round, groupId, key.memberId, 0, type(uint256).max, false
             );
     }
 
@@ -677,7 +690,7 @@ library GroupServiceMemberRewards {
         if (service.sourceTokenAddress == address(0)) return summary;
         uint256[] memory groupIds = _recipientGroupIds(self, key, service.sourceTokenAddress);
         for (uint256 i = 0; i < groupIds.length; ++i) {
-            _addRecipientGroupSummary(self, protocol, _share(key, 0, groupIds[i]), service, summary);
+            _addRecipientGroupSummary(self, protocol, key, groupIds[i], service, summary);
         }
         summary.status = _status(summary.pendingAmount != 0, summary.mintedAmount != 0);
     }
@@ -685,19 +698,20 @@ library GroupServiceMemberRewards {
     function _addRecipientGroupSummary(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 groupId,
         ServiceBudget memory service,
         MemberRewardSummary memory summary
     ) private view {
-        GroupBudget memory group = _groupBudget(self, protocol, _groupKey(share), service);
-        uint256[] memory sourceActionIds = _recipientSourceActionIds(self, share, service.sourceTokenAddress);
+        GroupBudget memory group = _groupBudget(self, protocol, _groupKey(key, groupId), service);
+        uint256[] memory sourceActionIds = _recipientSourceActionIds(self, key, service.sourceTokenAddress, groupId);
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
-            share.sourceActionId = sourceActionIds[i];
-            uint256 mintedAmount = _paidShare(self, share).recipient;
+            uint256 sourceActionId = sourceActionIds[i];
+            uint256 mintedAmount = _mintedRecipientRewards(self, key, sourceActionId, groupId)[key.memberId];
             if (mintedAmount != 0) {
                 summary.mintedAmount += mintedAmount;
             } else {
-                summary.pendingAmount += _recipientRewardAmount(self, protocol, service, group, share);
+                summary.pendingAmount += _recipientRewardAmount(self, protocol, service, group, key, sourceActionId, groupId);
             }
         }
     }
@@ -711,7 +725,7 @@ library GroupServiceMemberRewards {
         if (service.sourceTokenAddress == address(0)) return summary;
         uint256[] memory groupIds = _providerGroupIds(protocol, key, service.sourceTokenAddress);
         for (uint256 i = 0; i < groupIds.length; ++i) {
-            _addProviderGroupSummary(self, protocol, _share(key, 0, groupIds[i]), service, summary);
+            _addProviderGroupSummary(self, protocol, key, groupIds[i], service, summary);
         }
         summary.status = _status(summary.pendingAmount != 0, summary.mintedAmount != 0);
     }
@@ -719,19 +733,20 @@ library GroupServiceMemberRewards {
     function _addProviderGroupSummary(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 groupId,
         ServiceBudget memory service,
         MemberRewardSummary memory summary
     ) private view {
-        GroupBudget memory group = _groupBudget(self, protocol, _groupKey(share), service);
-        uint256[] memory sourceActionIds = _providerSourceActionIds(protocol, share, service.sourceTokenAddress);
+        GroupBudget memory group = _groupBudget(self, protocol, _groupKey(key, groupId), service);
+        uint256[] memory sourceActionIds = _providerSourceActionIds(protocol, key, service.sourceTokenAddress, groupId);
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
-            share.sourceActionId = sourceActionIds[i];
-            uint256 mintedAmount = _paidShare(self, share).provider;
+            uint256 sourceActionId = sourceActionIds[i];
+            uint256 mintedAmount = _mintedProviderRewards(self, key, sourceActionId, groupId)[key.memberId];
             if (mintedAmount != 0) {
                 summary.mintedAmount += mintedAmount;
             } else {
-                summary.pendingAmount += _providerRewardAmount(protocol, service, group, share);
+                summary.pendingAmount += _providerRewardAmount(protocol, service, group, key, sourceActionId, groupId);
             }
         }
     }
@@ -744,35 +759,39 @@ library GroupServiceMemberRewards {
     ) private returns (ClaimResult memory result) {
         uint256[] memory groupIds = _recipientGroupIds(self, key, service.sourceTokenAddress);
         for (uint256 i = 0; i < groupIds.length; ++i) {
-            _mintRecipientRewardsInGroup(self, protocol, _share(key, 0, groupIds[i]), service, result);
+            _mintRecipientRewardsInGroup(self, protocol, key, groupIds[i], service, result);
         }
     }
 
     function _mintRecipientRewardsInGroup(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 groupId,
         ServiceBudget memory service,
         ClaimResult memory result
     ) private {
-        uint256[] memory sourceActionIds = _recipientSourceActionIds(self, share, service.sourceTokenAddress);
+        uint256[] memory sourceActionIds = _recipientSourceActionIds(self, key, service.sourceTokenAddress, groupId);
         GroupBudget memory group;
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
-            share.sourceActionId = sourceActionIds[i];
-            GroupServiceStorage.PaidShare storage paid = _paidShare(self, share);
-            if (paid.recipient != 0) {
+            uint256 sourceActionId = sourceActionIds[i];
+            if (_mintedRecipientRewards(self, key, sourceActionId, groupId)[key.memberId] != 0) {
                 result.previouslyMinted = true;
                 continue;
             }
 
-            uint256 sourceReward = _recipientSourceReward(protocol, service.sourceTokenAddress, share);
+            uint256 sourceReward = _recipientSourceReward(protocol, service.sourceTokenAddress, key, sourceActionId, groupId);
             if (sourceReward == 0) continue;
             result.hasEligibleSource = true;
-            if (group.totalSourceReward == 0) group = _groupBudgetForMint(self, protocol, _groupKey(share), service);
+            if (group.totalSourceReward == 0) group = _groupBudgetForMint(self, protocol, _groupKey(key, groupId), service);
 
-            uint256 amount = _recipientRewardFromSource(self, protocol, service, group, share, sourceReward);
+            uint256 amount = _recipientRewardFromSource(
+                self, protocol, service, group, key, sourceActionId, groupId, sourceReward
+            );
             if (amount != 0) {
-                _payRecipientReward(self, service.sourceTokenAddress, share, group.totalSourceReward, paid, amount);
+                _payRecipientReward(
+                    self, service.sourceTokenAddress, key, sourceActionId, groupId, group.totalSourceReward, amount
+                );
                 result.mintAmount += amount;
             }
         }
@@ -787,40 +806,42 @@ library GroupServiceMemberRewards {
         if (service.providerIncentiveRatio == 0) return result;
         uint256[] memory groupIds = _providerGroupIds(protocol, key, service.sourceTokenAddress);
         for (uint256 i = 0; i < groupIds.length; ++i) {
-            _mintProviderRewardsInGroup(self, protocol, _share(key, 0, groupIds[i]), service, result);
+            _mintProviderRewardsInGroup(self, protocol, key, groupIds[i], service, result);
         }
     }
 
     function _mintProviderRewardsInGroup(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 groupId,
         ServiceBudget memory service,
         ClaimResult memory result
     ) private {
-        uint256[] memory sourceActionIds = _providerSourceActionIds(protocol, share, service.sourceTokenAddress);
+        uint256[] memory sourceActionIds = _providerSourceActionIds(protocol, key, service.sourceTokenAddress, groupId);
         GroupBudget memory group;
         uint256 providerBudget = 0;
         for (uint256 i = 0; i < sourceActionIds.length; ++i) {
-            share.sourceActionId = sourceActionIds[i];
-            GroupServiceStorage.PaidShare storage paid = _paidShare(self, share);
-            if (paid.provider != 0) {
+            uint256 sourceActionId = sourceActionIds[i];
+            if (_mintedProviderRewards(self, key, sourceActionId, groupId)[key.memberId] != 0) {
                 result.previouslyMinted = true;
                 continue;
             }
 
-            uint256 sourceReward = _providerSourceReward(protocol, service.sourceTokenAddress, share);
+            uint256 sourceReward = _providerSourceReward(protocol, service.sourceTokenAddress, key, sourceActionId, groupId);
             if (sourceReward == 0) continue;
             result.hasEligibleSource = true;
             if (group.totalSourceReward == 0) {
-                group = _groupBudgetForMint(self, protocol, _groupKey(share), service);
+                group = _groupBudgetForMint(self, protocol, _groupKey(key, groupId), service);
                 providerBudget = _providerBudget(service, group);
             }
 
             if (providerBudget == 0) continue;
             uint256 amount = Math.mulDiv(providerBudget, sourceReward, group.totalSourceReward);
             if (amount != 0) {
-                _payProviderReward(self, service.sourceTokenAddress, share, group.totalSourceReward, paid, amount);
+                _payProviderReward(
+                    self, service.sourceTokenAddress, key, sourceActionId, groupId, group.totalSourceReward, amount
+                );
                 result.mintAmount += amount;
             }
         }
@@ -830,62 +851,64 @@ library GroupServiceMemberRewards {
     function _mintRequiredRecipientReward(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         ServiceBudget memory service
     ) private returns (uint256 amount) {
-        GroupServiceStorage.PaidShare storage paid = _paidShare(self, share);
-        if (paid.recipient != 0) {
+        if (_mintedRecipientRewards(self, key, sourceActionId, groupId)[key.memberId] != 0) {
             revert IGroupServiceExecutorErrors.RecipientRewardAlreadyMinted(
-                share.tokenAddress,
-                share.serviceActionId,
-                share.round,
-                share.sourceActionId,
-                share.groupId,
-                share.memberId
+                key.tokenAddress,
+                key.actionId,
+                key.round,
+                sourceActionId,
+                groupId,
+                key.memberId
             );
         }
 
-        GroupServiceStorage.MemberRewardKey memory key = _groupKey(share);
-        _loadServiceBudget(self, protocol, key, service);
-        _checkServiceBudget(service, key);
-        GroupBudget memory group = _groupBudgetForMint(self, protocol, key, service);
-        _checkSourceReward(group.totalSourceReward, key);
-        amount = _recipientRewardAmount(self, protocol, service, group, share);
+        GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
+        _loadServiceBudget(self, protocol, groupKey, service);
+        _checkServiceBudget(service, groupKey);
+        GroupBudget memory group = _groupBudgetForMint(self, protocol, groupKey, service);
+        _checkSourceReward(group.totalSourceReward, groupKey);
+        amount = _recipientRewardAmount(self, protocol, service, group, key, sourceActionId, groupId);
         if (amount == 0) {
-            revert IGroupServiceExecutorErrors.ZeroRecipientReward(share.sourceActionId, share.groupId, share.memberId);
+            revert IGroupServiceExecutorErrors.ZeroRecipientReward(sourceActionId, groupId, key.memberId);
         }
-        _payRecipientReward(self, service.sourceTokenAddress, share, group.totalSourceReward, paid, amount);
+        _payRecipientReward(self, service.sourceTokenAddress, key, sourceActionId, groupId, group.totalSourceReward, amount);
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)
     function _mintRequiredProviderReward(
         GroupServiceStorage.Layout storage self,
         GroupServiceStorage.Protocol memory protocol,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         ServiceBudget memory service
     ) private returns (uint256 amount) {
-        GroupServiceStorage.PaidShare storage paid = _paidShare(self, share);
-        if (paid.provider != 0) {
+        if (_mintedProviderRewards(self, key, sourceActionId, groupId)[key.memberId] != 0) {
             revert IGroupServiceExecutorErrors.ProviderRewardAlreadyMinted(
-                share.tokenAddress,
-                share.serviceActionId,
-                share.round,
-                share.sourceActionId,
-                share.groupId,
-                share.memberId
+                key.tokenAddress,
+                key.actionId,
+                key.round,
+                sourceActionId,
+                groupId,
+                key.memberId
             );
         }
 
-        GroupServiceStorage.MemberRewardKey memory key = _groupKey(share);
-        _loadServiceBudget(self, protocol, key, service);
-        _checkServiceBudget(service, key);
-        GroupBudget memory group = _groupBudgetForMint(self, protocol, key, service);
-        _checkSourceReward(group.totalSourceReward, key);
-        amount = _providerRewardAmount(protocol, service, group, share);
+        GroupServiceStorage.MemberRewardKey memory groupKey = _groupKey(key, groupId);
+        _loadServiceBudget(self, protocol, groupKey, service);
+        _checkServiceBudget(service, groupKey);
+        GroupBudget memory group = _groupBudgetForMint(self, protocol, groupKey, service);
+        _checkSourceReward(group.totalSourceReward, groupKey);
+        amount = _providerRewardAmount(protocol, service, group, key, sourceActionId, groupId);
         if (amount == 0) {
-            revert IGroupServiceExecutorErrors.ZeroProviderReward(share.sourceActionId, share.groupId, share.memberId);
+            revert IGroupServiceExecutorErrors.ZeroProviderReward(sourceActionId, groupId, key.memberId);
         }
-        _payProviderReward(self, service.sourceTokenAddress, share, group.totalSourceReward, paid, amount);
+        _payProviderReward(self, service.sourceTokenAddress, key, sourceActionId, groupId, group.totalSourceReward, amount);
     }
 
     // forge-lint: disable-next-item(require-revert-in-loop)
@@ -903,22 +926,23 @@ library GroupServiceMemberRewards {
     function _payRecipientReward(
         GroupServiceStorage.Layout storage self,
         address sourceTokenAddress,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 totalSourceReward,
-        GroupServiceStorage.PaidShare storage paid,
         uint256 amount
     ) private {
-        paid.recipient = amount;
-        _rememberSourceReward(self, sourceTokenAddress, share.round, share.groupId, totalSourceReward);
-        _transferReward(share.tokenAddress, amount);
+        _mintedRecipientRewards(self, key, sourceActionId, groupId)[key.memberId] = amount;
+        _rememberSourceReward(self, sourceTokenAddress, key.round, groupId, totalSourceReward);
+        _transferReward(key.tokenAddress, amount);
         emit IGroupServiceExecutorEvents.RecipientPaid({
-            serviceTokenAddress: share.tokenAddress,
-            serviceActionId: share.serviceActionId,
-            round: share.round,
-            groupId: share.groupId,
+            serviceTokenAddress: key.tokenAddress,
+            serviceActionId: key.actionId,
+            round: key.round,
+            groupId: groupId,
             sourceTokenAddress: sourceTokenAddress,
-            sourceActionId: share.sourceActionId,
-            recipientId: share.memberId,
+            sourceActionId: sourceActionId,
+            recipientId: key.memberId,
             amount: amount
         });
     }
@@ -926,22 +950,23 @@ library GroupServiceMemberRewards {
     function _payProviderReward(
         GroupServiceStorage.Layout storage self,
         address sourceTokenAddress,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 totalSourceReward,
-        GroupServiceStorage.PaidShare storage paid,
         uint256 amount
     ) private {
-        paid.provider = amount;
-        _rememberSourceReward(self, sourceTokenAddress, share.round, share.groupId, totalSourceReward);
-        _transferReward(share.tokenAddress, amount);
+        _mintedProviderRewards(self, key, sourceActionId, groupId)[key.memberId] = amount;
+        _rememberSourceReward(self, sourceTokenAddress, key.round, groupId, totalSourceReward);
+        _transferReward(key.tokenAddress, amount);
         emit IGroupServiceExecutorEvents.ProviderPaid({
-            serviceTokenAddress: share.tokenAddress,
-            serviceActionId: share.serviceActionId,
-            round: share.round,
-            groupId: share.groupId,
+            serviceTokenAddress: key.tokenAddress,
+            serviceActionId: key.actionId,
+            round: key.round,
+            groupId: groupId,
             sourceTokenAddress: sourceTokenAddress,
-            sourceActionId: share.sourceActionId,
-            providerId: share.memberId,
+            sourceActionId: sourceActionId,
+            providerId: key.memberId,
             amount: amount
         });
     }
@@ -971,41 +996,38 @@ library GroupServiceMemberRewards {
         if (round > mintRound) revert IActionExecutorErrors.RoundAfterMintWindow(round, mintRound);
     }
 
-    function _paidShare(
+    function _mintedRecipientRewards(
         GroupServiceStorage.Layout storage self,
-        GroupServiceStorage.Share memory share
-    ) private view returns (GroupServiceStorage.PaidShare storage) {
-        return self.paidShares[
-            share.tokenAddress
-        ][share.serviceActionId][share.round][share.groupId][share.sourceActionId][share.memberId];
-    }
-
-    function _share(
         GroupServiceStorage.MemberRewardKey memory key,
         uint256 sourceActionId,
         uint256 groupId
-    ) private pure returns (GroupServiceStorage.Share memory) {
-        return GroupServiceStorage.Share(
-            key.tokenAddress, key.round, key.actionId, sourceActionId, groupId, key.memberId
-        );
+    ) private view returns (mapping(uint256 => uint256) storage) {
+        return self.mintedRecipientRewardByMemberId[key.tokenAddress][key.actionId][key.round][groupId][sourceActionId];
     }
 
-    function _groupKey(GroupServiceStorage.Share memory share)
-        private
-        pure
-        returns (GroupServiceStorage.MemberRewardKey memory)
-    {
-        return
-            GroupServiceStorage.MemberRewardKey(share.tokenAddress, share.round, share.serviceActionId, share.groupId);
+    function _mintedProviderRewards(
+        GroupServiceStorage.Layout storage self,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId
+    ) private view returns (mapping(uint256 => uint256) storage) {
+        return self.mintedProviderRewardByMemberId[key.tokenAddress][key.actionId][key.round][groupId][sourceActionId];
+    }
+
+    function _groupKey(
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 groupId
+    ) private pure returns (GroupServiceStorage.MemberRewardKey memory) {
+        return GroupServiceStorage.MemberRewardKey(key.tokenAddress, key.round, key.actionId, groupId);
     }
 
     function _isSettleableRound(
         GroupServiceStorage.Layout storage self,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
         uint256 mintRound
     ) private view returns (bool) {
-        uint256 createdRound = self.createdRoundByActionId[share.tokenAddress][share.serviceActionId];
-        return createdRound != 0 && share.round >= createdRound && share.round <= mintRound;
+        uint256 createdRound = self.createdRoundByActionId[key.tokenAddress][key.actionId];
+        return createdRound != 0 && key.round >= createdRound && key.round <= mintRound;
     }
 
     function _recipientRewardAmount(
@@ -1013,44 +1035,52 @@ library GroupServiceMemberRewards {
         GroupServiceStorage.Protocol memory protocol,
         ServiceBudget memory service,
         GroupBudget memory group,
-        GroupServiceStorage.Share memory share
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId
     ) private view returns (uint256) {
         if (group.ownerBudget == 0) return 0;
-        uint256 sourceReward = _recipientSourceReward(protocol, service.sourceTokenAddress, share);
-        return _recipientRewardFromSource(self, protocol, service, group, share, sourceReward);
+        uint256 sourceReward = _recipientSourceReward(protocol, service.sourceTokenAddress, key, sourceActionId, groupId);
+        return _recipientRewardFromSource(self, protocol, service, group, key, sourceActionId, groupId, sourceReward);
     }
 
     function _providerRewardAmount(
         GroupServiceStorage.Protocol memory protocol,
         ServiceBudget memory service,
         GroupBudget memory group,
-        GroupServiceStorage.Share memory share
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId
     ) private view returns (uint256) {
         uint256 providerBudget = _providerBudget(service, group);
         if (providerBudget == 0) return 0;
-        uint256 sourceReward = _providerSourceReward(protocol, service.sourceTokenAddress, share);
+        uint256 sourceReward = _providerSourceReward(protocol, service.sourceTokenAddress, key, sourceActionId, groupId);
         return Math.mulDiv(providerBudget, sourceReward, group.totalSourceReward);
     }
 
     function _recipientSourceReward(
         GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
-        GroupServiceStorage.Share memory share
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId
     ) private view returns (uint256) {
-        if (share.memberId == 0 || share.memberId == share.groupId) return 0;
+        if (key.memberId == 0 || key.memberId == groupId) return 0;
         return IGroupActionExecutor(protocol.groupActionExecutorAddress)
-            .generatedActionRewardByGroupId(sourceTokenAddress, share.round, share.sourceActionId, share.groupId);
+            .generatedActionRewardByGroupId(sourceTokenAddress, key.round, sourceActionId, groupId);
     }
 
     function _providerSourceReward(
         GroupServiceStorage.Protocol memory protocol,
         address sourceTokenAddress,
-        GroupServiceStorage.Share memory share
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId
     ) private view returns (uint256) {
-        if (share.memberId == 0 || share.memberId == share.groupId) return 0;
+        if (key.memberId == 0 || key.memberId == groupId) return 0;
         return IGroupActionExecutor(protocol.groupActionExecutorAddress)
             .generatedActionRewardByGroupIdByProviderId(
-                sourceTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
+                sourceTokenAddress, key.round, sourceActionId, groupId, key.memberId
             );
     }
 
@@ -1059,13 +1089,17 @@ library GroupServiceMemberRewards {
         GroupServiceStorage.Protocol memory protocol,
         ServiceBudget memory service,
         GroupBudget memory group,
-        GroupServiceStorage.Share memory share,
+        GroupServiceStorage.MemberRewardKey memory key,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 sourceReward
     ) private view returns (uint256) {
-        uint256 partnershipBudget = _actionPartnershipBudget(protocol, service, group, share, sourceReward);
+        uint256 partnershipBudget = _actionPartnershipBudget(
+            protocol, service, group, key.round, sourceActionId, groupId, sourceReward
+        );
         if (partnershipBudget == 0) return 0;
         uint256 ratio = GroupServiceRecipients.recipientRatio(
-            self, service.sourceTokenAddress, share.round, share.sourceActionId, share.groupId, share.memberId
+            self, service.sourceTokenAddress, key.round, sourceActionId, groupId, key.memberId
         );
         return _recipientRewardAmountFromBudget(partnershipBudget, ratio);
     }
@@ -1276,7 +1310,9 @@ library GroupServiceMemberRewards {
         GroupServiceStorage.Protocol memory protocol,
         ServiceBudget memory service,
         GroupBudget memory group,
-        GroupServiceStorage.Share memory share,
+        uint256 round,
+        uint256 sourceActionId,
+        uint256 groupId,
         uint256 sourceReward
     ) private view returns (uint256 partnershipBudget) {
         if (sourceReward == 0 || group.ownerBudget == 0) return 0;
@@ -1286,7 +1322,7 @@ library GroupServiceMemberRewards {
 
         uint256 ownerProviderReward = IGroupActionExecutor(protocol.groupActionExecutorAddress)
             .generatedActionRewardByGroupIdByProviderId(
-                service.sourceTokenAddress, share.round, share.sourceActionId, share.groupId, share.groupId
+                service.sourceTokenAddress, round, sourceActionId, groupId, groupId
             );
         partnershipBudget += Math.mulDiv(providerBudget, ownerProviderReward, group.totalSourceReward);
     }

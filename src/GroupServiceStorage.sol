@@ -26,20 +26,6 @@ library GroupServiceStorage {
         uint256 memberId;
     }
 
-    struct Share {
-        address tokenAddress;
-        uint256 round;
-        uint256 serviceActionId;
-        uint256 sourceActionId;
-        uint256 groupId;
-        uint256 memberId;
-    }
-
-    struct PaidShare {
-        uint256 recipient;
-        uint256 provider;
-    }
-
     struct Layout {
         // serviceTokenAddress => serviceActionId => action token address
         mapping(address => mapping(uint256 => address)) actionTokenAddressByActionId;
@@ -73,9 +59,9 @@ library GroupServiceStorage {
         mapping(
             address
                 => mapping(
-                uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => PaidShare))))
+                uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))
             )
-        ) paidShares;
+        ) mintedRecipientRewardByMemberId;
 
         // sourceTokenAddress => recipientId => groups with configured rewards by round
         mapping(address => mapping(uint256 => RoundHistoryUint256Set.Storage)) recipientGroupIdsByRecipientId;
@@ -85,6 +71,14 @@ library GroupServiceStorage {
 
         // sourceTokenAddress => round => groupId => positive source reward total (zero if uncached)
         mapping(address => mapping(uint256 => mapping(uint256 => uint256))) totalSourceRewardByGroupId;
+
+        // serviceTokenAddress => serviceActionId => round => groupId => sourceActionId => memberId
+        mapping(
+            address
+                => mapping(
+                uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256))))
+            )
+        ) mintedProviderRewardByMemberId;
     }
 
     function sourceTokenAddressForRound(
