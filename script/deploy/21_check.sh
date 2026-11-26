@@ -55,7 +55,7 @@ GROUP_ACTION_LIBRARY_SPECS=(
     "GroupActionVerify src/GroupActionVerify.sol GROUP_ACTION_VERIFY_LIBRARY_ADDRESS"
 )
 GROUP_SERVICE_LIBRARY_SPECS=(
-    "GroupRecipients src/GroupRecipients.sol GROUP_RECIPIENTS_LIBRARY_ADDRESS"
+    "GroupRecipients src/GroupServiceRecipients.sol GROUP_RECIPIENTS_LIBRARY_ADDRESS"
 )
 
 GROUP_ACTION_LIBRARY_FIELDS=""

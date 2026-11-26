@@ -2,7 +2,7 @@
 pragma solidity =0.8.37;
 
 import {GroupServiceStorage} from "./GroupServiceStorage.sol";
-import {GroupRecipients} from "./GroupRecipients.sol";
+import {GroupRecipients} from "./GroupServiceRecipients.sol";
 import {GroupServiceRoundAxis} from "./GroupServiceRoundAxis.sol";
 import {GroupActionVerify} from "./GroupActionVerify.sol";
 import {ExecutorBase} from "./ExecutorBase.sol";

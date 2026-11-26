@@ -346,7 +346,7 @@ def main():
              "field": "GROUP_ACTION_MANAGER_LIBRARY_ADDRESS", "executor": "GROUP_ACTION_EXECUTOR"},
             {"name": "GroupActionVerify", "path": "src/GroupActionVerify.sol",
              "field": "GROUP_ACTION_VERIFY_LIBRARY_ADDRESS", "executor": "GROUP_ACTION_EXECUTOR"},
-            {"name": "GroupRecipients", "path": "src/GroupRecipients.sol",
+            {"name": "GroupRecipients", "path": "src/GroupServiceRecipients.sol",
              "field": "GROUP_RECIPIENTS_LIBRARY_ADDRESS", "executor": "GROUP_SERVICE_EXECUTOR"},
         ]
         env.update({lib["field"]: f"0x{index + 20:040x}" for index, lib in enumerate(libraries)})
