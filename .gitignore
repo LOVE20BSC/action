@@ -8,3 +8,7 @@ lcov.info
 # 敏感部署配置
 .account
 /_site/
+
+# Python bytecode cache (generated when running script/*.py and test scripts)
+__pycache__/
+*.pyc
