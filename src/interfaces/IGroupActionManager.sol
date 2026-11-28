@@ -66,7 +66,7 @@ interface IGroupActionManagerErrors {
         uint256 required,
         uint256 actual
     );
-    error NoGovVotes(address tokenAddress);
+    error ZeroTotalGovPower(address tokenAddress);
     error TooManyVerificationEntries(
         uint256 count,
         uint256 maxCount

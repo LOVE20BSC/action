@@ -166,18 +166,18 @@ contract GroupActionManagerTest is GroupActionExecutorTestBase {
         _atPhase(3);
         memberNFT.setOwner(GROUP_8, GROUP_OWNER);
 
-        stake.setTotalGovVotes(address(token), 0);
+        stake.setTotalGovPower(address(token), 0);
         vm.prank(GROUP_OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.NoGovVotes.selector, address(token)));
+        vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.ZeroTotalGovPower.selector, address(token)));
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
 
-        stake.setTotalGovVotes(address(token), 1000e18);
-        stake.setGovVotes(address(token), GROUP_8, 50e18);
+        stake.setTotalGovPower(address(token), 1000e18);
+        stake.setGovPower(address(token), GROUP_8, 50e18);
         vm.prank(GROUP_OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGroupActionManagerErrors.InsufficientActivationMinGovRatio.selector, GROUP_8, 1e17, 5e16));
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
 
-        stake.setGovVotes(address(token), GROUP_8, 100e18);
+        stake.setGovPower(address(token), GROUP_8, 100e18);
         vm.prank(GROUP_OWNER);
         executor.activateGroup(address(token), ACTION_2, GROUP_8, _defaultConfig());
         require(executor.isGroupActive(address(token), ACTION_2, GROUP_8), "activated at the ratio boundary");

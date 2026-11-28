@@ -131,7 +131,7 @@ interface IGroupActionVerifyErrors {
         uint256 count,
         uint256 maxCount
     );
-    error ZeroVerifyVotes(
+    error ZeroVerifierGovPower(
         address tokenAddress,
         uint256 verifierId
     );

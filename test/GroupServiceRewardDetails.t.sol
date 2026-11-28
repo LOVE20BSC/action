@@ -104,8 +104,8 @@ contract GroupServiceRewardDetailsTest is GroupServiceTestBase {
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
         _armServiceReward(1000);
         actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, 800, false);
-        stake.setTotalGovVotes(address(token), SERVICE_ROUND, 100);
-        stake.setGovVotes(address(token), SERVICE_ROUND, GROUP_ID, 20);
+        stake.setTotalGovPower(address(token), SERVICE_ROUND, 100);
+        stake.setGovPower(address(token), SERVICE_ROUND, GROUP_ID, 20);
         _atPhase(VERIFY_PHASE);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
         _atPhase(MINT_PHASE);

@@ -1273,12 +1273,12 @@ library GroupServiceMemberRewards {
 
         uint256 cap = 0;
         uint256 verifyPhase = key.round + 2;
-        uint256 totalGovVotes = IStake(stakeAddress).totalGovVotes(service.sourceTokenAddress, verifyPhase);
-        if (totalGovVotes != 0) {
+        uint256 totalGovPower = IStake(stakeAddress).totalGovPower(service.sourceTokenAddress, verifyPhase);
+        if (totalGovPower != 0) {
             uint256 govRatio = Math.mulDiv(
-                IStake(stakeAddress).govVotes(service.sourceTokenAddress, verifyPhase, key.memberId),
+                IStake(stakeAddress).govPower(service.sourceTokenAddress, verifyPhase, key.memberId),
                 GroupServiceStorage.PRECISION,
-                totalGovVotes
+                totalGovPower
             );
             cap = Math.mulDiv(govRatio, service.govRatioMultiplier, GroupServiceStorage.PRECISION);
         }

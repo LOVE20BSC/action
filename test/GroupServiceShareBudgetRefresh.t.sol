@@ -94,9 +94,9 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
             address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_OWNER_B_ID, 100, MEMBER1_ID, 100
         );
         groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID_B, GROUP_ID, 100, MEMBER1_ID, 100);
-        stake.setTotalGovVotes(address(token), VERIFY_PHASE, 100);
-        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_ID, 10);
-        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_OWNER_B_ID, 30);
+        stake.setTotalGovPower(address(token), VERIFY_PHASE, 100);
+        stake.setGovPower(address(token), VERIFY_PHASE, GROUP_ID, 10);
+        stake.setGovPower(address(token), VERIFY_PHASE, GROUP_OWNER_B_ID, 30);
         _armServiceReward(600);
         _atPhase(MINT_PHASE);
 
@@ -191,15 +191,15 @@ contract GroupServiceShareBudgetRefreshTest is GroupServiceTestBase {
         _createServiceAction(SERVICE_ACTION_ID, PRECISION, 0.5e18, 0.4e18);
         _setGroupLedger(GROUP_ACTION_ID, _ids(GROUP_ID), _amounts(100), VERIFIER_ID);
         groupAction.setMarketScores(address(token), SERVICE_ROUND, GROUP_ACTION_ID, GROUP_ID, 50, MEMBER1_ID, 50);
-        stake.setTotalGovVotes(address(token), VERIFY_PHASE, 100);
-        stake.setGovVotes(address(token), VERIFY_PHASE, GROUP_ID, 25);
+        stake.setTotalGovPower(address(token), VERIFY_PHASE, 100);
+        stake.setGovPower(address(token), VERIFY_PHASE, GROUP_ID, 25);
         _armServiceReward(400);
         actionTarget.setActionReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, 1, false);
         _atPhase(VERIFY_PHASE);
         _setRecipients(GROUP_ID, GROUP_ACTION_ID, _ids(MEMBER1_ID), _ratios(0.5e18));
         _atPhase(MINT_PHASE);
 
-        vm.expectCall(address(stake), abi.encodeCall(IStake.totalGovVotes, (address(token), VERIFY_PHASE)), 1);
+        vm.expectCall(address(stake), abi.encodeCall(IStake.totalGovPower, (address(token), VERIFY_PHASE)), 1);
         vm.prank(MEMBER1);
         uint256 paid = executor.mintMemberReward(address(token), SERVICE_ROUND, SERVICE_ACTION_ID, MEMBER1_ID);
         require(paid == 60, "combined claim pays 40 recipient and 20 Provider from actual budget");

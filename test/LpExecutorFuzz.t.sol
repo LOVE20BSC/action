@@ -64,25 +64,25 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
     function testFuzzRewardSplitMatchesReference(
         uint96 rewardSeed,
         uint96 validSeed,
-        uint96 totalGovVotesSeed,
+        uint96 totalGovPowerSeed,
         uint96 multiplierSeed
     ) external {
         uint256 reward = uint256(rewardSeed) % 1e27 + 1;
-        uint256 validVotes = uint256(validSeed) % 1e24;
-        uint256 totalGovVotes = uint256(totalGovVotesSeed) % 1e24;
+        uint256 memberGovPower = uint256(validSeed) % 1e24;
+        uint256 totalGovPower = uint256(totalGovPowerSeed) % 1e24;
         uint256 multiplier = uint256(multiplierSeed) % 3e18;
 
         _createActionWithConfig(SECOND_ACTION_ID, multiplier, 0);
         _atPhaseBlock(3, 3000);
         _join(SECOND_ACTION_ID, 1, 100e18);
-        stake.setGovVotes(address(token), 2, 1, validVotes);
-        stake.setTotalGovVotes(address(token), 2, totalGovVotes);
+        stake.setGovPower(address(token), 2, 1, memberGovPower);
+        stake.setTotalGovPower(address(token), 2, totalGovPower);
         _atPhase(4);
         _setActionReward(2, SECOND_ACTION_ID, reward, true);
         _fundExecutor(reward);
 
         (uint256 expectedMint, uint256 expectedBurn) =
-            _referenceReward(reward, validVotes, totalGovVotes, multiplier);
+            _referenceReward(reward, memberGovPower, totalGovPower, multiplier);
         _assertPendingSplit(expectedMint, expectedBurn);
 
         (uint256 mintAmount, uint256 burnAmount) = _mintMemberReward(2, SECOND_ACTION_ID, 1);
@@ -112,17 +112,17 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         }
     }
 
-    function testFuzzGovRatioFloor(uint96 validSeed, uint96 totalGovVotesSeed) external {
-        uint256 totalGovVotes = uint256(totalGovVotesSeed) % 1e24 + 1;
-        uint256 validVotes = uint256(validSeed) % 1e24;
-        stake.setTotalGovVotes(address(token), 2, totalGovVotes);
-        stake.setGovVotes(address(token), 2, 1, validVotes);
+    function testFuzzGovRatioFloor(uint96 validSeed, uint96 totalGovPowerSeed) external {
+        uint256 totalGovPower = uint256(totalGovPowerSeed) % 1e24 + 1;
+        uint256 memberGovPower = uint256(validSeed) % 1e24;
+        stake.setTotalGovPower(address(token), 2, totalGovPower);
+        stake.setGovPower(address(token), 2, 1, memberGovPower);
 
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
-        require(minted == false && ratio == validVotes * 1e18 / totalGovVotes, "floor division");
+        require(minted == false && ratio == memberGovPower * 1e18 / totalGovPower, "floor division");
     }
 
-    function test_ZeroBoundaries(uint256 effectiveAmount, uint256 totalVotes, uint256 multiplier) external {
+    function test_ZeroBoundaries(uint256 effectiveAmount, uint256 totalGovPowerInput, uint256 multiplier) external {
         _atPhase(4);
         _setActionReward(2, ACTION_ID, PROPOSAL_REWARD, true);
         (uint256 idleMint, uint256 alreadyPaid, MemberRewardStatus idleStatus) =
@@ -130,16 +130,16 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         require(idleStatus == MemberRewardStatus.Unavailable && idleMint == 0 && alreadyPaid == 0, "zero total effective amount");
 
         uint256 memberAmount = effectiveAmount % 1e24 + 1e18;
-        uint256 totalGovVotes = totalVotes % 1e24;
+        uint256 totalGovPower = totalGovPowerInput % 1e24;
         uint256 govRatioMultiplier = multiplier % 3e18;
-        uint256 validVotes = totalGovVotes == 0 ? 0 : totalGovVotes / 2;
+        uint256 memberGovPower = totalGovPower == 0 ? 0 : totalGovPower / 2;
 
         _createActionWithConfig(SECOND_ACTION_ID, govRatioMultiplier, 0);
         _atPhaseBlock(3, 3000);
         _join(SECOND_ACTION_ID, 1, memberAmount);
         _join(SECOND_ACTION_ID, 2, 1e18);
-        stake.setGovVotes(address(token), 2, 1, validVotes);
-        stake.setTotalGovVotes(address(token), 2, totalGovVotes);
+        stake.setGovPower(address(token), 2, 1, memberGovPower);
+        stake.setTotalGovPower(address(token), 2, totalGovPower);
         _atPhase(4);
         _setActionReward(2, SECOND_ACTION_ID, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
@@ -152,10 +152,10 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         uint256 expectedBurn;
         if (govRatioMultiplier == 0) {
             expectedMint = theoreticalReward;
-        } else if (totalGovVotes == 0) {
+        } else if (totalGovPower == 0) {
             expectedBurn = theoreticalReward;
         } else {
-            uint256 govRatio = validVotes * PRECISION / totalGovVotes;
+            uint256 govRatio = memberGovPower * PRECISION / totalGovPower;
             uint256 govRatioCap = govRatio * govRatioMultiplier / PRECISION;
             uint256 cappedRatio = govRatioCap < effectiveLpRatio ? govRatioCap : effectiveLpRatio;
             expectedMint =
@@ -195,8 +195,8 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
 
     function _referenceReward(
         uint256 reward,
-        uint256 validVotes,
-        uint256 totalGovVotes,
+        uint256 memberGovPower,
+        uint256 totalGovPower,
         uint256 multiplier
     ) internal pure returns (uint256 mintAmount, uint256 burnAmount) {
         // The member joined at the phase start as the only participant, so effectiveLpRatio is 1e18.
@@ -204,10 +204,10 @@ contract LpExecutorFuzzTest is LpExecutorTestBase {
         if (multiplier == 0) {
             return (theoreticalReward, 0);
         }
-        if (totalGovVotes == 0) {
+        if (totalGovPower == 0) {
             return (0, theoreticalReward);
         }
-        uint256 govRatio = validVotes * 1e18 / totalGovVotes;
+        uint256 govRatio = memberGovPower * 1e18 / totalGovPower;
         uint256 govRatioCap = govRatio * multiplier / 1e18;
         uint256 cappedRatio = govRatioCap < 1e18 ? govRatioCap : 1e18;
         mintAmount = reward * cappedRatio / 1e18;

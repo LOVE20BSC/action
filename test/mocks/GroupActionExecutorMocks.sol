@@ -8,10 +8,10 @@ contract MockGroupActionExecutorStake {
     address public phaseAddress;
     address public voteAddress;
 
-    // tokenAddress => total valid gov votes
-    mapping(address => uint256) internal _totalGovVotes;
-    // tokenAddress => memberId => valid gov votes
-    mapping(address => mapping(uint256 => uint256)) internal _govVotes;
+    // tokenAddress => total valid gov govPowerAmount
+    mapping(address => uint256) internal _totalGovPower;
+    // tokenAddress => memberId => valid gov govPowerAmount
+    mapping(address => mapping(uint256 => uint256)) internal _govPower;
 
     function setMemberNFTAddress(address memberNFTAddress_) external {
         memberNFTAddress = memberNFTAddress_;
@@ -37,27 +37,27 @@ contract MockGroupActionExecutorStake {
         return voteAddress;
     }
 
-    function setTotalGovVotes(address tokenAddress, uint256 votes) external {
-        _totalGovVotes[tokenAddress] = votes;
+    function setTotalGovPower(address tokenAddress, uint256 govPowerAmount) external {
+        _totalGovPower[tokenAddress] = govPowerAmount;
     }
 
-    function setGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
-        _govVotes[tokenAddress][memberId] = votes;
+    function setGovPower(address tokenAddress, uint256 memberId, uint256 govPowerAmount) external {
+        _govPower[tokenAddress][memberId] = govPowerAmount;
     }
 
     // The real `Stake` is round-keyed; this double answers only the phase's current round (zero otherwise).
-    function totalGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
+    function totalGovPower(address tokenAddress, uint256 round) external view returns (uint256) {
         if (round != IPhase(phaseAddress).currentPhase()) return 0;
-        return _totalGovVotes[tokenAddress];
+        return _totalGovPower[tokenAddress];
     }
 
-    function govVotes(
+    function govPower(
         address tokenAddress,
         uint256 round,
         uint256 memberId
     ) external view returns (uint256) {
         if (round != IPhase(phaseAddress).currentPhase()) return 0;
-        return _govVotes[tokenAddress][memberId];
+        return _govPower[tokenAddress][memberId];
     }
 }
 

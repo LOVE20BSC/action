@@ -278,8 +278,8 @@ contract GroupServiceRewardReconciliationTest is ActionTargetIntegrationFixture,
         uint256 ownerWeight = weightA + rewardB;
         uint256 denominator = rewardA + rewardB;
         uint256 theoreticalBudget = expected.budget * ownerWeight / (2 * denominator);
-        uint256 ownerGovRatio = PRECISION * stake.govVotes(address(token), round + 2, OWNER_ID)
-            / stake.totalGovVotes(address(token), round + 2);
+        uint256 ownerGovRatio = PRECISION * stake.govPower(address(token), round + 2, OWNER_ID)
+            / stake.totalGovPower(address(token), round + 2);
         uint256 cappedBudget = expected.budget * (ownerGovRatio / 2) / PRECISION;
         require(cappedBudget < theoreticalBudget, "fixture triggers group cap");
         expected.burn = theoreticalBudget - cappedBudget;

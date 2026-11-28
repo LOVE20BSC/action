@@ -45,10 +45,10 @@ contract MockLpStake {
     address public phaseAddress;
     address public pairFactoryAddress;
 
-    // tokenAddress => total valid gov votes
-    mapping(address => RoundHistoryUint256.History) internal _totalGovVotes;
-    // tokenAddress => memberId => valid gov votes
-    mapping(address => mapping(uint256 => RoundHistoryUint256.History)) internal _govVotes;
+    // tokenAddress => total valid gov govPowerAmount
+    mapping(address => RoundHistoryUint256.History) internal _totalGovPower;
+    // tokenAddress => memberId => valid gov govPowerAmount
+    mapping(address => mapping(uint256 => RoundHistoryUint256.History)) internal _govPower;
 
     function setMemberNFTAddress(address memberNFTAddress_) external {
         memberNFTAddress = memberNFTAddress_;
@@ -74,32 +74,32 @@ contract MockLpStake {
         return pairFactoryAddress;
     }
 
-    function setTotalGovVotes(address tokenAddress, uint256 votes) external {
-        _totalGovVotes[tokenAddress].record(IPhase(phaseAddress).currentPhase(), votes);
+    function setTotalGovPower(address tokenAddress, uint256 govPowerAmount) external {
+        _totalGovPower[tokenAddress].record(IPhase(phaseAddress).currentPhase(), govPowerAmount);
     }
 
-    function setGovVotes(address tokenAddress, uint256 memberId, uint256 votes) external {
-        _govVotes[tokenAddress][memberId].record(IPhase(phaseAddress).currentPhase(), votes);
+    function setGovPower(address tokenAddress, uint256 memberId, uint256 govPowerAmount) external {
+        _govPower[tokenAddress][memberId].record(IPhase(phaseAddress).currentPhase(), govPowerAmount);
     }
 
-    function setTotalGovVotes(address tokenAddress, uint256 round, uint256 votes) external {
-        _totalGovVotes[tokenAddress].record(round, votes);
+    function setTotalGovPower(address tokenAddress, uint256 round, uint256 govPowerAmount) external {
+        _totalGovPower[tokenAddress].record(round, govPowerAmount);
     }
 
-    function setGovVotes(address tokenAddress, uint256 round, uint256 memberId, uint256 votes) external {
-        _govVotes[tokenAddress][memberId].record(round, votes);
+    function setGovPower(address tokenAddress, uint256 round, uint256 memberId, uint256 govPowerAmount) external {
+        _govPower[tokenAddress][memberId].record(round, govPowerAmount);
     }
 
-    function totalGovVotes(address tokenAddress, uint256 round) external view returns (uint256) {
-        return _totalGovVotes[tokenAddress].value(round);
+    function totalGovPower(address tokenAddress, uint256 round) external view returns (uint256) {
+        return _totalGovPower[tokenAddress].value(round);
     }
 
-    function govVotes(
+    function govPower(
         address tokenAddress,
         uint256 round,
         uint256 memberId
     ) external view returns (uint256) {
-        return _govVotes[tokenAddress][memberId].value(round);
+        return _govPower[tokenAddress][memberId].value(round);
     }
 }
 

@@ -295,7 +295,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _join(3, 1e18);
         _join(1, 1e18);
 
-        stake.setGovVotes(address(token), 2, 99e18);
+        stake.setGovPower(address(token), 2, 99e18);
         vm.prank(MEMBER2);
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, 1e17, 99e15));
         lpExecutor.join(address(token), ACTION_ID, 2, 1e18);
@@ -304,7 +304,7 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testJoinSecondSkipsGovCheck() external {
         _join(1, 10e18);
-        stake.setGovVotes(address(token), 1, 1);
+        stake.setGovPower(address(token), 1, 1);
         _join(1, 10e18);
         require(lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 1) == 20e18, "second join allowed");
         require(actionTarget.registerCalls() == 1, "registered once");
@@ -312,14 +312,14 @@ contract LpExecutorTest is LpExecutorTestBase {
 
     function testJoinSkipsGovCheckForPreJoinedMember() external {
         actionTarget.setJoined(address(token), ACTION_ID, 2, true);
-        stake.setGovVotes(address(token), 2, 0);
+        stake.setGovPower(address(token), 2, 0);
         _join(2, 1e18);
         require(lpExecutor.joinedAmountByMemberId(address(token), 2, ACTION_ID, 2) == 1e18, "join allowed");
         require(actionTarget.registerCalls() == 0, "already registered member");
     }
 
-    function testJoinZeroTotalGovVotesRequiresZeroMinRatio() external {
-        stake.setTotalGovVotes(address(token), 0);
+    function testJoinZeroTotalGovPowerRequiresZeroMinRatio() external {
+        stake.setTotalGovPower(address(token), 0);
         vm.prank(MEMBER1);
         vm.expectRevert(abi.encodeWithSelector(ILpExecutorErrors.InsufficientGovRatio.selector, 1e17, 0));
         lpExecutor.join(address(token), ACTION_ID, 1, 1e18);
@@ -679,12 +679,12 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(token.burnCalls() == 0, "burn not called");
     }
 
-    function testMintMemberRewardBurnsAllWhenNoGovVotes() external {
+    function testMintMemberRewardBurnsAllWhenTotalGovPowerIsZero() external {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
-        stake.setTotalGovVotes(address(token), 0);
-        stake.setGovVotes(address(token), 1, 0);
+        stake.setTotalGovPower(address(token), 0);
+        stake.setGovPower(address(token), 1, 0);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
@@ -709,7 +709,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(4);
-        stake.setGovVotes(address(token), 1, 1000e18);
+        stake.setGovPower(address(token), 1, 1000e18);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _fundExecutor(PROPOSAL_REWARD);
 
@@ -901,8 +901,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         _atPhaseBlock(3, 3000);
         _join(1, 100e18);
         _atPhase(5);
-        stake.setTotalGovVotes(address(token), 1200e18);
-        stake.setGovVotes(address(token), 1, 300e18);
+        stake.setTotalGovPower(address(token), 1200e18);
+        stake.setGovPower(address(token), 1, 300e18);
         _setActionReward(2, PROPOSAL_REWARD, true);
         _setActionReward(3, 500e18, true);
         _fundExecutor(1500e18);
@@ -1081,8 +1081,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         _fundExecutor(PROPOSAL_REWARD);
         (uint256 pendingMint, uint256 pendingBurn,) = lpExecutor.rewardDetail(address(token), 2, ACTION_ID, 1);
         require(pendingMint == 200e18 && pendingBurn == 800e18, "initial cap");
-        stake.setTotalGovVotes(address(token), 1200e18);
-        stake.setGovVotes(address(token), 1, 300e18);
+        stake.setTotalGovPower(address(token), 1200e18);
+        stake.setGovPower(address(token), 1, 300e18);
         (pendingMint, pendingBurn,) = lpExecutor.rewardDetail(address(token), 2, ACTION_ID, 1);
         require(pendingMint == 500e18 && pendingBurn == 500e18, "latest numerator and denominator set the cap");
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
@@ -1093,7 +1093,7 @@ contract LpExecutorTest is LpExecutorTestBase {
         (ratio, minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(minted && ratio == 25e16, "recorded at mint");
 
-        stake.setTotalGovVotes(address(token), 3000e18);
+        stake.setTotalGovPower(address(token), 3000e18);
         (ratio, minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(minted && ratio == 25e16, "stake changes do not rewrite the settlement ratio");
         {
@@ -1104,8 +1104,8 @@ contract LpExecutorTest is LpExecutorTestBase {
         require(minted == false && ratio == 1e17, "unminted round follows the latest total votes");
     }
 
-    function testGovRatioZeroWithoutTotalGovVotes() external {
-        stake.setTotalGovVotes(address(token), 2, 0);
+    function testGovRatioZeroWithoutTotalGovPower() external {
+        stake.setTotalGovPower(address(token), 2, 0);
         (uint256 ratio, bool minted) = lpExecutor.govRatio(address(token), 2, ACTION_ID, 1);
         require(ratio == 0 && minted == false, "zero denominator returns zero");
     }

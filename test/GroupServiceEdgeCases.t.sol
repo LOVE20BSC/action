@@ -150,9 +150,9 @@ contract GroupServiceEdgeCasesTest is GroupServiceTestBase {
         executor.setRecipients(
             address(childToken), GROUP_ACTION_ID, GROUP_ID, _ids(MEMBER2_ID), _ratios(PRECISION), remarks
         );
-        stake.setTotalGovVotes(address(token), 100e18);
-        stake.setTotalGovVotes(address(childToken), 100e18);
-        stake.setGovVotes(address(childToken), GROUP_ID, 50e18);
+        stake.setTotalGovPower(address(token), 100e18);
+        stake.setTotalGovPower(address(childToken), 100e18);
+        stake.setGovPower(address(childToken), GROUP_ID, 50e18);
         _atPhase(MINT_PHASE);
 
         require(
